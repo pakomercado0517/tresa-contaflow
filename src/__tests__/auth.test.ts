@@ -1,8 +1,8 @@
 import request from "supertest";
-import app from "../server.js";
-import { cleanDatabase, closeDatabase } from "./helpers/test-db.js";
-import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers.js";
-import { User } from "../database/models/index.js";
+import app from "../server";
+import { cleanDatabase, closeDatabase } from "./helpers/test-db";
+import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
+import { User } from "../database/models/index";
 
 describe("Auth API", () => {
   beforeAll(async () => {
@@ -40,7 +40,7 @@ describe("Auth API", () => {
           password: "password123",
         });
 
-      expectError(response, 400);
+      expectError(response, 409); // 409 Conflict para email duplicado
     });
 
     it("debe rechazar registro con email inválido", async () => {
@@ -117,7 +117,7 @@ describe("Auth API", () => {
       await cleanDatabase();
       const user = await createTestUser("refresh@example.com");
       userId = user.id;
-      const tokens = generateTestTokens(userId);
+      const tokens = generateTestTokens(userId, "refresh@example.com");
       refreshToken = tokens.refreshToken;
     });
 
@@ -150,7 +150,7 @@ describe("Auth API", () => {
     beforeEach(async () => {
       await cleanDatabase();
       const user = await createTestUser("logout@example.com");
-      const tokens = generateTestTokens(user.id);
+      const tokens = generateTestTokens(user.id, "logout@example.com");
       accessToken = tokens.accessToken;
     });
 

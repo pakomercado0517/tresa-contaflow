@@ -1,8 +1,8 @@
 import request from "supertest";
-import app from "../server.js";
-import { cleanDatabase, closeDatabase } from "./helpers/test-db.js";
-import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers.js";
-import { Profile, Invoice } from "../database/models/index.js";
+import app from "../server";
+import { cleanDatabase, closeDatabase } from "./helpers/test-db";
+import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
+import { Profile, Invoice } from "../database/models/index";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -15,7 +15,7 @@ describe("Invoices API", () => {
     await cleanDatabase();
     const user = await createTestUser("invoices@example.com");
     userId = user.id;
-    const tokens = generateTestTokens(userId);
+    const tokens = generateTestTokens(userId, "invoices@example.com");
     accessToken = tokens.accessToken;
 
     // Crear perfil para las pruebas
@@ -56,6 +56,9 @@ describe("Invoices API", () => {
 
   describe("GET /api/invoices/metrics", () => {
     beforeEach(async () => {
+      // Limpiar facturas previas
+      await Invoice.destroy({ where: { profile_id: profileId } });
+      
       // Crear algunas facturas de prueba
       await Invoice.create({
         profile_id: profileId,

@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config.js";
+import sequelize from "../config";
 import User from "./User.model.js";
 
 type TipoPersona = "FISICA" | "MORAL";

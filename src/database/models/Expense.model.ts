@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config.js";
+import sequelize from "../config";
 import Profile from "./Profile.model.js";
 
 type TipoOrigen = "XML" | "MANUAL";

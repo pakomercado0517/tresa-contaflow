@@ -8,6 +8,7 @@ import {
   verifyEmail,
 } from "../controllers/auth.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
+import { authenticateToken } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
@@ -35,7 +36,7 @@ const verifyEmailValidation = [
 // Rutas
 router.post("/register", registerValidation, validateRequest, register);
 router.post("/login", loginValidation, validateRequest, login);
-router.post("/logout", logout);
+router.post("/logout", authenticateToken, logout); // Agregado middleware de auth
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
 

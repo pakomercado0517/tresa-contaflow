@@ -1,30 +1,43 @@
-require("dotenv").config();
+const { Sequelize } = require("sequelize");
+const dotenv = require("dotenv");
 
-if (!process.env.DATABASE_URL) {
+// Cargar variables de entorno en el orden correcto
+// Si estamos en modo test, cargar primero .env.test
+if (process.env.NODE_ENV === "test" || process.argv.includes("vitest")) {
+  dotenv.config({ path: ".env.test", override: true });
+}
+dotenv.config();
+
+// Obtener DATABASE_URL
+const databaseUrl = process.env.DATABASE_URL;
+
+// Validar que DATABASE_URL esté definida
+if (!databaseUrl) {
   throw new Error("DATABASE_URL no está definida en las variables de entorno");
 }
 
-module.exports = {
-  development: {
-    url: process.env.DATABASE_URL,
-    dialect: "postgres",
-    logging: console.log,
+// Detectar si la URL es de Railway (requiere SSL)
+const requiresSSL = databaseUrl.includes("railway.app") || databaseUrl.includes("rlwy.net");
+
+// Configuración de Sequelize
+const sequelize = new Sequelize(databaseUrl, {
+  dialect: "postgres",
+  logging: process.env.NODE_ENV === "development" ? console.log : false,
+  dialectOptions: {
+    ssl: requiresSSL || process.env.NODE_ENV === "production" 
+      ? { require: true, rejectUnauthorized: false } 
+      : false,
   },
-  test: {
-    url: process.env.DATABASE_URL,
-    dialect: "postgres",
-    logging: false,
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000,
   },
-  production: {
-    url: process.env.DATABASE_URL,
-    dialect: "postgres",
-    logging: false,
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false,
-      },
-    },
-  },
-};
+});
+
+// Exportar tanto default como named export para compatibilidad
+module.exports = sequelize;
+module.exports.sequelize = sequelize;
+module.exports.default = sequelize;
 

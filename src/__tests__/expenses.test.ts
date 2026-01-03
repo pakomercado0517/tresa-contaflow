@@ -1,8 +1,8 @@
 import request from "supertest";
-import app from "../server.js";
-import { cleanDatabase, closeDatabase } from "./helpers/test-db.js";
-import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers.js";
-import { Profile, Expense } from "../database/models/index.js";
+import app from "../server";
+import { cleanDatabase, closeDatabase } from "./helpers/test-db";
+import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
+import { Profile, Expense } from "../database/models/index";
 
 describe("Expenses API", () => {
   let accessToken: string;
@@ -13,7 +13,7 @@ describe("Expenses API", () => {
     await cleanDatabase();
     const user = await createTestUser("expenses@example.com");
     userId = user.id;
-    const tokens = generateTestTokens(userId);
+    const tokens = generateTestTokens(userId, "expenses@example.com");
     accessToken = tokens.accessToken;
 
     // Crear perfil para las pruebas
@@ -51,7 +51,7 @@ describe("Expenses API", () => {
       expect(response.body).toHaveProperty("data");
       expect(response.body.data).toHaveProperty("id");
       expect(response.body.data).toHaveProperty("tipo_origen", "MANUAL");
-      expect(response.body.data).toHaveProperty("total", 500.0);
+      expect(parseFloat(response.body.data.total)).toBe(500.0);
     });
 
     it("debe rechazar gasto sin profileId", async () => {

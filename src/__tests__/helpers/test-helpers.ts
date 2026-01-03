@@ -1,7 +1,7 @@
 import type { Response } from "supertest";
-import { User } from "../../database/models/index.js";
+import { User } from "../../database/models/index";
 import bcrypt from "bcrypt";
-import { generateAccessToken, generateRefreshToken } from "../../utils/jwt.util.js";
+import { generateAccessToken, generateRefreshToken } from "../../utils/jwt.util";
 
 /**
  * Crea un usuario de prueba
@@ -23,11 +23,12 @@ export async function createTestUser(
 /**
  * Genera tokens JWT para un usuario
  */
-export function generateTestTokens(userId: string): { accessToken: string; refreshToken: string } {
-  return {
-    accessToken: generateAccessToken(userId),
-    refreshToken: generateRefreshToken(userId),
+export function generateTestTokens(userId: string, email: string = "test@example.com"): { accessToken: string; refreshToken: string } {
+  const tokens = {
+    accessToken: generateAccessToken({ userId, email }),
+    refreshToken: generateRefreshToken({ userId, email }),
   };
+  return tokens;
 }
 
 /**

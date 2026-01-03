@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import path from "path";
 
 export default defineConfig({
   test: {
@@ -19,15 +20,18 @@ export default defineConfig({
     },
     testTimeout: 30000,
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
+    forks: {
+      singleFork: true,
+    },
+    // Ejecutar tests de forma secuencial para evitar conflictos de BD
+    fileParallelism: false,
+    sequence: {
+      shuffle: false,
     },
   },
   resolve: {
     alias: {
-      "@": "./src",
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });
