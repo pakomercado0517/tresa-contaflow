@@ -19,3 +19,4 @@ const testSequelize = new Sequelize(
 // Hacer disponible globalmente para los tests
 (global as any).testSequelize = testSequelize;
 
+
