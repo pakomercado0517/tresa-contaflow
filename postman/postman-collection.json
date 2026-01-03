@@ -1,0 +1,602 @@
+{
+  "info": {
+    "name": "Tresa ContaFlow API",
+    "description": "Colección de pruebas para la API de Tresa ContaFlow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "tresa-contaflow"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Registro exitoso\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        pm.expect(jsonData).to.have.property('user');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error en registro\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Registro de nuevo usuario"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Login exitoso\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('accessToken');",
+                  "        pm.expect(jsonData).to.have.property('refreshToken');",
+                  "        ",
+                  "        // Guardar tokens automáticamente",
+                  "        pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                  "        pm.collectionVariables.set('refreshToken', jsonData.refreshToken);",
+                  "        pm.collectionVariables.set('userId', jsonData.user.id);",
+                  "        pm.collectionVariables.set('userEmail', jsonData.user.email);",
+                  "        ",
+                  "        console.log('✅ Tokens guardados automáticamente');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error en login\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Iniciar sesión y obtener tokens JWT"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Refresh exitoso\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('accessToken');",
+                  "        ",
+                  "        // Actualizar access token",
+                  "        pm.collectionVariables.set('accessToken', jsonData.accessToken);",
+                  "        ",
+                  "        console.log('✅ Access token actualizado');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error en refresh\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Renovar access token usando refresh token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Logout exitoso\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "    ",
+                  "    // Limpiar tokens",
+                  "    pm.collectionVariables.unset('accessToken');",
+                  "    pm.collectionVariables.unset('refreshToken');",
+                  "    ",
+                  "    console.log('✅ Tokens limpiados');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "logout"]
+            },
+            "description": "Cerrar sesión"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Email verificado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error en verificación\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"tu-token-de-verificacion-aqui\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify-email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "verify-email"]
+            },
+            "description": "Verificar email usando el token recibido por correo"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Protected Route",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Ruta protegida accesible\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Prueba de ruta protegida (ejemplo)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints de autenticación"
+    },
+    {
+      "name": "Profiles",
+      "item": [
+        {
+          "name": "Get All Profiles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Perfiles obtenidos exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData).to.have.property('count');",
+                  "        pm.expect(jsonData.data).to.be.an('array');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener perfiles\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profiles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profiles"]
+            },
+            "description": "Obtener todos los perfiles del usuario autenticado"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Perfil obtenido exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        ",
+                  "        // Guardar profile ID para otras peticiones",
+                  "        pm.collectionVariables.set('profileId', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener perfil\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profiles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profiles", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil"
+                }
+              ]
+            },
+            "description": "Obtener un perfil específico por ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Perfil creado exitosamente\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        pm.expect(jsonData.data).to.have.property('rfc');",
+                  "        ",
+                  "        // Guardar profile ID para otras peticiones",
+                  "        pm.collectionVariables.set('profileId', jsonData.data.id);",
+                  "        ",
+                  "        console.log('✅ Perfil creado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear perfil\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Mi Empresa S.A. de C.V.\",\n  \"rfc\": \"MEM123456ABC\",\n  \"tipo_persona\": \"MORAL\",\n  \"regimen_fiscal\": \"601\",\n  \"validaciones_habilitadas\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/profiles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profiles"]
+            },
+            "description": "Crear un nuevo perfil (RFC)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Perfil actualizado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        ",
+                  "        console.log('✅ Perfil actualizado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al actualizar perfil\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Mi Empresa Actualizada S.A. de C.V.\",\n  \"regimen_fiscal\": \"603\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/profiles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profiles", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil"
+                }
+              ]
+            },
+            "description": "Actualizar un perfil existente"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Perfil eliminado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        ",
+                  "        // Limpiar profileId",
+                  "        pm.collectionVariables.unset('profileId');",
+                  "        ",
+                  "        console.log('✅ Perfil eliminado');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al eliminar perfil\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profiles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profiles", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil"
+                }
+              ]
+            },
+            "description": "Eliminar un perfil"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar perfiles (RFCs)"
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "profileId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+
