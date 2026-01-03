@@ -179,3 +179,63 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
   }
 }
 
+/**
+ * Crea una sesión del Customer Portal de Stripe
+ * Permite a los usuarios gestionar su suscripción, métodos de pago y facturas
+ */
+export async function createPortalSession(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    // Verificar que el usuario tenga una suscripción activa con Stripe
+    const subscriptionService = new SubscriptionService();
+    const subscription = await subscriptionService.getActiveSubscription(userId);
+
+    if (!subscription || !subscription.stripe_customer_id) {
+      res.status(400).json({
+        error: "No hay suscripción activa",
+        message: "Debes tener una suscripción activa para acceder al portal de clientes",
+      });
+      return;
+    }
+
+    // Obtener servicio de Stripe
+    const stripeService = getStripeService();
+    const stripe = stripeService.getClient();
+
+    // Obtener URL de retorno desde variables de entorno o usar default
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const returnUrl = `${frontendUrl}/settings/subscription`;
+
+    // Crear sesión del portal
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: subscription.stripe_customer_id,
+      return_url: returnUrl,
+    });
+
+    res.json({
+      url: portalSession.url,
+      message: "Sesión del portal creada exitosamente",
+    });
+  } catch (error) {
+    console.error("Error al crear sesión del portal:", error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: "Error al crear sesión del portal",
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: "Error desconocido al crear sesión del portal" });
+  }
+}
+

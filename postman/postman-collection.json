@@ -569,6 +569,136 @@
       "name": "Invoices",
       "item": [
         {
+          "name": "Get All Invoices",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Facturas obtenidas exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData).to.have.property('pagination');",
+                  "        pm.expect(jsonData.data).to.be.an('array');",
+                  "        ",
+                  "        console.log('Total facturas:', jsonData.pagination.total);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener facturas\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices?profileId={{profileId}}&page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices"],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil (opcional)"
+                },
+                {
+                  "key": "mes",
+                  "value": "",
+                  "description": "Mes (1-12, opcional)"
+                },
+                {
+                  "key": "año",
+                  "value": "",
+                  "description": "Año (opcional)"
+                },
+                {
+                  "key": "tipo",
+                  "value": "",
+                  "description": "Tipo: PUE, PPD, COMPLEMENTO_PAGO (opcional)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Límite por página (default: 50, max: 100)"
+                }
+              ]
+            },
+            "description": "Obtener todas las facturas del usuario con filtros opcionales"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Invoice by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Factura obtenida exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        pm.expect(jsonData.data).to.have.property('uuid');",
+                  "        ",
+                  "        // Guardar invoice ID para otras peticiones",
+                  "        pm.collectionVariables.set('invoiceId', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener factura\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{invoiceId}}",
+                  "description": "ID de la factura"
+                }
+              ]
+            },
+            "description": "Obtener una factura específica por ID"
+          },
+          "response": []
+        },
+        {
           "name": "Parse XML CFDI",
           "event": [
             {
@@ -643,12 +773,829 @@
               "host": ["{{base_url}}"],
               "path": ["api", "invoices", "parse"]
             },
-            "description": "Parsea un archivo XML CFDI y retorna los datos extraídos"
+            "description": "Parsea un archivo XML CFDI y retorna los datos extraídos (no guarda en BD)"
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Invoice (XML)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Factura/Gasto subida exitosamente\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData).to.have.property('tipo');",
+                  "        ",
+                  "        // Guardar invoice/expense ID",
+                  "        if (jsonData.tipo === 'factura') {",
+                  "            pm.collectionVariables.set('invoiceId', jsonData.data.id);",
+                  "        } else {",
+                  "            pm.collectionVariables.set('expenseId', jsonData.data.id);",
+                  "        }",
+                  "        ",
+                  "        console.log('✅ ' + (jsonData.tipo === 'factura' ? 'Factura' : 'Gasto') + ' guardado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al subir factura\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "xml",
+                  "type": "file",
+                  "src": [],
+                  "description": "Archivo XML CFDI a subir y guardar"
+                },
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "type": "text",
+                  "description": "ID del perfil (RFC) a usar para validaciones"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "upload"]
+            },
+            "description": "Sube un archivo XML CFDI, lo parsea, valida y guarda en BD (factura o gasto según RFC)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Factura eliminada exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        ",
+                  "        console.log('✅ Factura eliminada');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al eliminar factura\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{invoiceId}}",
+                  "description": "ID de la factura"
+                }
+              ]
+            },
+            "description": "Eliminar una factura"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Métricas obtenidas exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('filters');",
+                  "        pm.expect(jsonData).to.have.property('metrics');",
+                  "        pm.expect(jsonData.metrics).to.have.property('totalFacturado');",
+                  "        pm.expect(jsonData.metrics).to.have.property('totalPagado');",
+                  "        pm.expect(jsonData.metrics).to.have.property('totalCompras');",
+                  "        pm.expect(jsonData.metrics).to.have.property('pendientePagar');",
+                  "        ",
+                  "        console.log('📊 Métricas del Dashboard:');",
+                  "        console.log('Total Facturado:', jsonData.metrics.totalFacturado);",
+                  "        console.log('Total Pagado:', jsonData.metrics.totalPagado);",
+                  "        console.log('Total Compras:', jsonData.metrics.totalCompras);",
+                  "        console.log('Pendiente a Pagar:', jsonData.metrics.pendientePagar);",
+                  "        console.log('Total Facturas:', jsonData.metrics.totalFacturas);",
+                  "        console.log('Total Gastos:', jsonData.metrics.totalGastos);",
+                  "        console.log('Facturas PUE:', jsonData.metrics.facturasPUE);",
+                  "        console.log('Facturas PPD:', jsonData.metrics.facturasPPD);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener métricas\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/metrics?profileId={{profileId}}&mes=&año=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "metrics"],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil (opcional)"
+                },
+                {
+                  "key": "mes",
+                  "value": "",
+                  "description": "Mes (1-12, opcional)"
+                },
+                {
+                  "key": "año",
+                  "value": "",
+                  "description": "Año (opcional)"
+                }
+              ]
+            },
+            "description": "Obtener métricas del dashboard (total facturado, pagado, compras, pendiente, etc.)"
           },
           "response": []
         }
       ],
       "description": "Endpoints para gestionar facturas"
+    },
+    {
+      "name": "Expenses",
+      "item": [
+        {
+          "name": "Get All Expenses",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Gastos obtenidos exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData).to.have.property('pagination');",
+                  "        pm.expect(jsonData.data).to.be.an('array');",
+                  "        ",
+                  "        console.log('Total gastos:', jsonData.pagination.total);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener gastos\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/expenses?profileId={{profileId}}&page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses"],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "description": "ID del perfil (opcional)"
+                },
+                {
+                  "key": "mes",
+                  "value": "",
+                  "description": "Mes (1-12, opcional)"
+                },
+                {
+                  "key": "año",
+                  "value": "",
+                  "description": "Año (opcional)"
+                },
+                {
+                  "key": "tipo",
+                  "value": "",
+                  "description": "Tipo: PUE, PPD, COMPLEMENTO_PAGO (opcional)"
+                },
+                {
+                  "key": "categoria",
+                  "value": "",
+                  "description": "Categoría (opcional)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Límite por página (default: 50, max: 100)"
+                }
+              ]
+            },
+            "description": "Obtener todos los gastos del usuario con filtros opcionales"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Expense by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Gasto obtenido exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        ",
+                  "        // Guardar expense ID para otras peticiones",
+                  "        pm.collectionVariables.set('expenseId', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener gasto\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/expenses/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{expenseId}}",
+                  "description": "ID del gasto"
+                }
+              ]
+            },
+            "description": "Obtener un gasto específico por ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Expense (Manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Gasto creado exitosamente\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('id');",
+                  "        ",
+                  "        // Guardar expense ID",
+                  "        pm.collectionVariables.set('expenseId', jsonData.data.id);",
+                  "        ",
+                  "        console.log('✅ Gasto creado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear gasto\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profileId\": \"{{profileId}}\",\n  \"fecha\": \"2024-01-15T00:00:00.000Z\",\n  \"total\": 1000.00,\n  \"subtotal\": 862.07,\n  \"iva\": 137.93,\n  \"concepto\": \"Gasto de ejemplo\",\n  \"categoria\": \"Servicios\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses"]
+            },
+            "description": "Crear un gasto manual (no desde XML)"
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Expense (XML)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Gasto subido exitosamente\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        ",
+                  "        // Guardar expense ID",
+                  "        pm.collectionVariables.set('expenseId', jsonData.data.id);",
+                  "        ",
+                  "        console.log('✅ Gasto guardado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al subir gasto\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "xml",
+                  "type": "file",
+                  "src": [],
+                  "description": "Archivo XML CFDI de gasto a subir y guardar"
+                },
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "type": "text",
+                  "description": "ID del perfil (RFC) a usar para validaciones"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/expenses/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses", "upload"]
+            },
+            "description": "Sube un archivo XML CFDI de gasto, lo parsea, valida y guarda en BD"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Expense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Gasto actualizado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        ",
+                  "        console.log('✅ Gasto actualizado:', jsonData.data.id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al actualizar gasto\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2024-01-15T00:00:00.000Z\",\n  \"total\": 1200.00,\n  \"subtotal\": 1034.48,\n  \"iva\": 165.52,\n  \"concepto\": \"Gasto actualizado\",\n  \"categoria\": \"Servicios\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/expenses/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{expenseId}}",
+                  "description": "ID del gasto"
+                }
+              ]
+            },
+            "description": "Actualizar un gasto manual existente (solo gastos MANUAL, no XML)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Expense",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Gasto eliminado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        ",
+                  "        console.log('✅ Gasto eliminado');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al eliminar gasto\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/expenses/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "expenses", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{expenseId}}",
+                  "description": "ID del gasto"
+                }
+              ]
+            },
+            "description": "Eliminar un gasto"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar gastos"
+    },
+    {
+      "name": "Subscription",
+      "item": [
+        {
+          "name": "Get Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Suscripción obtenida exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('plan');",
+                  "        pm.expect(jsonData).to.have.property('status');",
+                  "        pm.expect(jsonData).to.have.property('planPrice');",
+                  "        ",
+                  "        console.log('Plan:', jsonData.plan);",
+                  "        console.log('Status:', jsonData.status);",
+                  "        console.log('Precio:', jsonData.planPrice);",
+                  "        ",
+                  "        if (jsonData.stripeCustomerId) {",
+                  "            console.log('Stripe Customer ID:', jsonData.stripeCustomerId);",
+                  "        }",
+                  "        if (jsonData.stripeSubscriptionId) {",
+                  "            console.log('Stripe Subscription ID:', jsonData.stripeSubscriptionId);",
+                  "        }",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al obtener suscripción\", function () {",
+                  "        pm.response.to.have.status(401);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscription",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscription"]
+            },
+            "description": "Obtener la información de la suscripción actual del usuario"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Checkout Session (BASIC)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Checkout session creada exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('sessionId');",
+                  "        pm.expect(jsonData).to.have.property('url');",
+                  "        ",
+                  "        // Guardar session ID",
+                  "        pm.collectionVariables.set('checkoutSessionId', jsonData.sessionId);",
+                  "        ",
+                  "        console.log('✅ Checkout session creada:', jsonData.sessionId);",
+                  "        console.log('🔗 URL de checkout:', jsonData.url);",
+                  "        console.log('💡 Abre la URL en tu navegador para completar el pago');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear checkout session\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        const jsonData = pm.response.json();",
+                  "        console.log('Error:', jsonData.error || jsonData.message);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"BASIC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscription/create-checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscription", "create-checkout"]
+            },
+            "description": "Crear una sesión de checkout de Stripe para suscribirse al plan BASIC ($29/mes)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Checkout Session (PRO)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Checkout session creada exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('sessionId');",
+                  "        pm.expect(jsonData).to.have.property('url');",
+                  "        ",
+                  "        // Guardar session ID",
+                  "        pm.collectionVariables.set('checkoutSessionId', jsonData.sessionId);",
+                  "        ",
+                  "        console.log('✅ Checkout session creada:', jsonData.sessionId);",
+                  "        console.log('🔗 URL de checkout:', jsonData.url);",
+                  "        console.log('💡 Abre la URL en tu navegador para completar el pago');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear checkout session\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        const jsonData = pm.response.json();",
+                  "        console.log('Error:', jsonData.error || jsonData.message);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"PRO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/subscription/create-checkout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscription", "create-checkout"]
+            },
+            "description": "Crear una sesión de checkout de Stripe para suscribirse al plan PRO ($79/mes)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Customer Portal Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Sesión del portal creada exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('url');",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        ",
+                  "        console.log('✅ Sesión del Customer Portal creada');",
+                  "        console.log('🔗 URL del portal:', jsonData.url);",
+                  "        console.log('💡 Abre la URL en tu navegador para gestionar tu suscripción');",
+                  "        console.log('📋 El portal permite:');",
+                  "        console.log('   - Ver y actualizar métodos de pago');",
+                  "        console.log('   - Ver historial de facturas');",
+                  "        console.log('   - Cancelar suscripción');",
+                  "        console.log('   - Actualizar plan');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear sesión del portal\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        const jsonData = pm.response.json();",
+                  "        console.log('Error:', jsonData.error || jsonData.message);",
+                  "        ",
+                  "        if (pm.response.code === 400) {",
+                  "            console.log('💡 Asegúrate de tener una suscripción activa con Stripe');",
+                  "        }",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/subscription/create-portal-session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "subscription", "create-portal-session"]
+            },
+            "description": "Crear una sesión del Customer Portal de Stripe para gestionar suscripción, métodos de pago y facturas"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar suscripciones y pagos con Stripe"
     }
   ],
   "variable": [
@@ -681,7 +1628,21 @@
       "key": "profileId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "expenseId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkoutSessionId",
+      "value": "",
+      "type": "string"
     }
   ]
 }
-

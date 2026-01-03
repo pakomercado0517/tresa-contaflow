@@ -177,14 +177,26 @@ export class FiscalValidationService {
 
   /**
    * Verifica si un UUID ya existe en la base de datos
+   * @param uuid UUID a verificar
+   * @param profileId ID del perfil
+   * @param tipo Tipo de registro a verificar ("invoice", "expense", o "both" para verificar en ambas)
    */
-  private async checkUUIDDuplicado(
+  async checkUUIDDuplicado(
     uuid: string,
     profileId: string,
-    tipo: "invoice" | "expense"
+    tipo: "invoice" | "expense" | "both" = "both"
   ): Promise<boolean> {
     try {
-      if (tipo === "invoice") {
+      if (tipo === "both") {
+        // Verificar en ambas tablas (útil para complementos de pago)
+        const existingInvoice = await Invoice.findOne({
+          where: { uuid, profile_id: profileId },
+        });
+        const existingExpense = await Expense.findOne({
+          where: { uuid, profile_id: profileId },
+        });
+        return !!(existingInvoice || existingExpense);
+      } else if (tipo === "invoice") {
         const existing = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
         });

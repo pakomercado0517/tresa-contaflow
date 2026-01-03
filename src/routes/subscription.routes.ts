@@ -3,6 +3,7 @@ import { body } from "express-validator";
 import {
   createCheckoutSession,
   getSubscription,
+  createPortalSession,
 } from "../controllers/subscription.controller.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
@@ -26,6 +27,9 @@ router.post(
   validateRequest,
   createCheckoutSession
 );
+
+// POST /api/subscription/create-portal-session - Crear sesión del Customer Portal
+router.post("/create-portal-session", createPortalSession);
 
 export default router;
 

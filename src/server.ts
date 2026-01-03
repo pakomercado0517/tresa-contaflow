@@ -7,6 +7,7 @@ import fileUpload from "express-fileupload";
 import authRoutes from "./routes/auth.routes.js";
 import profileRoutes from "./routes/profile.routes.js";
 import invoiceRoutes from "./routes/invoice.routes.js";
+import expenseRoutes from "./routes/expense.routes.js";
 import subscriptionRoutes from "./routes/subscription.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 
@@ -42,6 +43,7 @@ app.get("/", (req, res) =>
 app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/expenses", expenseRoutes);
 app.use("/api/subscription", subscriptionRoutes);
 app.use("/api/webhooks", webhookRoutes);
 

@@ -1,0 +1,176 @@
+import request from "supertest";
+import app from "../server.js";
+import { cleanDatabase, closeDatabase } from "./helpers/test-db.js";
+import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers.js";
+import { User } from "../database/models/index.js";
+
+describe("Auth API", () => {
+  beforeAll(async () => {
+    await cleanDatabase();
+  });
+
+  afterAll(async () => {
+    await cleanDatabase();
+    await closeDatabase();
+  });
+
+  describe("POST /api/auth/register", () => {
+    it("debe registrar un nuevo usuario exitosamente", async () => {
+      const response = await request(app)
+        .post("/api/auth/register")
+        .send({
+          email: "newuser@example.com",
+          password: "password123",
+        });
+
+      expectSuccess(response, 201);
+      expect(response.body).toHaveProperty("user");
+      expect(response.body.user).toHaveProperty("id");
+      expect(response.body.user).toHaveProperty("email", "newuser@example.com");
+      expect(response.body.user).not.toHaveProperty("password_hash");
+    });
+
+    it("debe rechazar registro con email duplicado", async () => {
+      await createTestUser("duplicate@example.com");
+
+      const response = await request(app)
+        .post("/api/auth/register")
+        .send({
+          email: "duplicate@example.com",
+          password: "password123",
+        });
+
+      expectError(response, 400);
+    });
+
+    it("debe rechazar registro con email inválido", async () => {
+      const response = await request(app)
+        .post("/api/auth/register")
+        .send({
+          email: "invalid-email",
+          password: "password123",
+        });
+
+      expectError(response, 400);
+    });
+
+    it("debe rechazar registro con password muy corto", async () => {
+      const response = await request(app)
+        .post("/api/auth/register")
+        .send({
+          email: "shortpass@example.com",
+          password: "123",
+        });
+
+      expectError(response, 400);
+    });
+  });
+
+  describe("POST /api/auth/login", () => {
+    beforeEach(async () => {
+      await cleanDatabase();
+      await createTestUser("login@example.com", "password123");
+    });
+
+    it("debe hacer login exitosamente con credenciales válidas", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: "login@example.com",
+          password: "password123",
+        });
+
+      expectSuccess(response, 200);
+      expect(response.body).toHaveProperty("accessToken");
+      expect(response.body).toHaveProperty("refreshToken");
+      expect(response.body).toHaveProperty("user");
+    });
+
+    it("debe rechazar login con email incorrecto", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: "wrong@example.com",
+          password: "password123",
+        });
+
+      expectError(response, 401);
+    });
+
+    it("debe rechazar login con password incorrecto", async () => {
+      const response = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: "login@example.com",
+          password: "wrongpassword",
+        });
+
+      expectError(response, 401);
+    });
+  });
+
+  describe("POST /api/auth/refresh", () => {
+    let userId: string;
+    let refreshToken: string;
+
+    beforeEach(async () => {
+      await cleanDatabase();
+      const user = await createTestUser("refresh@example.com");
+      userId = user.id;
+      const tokens = generateTestTokens(userId);
+      refreshToken = tokens.refreshToken;
+    });
+
+    it("debe renovar access token con refresh token válido", async () => {
+      const response = await request(app)
+        .post("/api/auth/refresh")
+        .send({
+          refreshToken,
+        });
+
+      expectSuccess(response, 200);
+      expect(response.body).toHaveProperty("accessToken");
+      expect(response.body.accessToken).not.toBe(refreshToken);
+    });
+
+    it("debe rechazar refresh token inválido", async () => {
+      const response = await request(app)
+        .post("/api/auth/refresh")
+        .send({
+          refreshToken: "invalid-token",
+        });
+
+      expectError(response, 401);
+    });
+  });
+
+  describe("POST /api/auth/logout", () => {
+    let accessToken: string;
+
+    beforeEach(async () => {
+      await cleanDatabase();
+      const user = await createTestUser("logout@example.com");
+      const tokens = generateTestTokens(user.id);
+      accessToken = tokens.accessToken;
+    });
+
+    it("debe hacer logout exitosamente con token válido", async () => {
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send();
+
+      expectSuccess(response, 200);
+      expect(response.body).toHaveProperty("message");
+    });
+
+    it("debe rechazar logout sin token", async () => {
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .send();
+
+      expectError(response, 401);
+    });
+  });
+});
+
