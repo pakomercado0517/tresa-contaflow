@@ -1,0 +1,181 @@
+import { type Response } from "express";
+import type { AuthRequest } from "../middlewares/auth.middleware.js";
+import type Stripe from "stripe";
+import { getStripeService } from "../services/stripe.service.js";
+import { PLAN_PRICES, type Plan } from "../constants/plans.constants.js";
+import { SubscriptionService } from "../services/subscription.service.js";
+import { User } from "../database/models/index.js";
+
+/**
+ * Crea una sesión de checkout de Stripe para suscribirse a un plan
+ */
+export async function createCheckoutSession(
+  req: AuthRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    const { plan } = req.body;
+
+    // Validar que el plan sea válido
+    if (!plan || !["BASIC", "PRO"].includes(plan)) {
+      res.status(400).json({
+        error: "Plan inválido",
+        message: "El plan debe ser BASIC o PRO",
+        allowedPlans: ["BASIC", "PRO"],
+      });
+      return;
+    }
+
+    // El plan FREE no requiere checkout
+    if (plan === "FREE") {
+      res.status(400).json({
+        error: "Plan inválido",
+        message: "El plan FREE no requiere suscripción",
+      });
+      return;
+    }
+
+    // Verificar si ya tiene una suscripción activa
+    const subscriptionService = new SubscriptionService();
+    const existingSubscription = await subscriptionService.getActiveSubscription(userId);
+
+    if (existingSubscription && existingSubscription.plan === plan) {
+      res.status(400).json({
+        error: "Ya tienes este plan activo",
+        message: `Ya estás suscrito al plan ${plan}`,
+      });
+      return;
+    }
+
+    // Obtener servicio de Stripe
+    const stripeService = getStripeService();
+    const stripe = stripeService.getClient();
+
+    // Obtener Price ID del plan
+    const priceId = stripeService.getPriceId(plan as "BASIC" | "PRO");
+
+    // Obtener URLs de éxito y cancelación desde variables de entorno o usar defaults
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const successUrl = `${frontendUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${frontendUrl}/subscription/cancel`;
+
+    // Obtener email del usuario para pre-llenar el checkout
+    const user = await User.findByPk(userId);
+    const customerEmail = user?.email || undefined;
+
+    const stripeCustomerId = existingSubscription?.stripe_customer_id || undefined;
+
+    // Preparar parámetros del checkout session
+    // Stripe solo permite uno: customer O customer_email, no ambos
+    const checkoutParams: Stripe.Checkout.SessionCreateParams = {
+      payment_method_types: ["card"],
+      mode: "subscription",
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        userId: userId,
+        plan: plan,
+      },
+      subscription_data: {
+        metadata: {
+          userId: userId,
+          plan: plan,
+        },
+      },
+    };
+
+    // Si ya tiene un customer en Stripe, usar customer (reutilizar)
+    // Si no, usar customer_email para pre-llenar el email
+    if (stripeCustomerId) {
+      checkoutParams.customer = stripeCustomerId;
+    } else if (customerEmail) {
+      checkoutParams.customer_email = customerEmail;
+    }
+
+    // Crear checkout session
+    const session = await stripe.checkout.sessions.create(checkoutParams);
+
+    res.json({
+      sessionId: session.id,
+      url: session.url,
+      message: "Checkout session creada exitosamente",
+    });
+  } catch (error) {
+    console.error("Error al crear checkout session:", error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: "Error al crear checkout session",
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: "Error desconocido al crear checkout session" });
+  }
+}
+
+/**
+ * Obtiene la información de la suscripción actual del usuario
+ */
+export async function getSubscription(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    const subscriptionService = new SubscriptionService();
+    const subscription = await subscriptionService.getActiveSubscription(userId);
+
+    if (!subscription) {
+      // Si no tiene suscripción activa, retornar plan FREE
+      res.json({
+        plan: "FREE",
+        status: "ACTIVE",
+        planPrice: PLAN_PRICES.FREE,
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        cancelAtPeriodEnd: false,
+      });
+      return;
+    }
+
+    res.json({
+      plan: subscription.plan,
+      status: subscription.status,
+      planPrice: Number(subscription.plan_price),
+      currentPeriodStart: subscription.current_period_start,
+      currentPeriodEnd: subscription.current_period_end,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      stripeCustomerId: subscription.stripe_customer_id,
+      stripeSubscriptionId: subscription.stripe_subscription_id,
+    });
+  } catch (error) {
+    console.error("Error al obtener suscripción:", error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: "Error al obtener suscripción",
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: "Error desconocido al obtener suscripción" });
+  }
+}
+

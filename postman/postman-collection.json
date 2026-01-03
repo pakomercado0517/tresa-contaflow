@@ -564,6 +564,91 @@
         }
       ],
       "description": "Endpoints para gestionar perfiles (RFCs)"
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "Parse XML CFDI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"XML parseado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData.data).to.have.property('uuid');",
+                  "        pm.expect(jsonData.data).to.have.property('tipo');",
+                  "        pm.expect(jsonData.data).to.have.property('total');",
+                  "        pm.expect(jsonData.data).to.have.property('rfcEmisor');",
+                  "        ",
+                  "        console.log('UUID:', jsonData.data.uuid);",
+                  "        console.log('Tipo:', jsonData.data.tipo);",
+                  "        console.log('Total:', jsonData.data.total);",
+                  "        console.log('RFC Emisor:', jsonData.data.rfcEmisor);",
+                  "        ",
+                  "        // Validación",
+                  "        if (jsonData.validacion) {",
+                  "            console.log('✅ Validación:', jsonData.validacion.valido ? 'Válido' : 'Inválido');",
+                  "            if (jsonData.validacion.advertencias && jsonData.validacion.advertencias.length > 0) {",
+                  "                console.log('⚠️ Advertencias:', jsonData.validacion.advertencias);",
+                  "            }",
+                  "            if (jsonData.validacion.errores && jsonData.validacion.errores.length > 0) {",
+                  "                console.log('❌ Errores:', jsonData.validacion.errores);",
+                  "            }",
+                  "        }",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al parsear XML\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "xml",
+                  "type": "file",
+                  "src": [],
+                  "description": "Archivo XML CFDI a parsear"
+                },
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}",
+                  "type": "text",
+                  "description": "ID del perfil (RFC) a usar para validaciones"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/invoices/parse",
+              "host": ["{{base_url}}"],
+              "path": ["api", "invoices", "parse"]
+            },
+            "description": "Parsea un archivo XML CFDI y retorna los datos extraídos"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar facturas"
     }
   ],
   "variable": [

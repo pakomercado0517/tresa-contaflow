@@ -9,6 +9,7 @@ import {
 } from "../controllers/profile.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
+import { validateProfileLimit } from "../middlewares/plan-limits.middleware.js";
 
 const router = Router();
 
@@ -75,7 +76,7 @@ const profileIdValidation = [
 // Rutas
 router.get("/", getProfiles);
 router.get("/:id", profileIdValidation, validateRequest, getProfileById);
-router.post("/", createProfileValidation, validateRequest, createProfile);
+router.post("/", createProfileValidation, validateRequest, validateProfileLimit, createProfile);
 router.put("/:id", updateProfileValidation, validateRequest, updateProfile);
 router.delete("/:id", profileIdValidation, validateRequest, deleteProfile);
 
