@@ -1,0 +1,38 @@
+# Normalizar todos los archivos de texto a LF en el repositorio
+* text=auto eol=lf
+
+# Archivos binarios explícitos
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.rar binary
+*.7z binary
+
+# Archivos de base de datos
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Archivos compilados
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Archivos de imagen
+*.svg text eol=lf
+
+# Scripts de shell deben mantener LF
+*.sh text eol=lf
+
+# Archivos de configuración de Windows pueden necesitar CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
