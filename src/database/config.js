@@ -22,7 +22,7 @@ const requiresSSL = databaseUrl.includes("railway.app") || databaseUrl.includes(
 // Configuración de Sequelize
 const sequelize = new Sequelize(databaseUrl, {
   dialect: "postgres",
-  logging: process.env.NODE_ENV === "development" ? console.log : false,
+  logging: false,
   dialectOptions: {
     ssl: requiresSSL || process.env.NODE_ENV === "production" 
       ? { require: true, rejectUnauthorized: false } 

@@ -9,12 +9,12 @@ const databaseUrl = process.env.DATABASE_URL || "postgresql://localhost:5432/tes
 
 // Validar solo en producción y desarrollo
 if (!process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
-  console.warn("⚠️ DATABASE_URL no está definida. Usando valor por defecto para tests.");
+  // Logger desactivado
 }
 
 const sequelize = new Sequelize(databaseUrl, {
   dialect: "postgres",
-  logging: process.env.NODE_ENV === "development" ? console.log : false,
+  logging: false,
   dialectOptions: {
     ssl: process.env.NODE_ENV === "production" ? { require: true, rejectUnauthorized: false } : false,
   },
