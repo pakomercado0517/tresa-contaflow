@@ -25,6 +25,7 @@
   "packageManager": "pnpm@10.26.1",
   "dependencies": {
     "@getbrevo/brevo": "^3.0.1",
+    "@types/express-fileupload": "^1.5.1",
     "@types/multer": "^2.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
