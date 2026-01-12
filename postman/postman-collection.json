@@ -251,6 +251,73 @@
           "response": []
         },
         {
+          "name": "Update Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Perfil actualizado exitosamente\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        pm.expect(jsonData).to.have.property('user');",
+                  "        pm.expect(jsonData.user).to.have.property('id');",
+                  "        pm.expect(jsonData.user).to.have.property('email');",
+                  "        pm.expect(jsonData.user).to.have.property('nombre');",
+                  "        pm.expect(jsonData.user).to.have.property('apellido');",
+                  "        pm.expect(jsonData.user).to.have.property('telefono');",
+                  "        ",
+                  "        console.log('✅ Perfil actualizado correctamente');",
+                  "        console.log('Nombre:', jsonData.user.nombre);",
+                  "        console.log('Apellido:', jsonData.user.apellido);",
+                  "        console.log('Teléfono:', jsonData.user.telefono);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al actualizar perfil\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        const jsonData = pm.response.json();",
+                  "        console.log('Error:', jsonData.error || jsonData.message);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Pérez\",\n  \"telefono\": \"+521234567890\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "profile"]
+            },
+            "description": "Actualizar el perfil del usuario autenticado (nombre, apellido, teléfono). Puedes actualizar todos los campos o solo algunos."
+          },
+          "response": []
+        },
+        {
           "name": "Test Protected Route",
           "event": [
             {

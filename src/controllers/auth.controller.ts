@@ -8,6 +8,7 @@ import {
 } from "../utils/jwt.util.js";
 import { generateVerificationToken, hashVerificationToken } from "../utils/verification.util.js";
 import { sendVerificationEmail } from "../services/email.service.js";
+import type { AuthRequest } from "../middlewares/auth.middleware.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
@@ -155,6 +156,9 @@ export async function register(req: Request, res: Response): Promise<void> {
       user: {
         id: user.id,
         email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        telefono: user.telefono,
         email_verified: user.email_verified,
       },
     });
@@ -270,6 +274,9 @@ export async function login(req: Request, res: Response): Promise<void> {
       user: {
         id: user.id,
         email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        telefono: user.telefono,
         email_verified: user.email_verified,
       },
     });
@@ -563,6 +570,137 @@ export async function resendVerificationEmail(req: Request, res: Response): Prom
     if (error instanceof Error) {
       res.status(500).json({ 
         error: "Error al reenviar email",
+        message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    res.status(500).json({ 
+      error: "Error desconocido",
+      message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+    });
+  }
+}
+
+export async function updateProfile(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ 
+        error: "Usuario no autenticado",
+        message: "Debes iniciar sesión para actualizar tu perfil"
+      });
+      return;
+    }
+
+    const { nombre, apellido, telefono } = req.body;
+
+    // Validar que al menos un campo esté presente
+    if (nombre === undefined && apellido === undefined && telefono === undefined) {
+      res.status(400).json({ 
+        error: "Datos requeridos",
+        message: "Debes proporcionar al menos un campo para actualizar (nombre, apellido o teléfono)"
+      });
+      return;
+    }
+
+    // Validar tipos de datos
+    if (nombre !== undefined && typeof nombre !== "string") {
+      res.status(400).json({ 
+        error: "Nombre inválido",
+        message: "El nombre debe ser una cadena de texto"
+      });
+      return;
+    }
+
+    if (apellido !== undefined && typeof apellido !== "string") {
+      res.status(400).json({ 
+        error: "Apellido inválido",
+        message: "El apellido debe ser una cadena de texto"
+      });
+      return;
+    }
+
+    if (telefono !== undefined && typeof telefono !== "string") {
+      res.status(400).json({ 
+        error: "Teléfono inválido",
+        message: "El teléfono debe ser una cadena de texto"
+      });
+      return;
+    }
+
+    // Buscar usuario
+    let user;
+    try {
+      user = await User.findByPk(userId);
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({ 
+        error: "Error de base de datos",
+        message: "No se pudo encontrar el usuario. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    if (!user) {
+      res.status(404).json({ 
+        error: "Usuario no encontrado",
+        message: "El usuario no existe"
+      });
+      return;
+    }
+
+    // Preparar datos para actualizar (solo los campos que están definidos)
+    const updateData: {
+      nombre?: string | null;
+      apellido?: string | null;
+      telefono?: string | null;
+    } = {};
+
+    if (nombre !== undefined) {
+      updateData.nombre = nombre.trim() || null;
+    }
+
+    if (apellido !== undefined) {
+      updateData.apellido = apellido.trim() || null;
+    }
+
+    if (telefono !== undefined) {
+      updateData.telefono = telefono.trim() || null;
+    }
+
+    // Actualizar usuario
+    try {
+      await user.update(updateData);
+    } catch (updateError) {
+      console.error("Error al actualizar usuario:", updateError);
+      res.status(500).json({ 
+        error: "Error al actualizar perfil",
+        message: "No se pudo actualizar el perfil. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    // Recargar usuario actualizado
+    await user.reload();
+
+    res.json({
+      message: "Perfil actualizado correctamente",
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        telefono: user.telefono,
+        email_verified: user.email_verified,
+      },
+    });
+  } catch (error) {
+    console.error("Error inesperado al actualizar perfil:", error);
+    
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: "Error al actualizar perfil",
         message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
       });
       return;

@@ -5,6 +5,9 @@ interface UserAttributes {
   id: string;
   email: string;
   password_hash: string;
+  nombre: string | null;
+  apellido: string | null;
+  telefono: string | null;
   email_verified: boolean;
   email_verification_token: string | null;
   email_verification_expires: Date | null;
@@ -20,6 +23,9 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   declare id: string;
   declare email: string;
   declare password_hash: string;
+  declare nombre: string | null;
+  declare apellido: string | null;
+  declare telefono: string | null;
   declare email_verified: boolean;
   declare email_verification_token: string | null;
   declare email_verification_expires: Date | null;
@@ -42,6 +48,18 @@ User.init(
     password_hash: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    nombre: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    apellido: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    telefono: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     email_verified: {
       type: DataTypes.BOOLEAN,

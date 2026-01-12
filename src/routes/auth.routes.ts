@@ -7,6 +7,7 @@ import {
   refresh,
   verifyEmail,
   resendVerificationEmail,
+  updateProfile,
 } from "../controllers/auth.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
@@ -38,6 +39,24 @@ const resendVerificationEmailValidation = [
   body("email").isEmail().withMessage("Email inválido"),
 ];
 
+const updateProfileValidation = [
+  body("nombre")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El nombre debe ser una cadena de texto"),
+  body("apellido")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El apellido debe ser una cadena de texto"),
+  body("telefono")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El teléfono debe ser una cadena de texto"),
+];
+
 // Rutas
 router.post("/register", registerValidation, validateRequest, register);
 router.post("/login", loginValidation, validateRequest, login);
@@ -45,6 +64,7 @@ router.post("/logout", authenticateToken, logout); // Agregado middleware de aut
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
 router.post("/resend-verification-email", resendVerificationEmailValidation, validateRequest, resendVerificationEmail);
+router.patch("/profile", authenticateToken, updateProfileValidation, validateRequest, updateProfile);
 
 export default router;
 
