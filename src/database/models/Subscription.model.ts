@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config";
+import sequelize from "../config.js";
 import User from "./User.model.js";
 
 type Plan = "FREE" | "BASIC" | "PRO" | "ENTERPRISE";

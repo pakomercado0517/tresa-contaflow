@@ -48,7 +48,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
   ENTERPRISE: {
     profiles: null, // ilimitado
-    invoicesPerMonth: null, // ilimitado
+    invoicesPerMonth: 5000, // 5000 archivos XML al mes
     expensesPerMonth: null, // ilimitado
     exportPDF: true,
     exportExcel: true,
@@ -64,8 +64,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
  */
 export const PLAN_PRICES: Record<Plan, number> = {
   FREE: 0,
-  BASIC: 29,
-  PRO: 79,
-  ENTERPRISE: 0, // Custom pricing
+  BASIC: 300,
+  PRO: 800,
+  ENTERPRISE: 1200,
 };
 

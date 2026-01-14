@@ -1,7 +1,7 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { handleStripeWebhook } from "../controllers/webhook.controller.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 /**
  * Endpoint para recibir webhooks de Stripe

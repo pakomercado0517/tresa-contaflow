@@ -346,7 +346,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
 
 /**
  * Lista las facturas del usuario
- * Soporta filtros: profileId, mes, año, tipo, y paginación
+ * Soporta filtros: profileId, mes, año, tipo, search (búsqueda por texto), y paginación
  */
 export async function getInvoices(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -357,7 +357,7 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
     }
 
     // Obtener parámetros de query
-    const { profileId, mes, año, tipo, page = "1", limit = "50" } = req.query;
+    const { profileId, mes, año, tipo, search, page = "1", limit = "50" } = req.query;
 
     // Construir filtros
     const whereClause: any = {};
@@ -383,6 +383,18 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
 
     if (tipo && typeof tipo === "string" && ["PUE", "PPD", "COMPLEMENTO_PAGO"].includes(tipo)) {
       whereClause.tipo = tipo;
+    }
+
+    // Búsqueda por texto (RFC, razón social, concepto)
+    if (search && typeof search === "string" && search.trim().length > 0) {
+      const searchTerm = `%${search.trim()}%`;
+      whereClause[Op.or] = [
+        { rfc_emisor: { [Op.iLike]: searchTerm } },
+        { nombre_emisor: { [Op.iLike]: searchTerm } },
+        { rfc_receptor: { [Op.iLike]: searchTerm } },
+        { nombre_receptor: { [Op.iLike]: searchTerm } },
+        { concepto: { [Op.iLike]: searchTerm } },
+      ];
     }
 
     // Paginación

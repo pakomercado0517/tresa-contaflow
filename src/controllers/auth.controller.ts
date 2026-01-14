@@ -712,3 +712,66 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     });
   }
 }
+
+/**
+ * Obtiene los datos del usuario autenticado actual
+ */
+export async function getCurrentUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ 
+        error: "Unauthorized",
+        message: "Token inválido o expirado"
+      });
+      return;
+    }
+
+    // Buscar usuario
+    let user;
+    try {
+      user = await User.findByPk(userId);
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Error al obtener el usuario"
+      });
+      return;
+    }
+
+    if (!user) {
+      res.status(401).json({ 
+        error: "Unauthorized",
+        message: "Token inválido o expirado"
+      });
+      return;
+    }
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        telefono: user.telefono,
+        email_verified: user.email_verified,
+      },
+    });
+  } catch (error) {
+    console.error("Error inesperado al obtener usuario:", error);
+    
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Error al obtener el usuario"
+      });
+      return;
+    }
+
+    res.status(500).json({ 
+      error: "Internal Server Error",
+      message: "Error al obtener el usuario"
+    });
+  }
+}

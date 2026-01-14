@@ -1,9 +1,9 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { parseXML, uploadInvoice, getInvoices, getInvoiceById, deleteInvoice, getMetrics } from "../controllers/invoice.controller.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateInvoiceLimit } from "../middlewares/plan-limits.middleware.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);

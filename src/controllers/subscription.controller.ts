@@ -1,42 +1,39 @@
-import { type Response } from "express";
-import type { AuthRequest } from "../middlewares/auth.middleware.js";
-import type Stripe from "stripe";
-import { getStripeService } from "../services/stripe.service.js";
-import { PLAN_PRICES, type Plan } from "../constants/plans.constants.js";
-import { SubscriptionService } from "../services/subscription.service.js";
-import { User } from "../database/models/index.js";
+import { type Response } from 'express';
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+import type Stripe from 'stripe';
+import { getStripeService } from '../services/stripe.service.js';
+import { PLAN_PRICES, type Plan } from '../constants/plans.constants.js';
+import { SubscriptionService } from '../services/subscription.service.js';
+import { User } from '../database/models/index.js';
 
 /**
  * Crea una sesión de checkout de Stripe para suscribirse a un plan
  */
-export async function createCheckoutSession(
-  req: AuthRequest,
-  res: Response
-): Promise<void> {
+export async function createCheckoutSession(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
     const { plan } = req.body;
 
     // Validar que el plan sea válido
-    if (!plan || !["BASIC", "PRO"].includes(plan)) {
+    if (!plan || !['BASIC', 'PRO'].includes(plan)) {
       res.status(400).json({
-        error: "Plan inválido",
-        message: "El plan debe ser BASIC o PRO",
-        allowedPlans: ["BASIC", "PRO"],
+        error: 'Plan inválido',
+        message: 'El plan debe ser BASIC o PRO',
+        allowedPlans: ['BASIC', 'PRO'],
       });
       return;
     }
 
     // El plan FREE no requiere checkout
-    if (plan === "FREE") {
+    if (plan === 'FREE') {
       res.status(400).json({
-        error: "Plan inválido",
-        message: "El plan FREE no requiere suscripción",
+        error: 'Plan inválido',
+        message: 'El plan FREE no requiere suscripción',
       });
       return;
     }
@@ -47,7 +44,7 @@ export async function createCheckoutSession(
 
     if (existingSubscription && existingSubscription.plan === plan) {
       res.status(400).json({
-        error: "Ya tienes este plan activo",
+        error: 'Ya tienes este plan activo',
         message: `Ya estás suscrito al plan ${plan}`,
       });
       return;
@@ -58,10 +55,10 @@ export async function createCheckoutSession(
     const stripe = stripeService.getClient();
 
     // Obtener Price ID del plan
-    const priceId = stripeService.getPriceId(plan as "BASIC" | "PRO");
+    const priceId = stripeService.getPriceId(plan as 'BASIC' | 'PRO');
 
     // Obtener URLs de éxito y cancelación desde variables de entorno o usar defaults
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const successUrl = `${frontendUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${frontendUrl}/subscription/cancel`;
 
@@ -74,8 +71,8 @@ export async function createCheckoutSession(
     // Preparar parámetros del checkout session
     // Stripe solo permite uno: customer O customer_email, no ambos
     const checkoutParams: Stripe.Checkout.SessionCreateParams = {
-      payment_method_types: ["card"],
-      mode: "subscription",
+      payment_method_types: ['card'],
+      mode: 'subscription',
       line_items: [
         {
           price: priceId,
@@ -110,20 +107,20 @@ export async function createCheckoutSession(
     res.json({
       sessionId: session.id,
       url: session.url,
-      message: "Checkout session creada exitosamente",
+      message: 'Checkout session creada exitosamente',
     });
   } catch (error) {
-    console.error("Error al crear checkout session:", error);
+    console.error('Error al crear checkout session:', error);
 
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al crear checkout session",
+        error: 'Error al crear checkout session',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al crear checkout session" });
+    res.status(500).json({ error: 'Error desconocido al crear checkout session' });
   }
 }
 
@@ -134,7 +131,7 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -144,8 +141,8 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
     if (!subscription) {
       // Si no tiene suscripción activa, retornar plan FREE
       res.json({
-        plan: "FREE",
-        status: "ACTIVE",
+        plan: 'FREE',
+        status: 'ACTIVE',
         planPrice: PLAN_PRICES.FREE,
         currentPeriodStart: null,
         currentPeriodEnd: null,
@@ -165,17 +162,17 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
       stripeSubscriptionId: subscription.stripe_subscription_id,
     });
   } catch (error) {
-    console.error("Error al obtener suscripción:", error);
+    console.error('Error al obtener suscripción:', error);
 
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al obtener suscripción",
+        error: 'Error al obtener suscripción',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al obtener suscripción" });
+    res.status(500).json({ error: 'Error desconocido al obtener suscripción' });
   }
 }
 
@@ -183,14 +180,11 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
  * Crea una sesión del Customer Portal de Stripe
  * Permite a los usuarios gestionar su suscripción, métodos de pago y facturas
  */
-export async function createPortalSession(
-  req: AuthRequest,
-  res: Response
-): Promise<void> {
+export async function createPortalSession(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -200,8 +194,8 @@ export async function createPortalSession(
 
     if (!subscription || !subscription.stripe_customer_id) {
       res.status(400).json({
-        error: "No hay suscripción activa",
-        message: "Debes tener una suscripción activa para acceder al portal de clientes",
+        error: 'No hay suscripción activa',
+        message: 'Debes tener una suscripción activa para acceder al portal de clientes',
       });
       return;
     }
@@ -211,8 +205,8 @@ export async function createPortalSession(
     const stripe = stripeService.getClient();
 
     // Obtener URL de retorno desde variables de entorno o usar default
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const returnUrl = `${frontendUrl}/settings/subscription`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const returnUrl = `${frontendUrl}/dashboard/setup?tab=subscription`;
 
     // Crear sesión del portal
     const portalSession = await stripe.billingPortal.sessions.create({
@@ -222,20 +216,116 @@ export async function createPortalSession(
 
     res.json({
       url: portalSession.url,
-      message: "Sesión del portal creada exitosamente",
+      message: 'Sesión del portal creada exitosamente',
     });
   } catch (error) {
-    console.error("Error al crear sesión del portal:", error);
+    console.error('Error al crear sesión del portal:', error);
 
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al crear sesión del portal",
+        error: 'Error al crear sesión del portal',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al crear sesión del portal" });
+    res.status(500).json({ error: 'Error desconocido al crear sesión del portal' });
   }
 }
 
+/**
+ * Asigna una suscripción gratis a un usuario (solo para administradores)
+ * Permite asignar cualquier plan (FREE, BASIC, PRO, ENTERPRISE) sin pago
+ */
+export async function assignFreeSubscription(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const adminUserId = req.userId;
+    if (!adminUserId) {
+      res.status(401).json({ error: 'Usuario no autenticado' });
+      return;
+    }
+
+    const { userId, plan } = req.body;
+
+    // Validar que se proporcionen los campos requeridos
+    if (!userId || typeof userId !== 'string') {
+      res.status(400).json({
+        error: 'userId requerido',
+        message: 'Debes proporcionar el userId del usuario al que se asignará la suscripción',
+      });
+      return;
+    }
+
+    if (!plan || typeof plan !== 'string') {
+      res.status(400).json({
+        error: 'plan requerido',
+        message: 'Debes proporcionar el plan a asignar (FREE, BASIC, PRO, ENTERPRISE)',
+      });
+      return;
+    }
+
+    // Validar que el plan sea válido
+    const validPlans = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'];
+    if (!validPlans.includes(plan)) {
+      res.status(400).json({
+        error: 'Plan inválido',
+        message: `El plan debe ser uno de: ${validPlans.join(', ')}`,
+        allowedPlans: validPlans,
+      });
+      return;
+    }
+
+    // Verificar que el usuario existe
+    const targetUser = await User.findByPk(userId);
+    if (!targetUser) {
+      res.status(404).json({
+        error: 'Usuario no encontrado',
+        message: `No se encontró un usuario con el ID: ${userId}`,
+      });
+      return;
+    }
+
+    // Obtener precio del plan desde las constantes
+    const planPrice = PLAN_PRICES[plan as Plan];
+
+    // Asignar suscripción usando el servicio
+    const subscriptionService = new SubscriptionService();
+    const subscription = await subscriptionService.assignSubscription(
+      userId,
+      plan as Plan,
+      planPrice
+    );
+
+    res.json({
+      message: `Suscripción ${plan} asignada exitosamente`,
+      subscription: {
+        id: subscription.id,
+        userId: subscription.user_id,
+        plan: subscription.plan,
+        planPrice: Number(subscription.plan_price),
+        status: subscription.status,
+        currentPeriodStart: subscription.current_period_start,
+        currentPeriodEnd: subscription.current_period_end,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      },
+      user: {
+        id: targetUser.id,
+        email: targetUser.email,
+        nombre: targetUser.nombre,
+        apellido: targetUser.apellido,
+      },
+    });
+  } catch (error) {
+    console.error('Error al asignar suscripción gratis:', error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: 'Error al asignar suscripción',
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'Error desconocido al asignar suscripción' });
+  }
+}

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { body, param } from "express-validator";
 import {
   getProfiles,
@@ -11,7 +11,7 @@ import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateProfileLimit } from "../middlewares/plan-limits.middleware.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);

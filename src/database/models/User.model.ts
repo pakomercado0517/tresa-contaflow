@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config";
+import sequelize from "../config.js";
 
 interface UserAttributes {
   id: string;
@@ -16,8 +16,9 @@ interface UserAttributes {
 }
 
 interface UserCreationAttributes
-  extends Omit<UserAttributes, "id" | "created_at" | "updated_at">,
-    Partial<Pick<UserAttributes, "email_verified">> {}
+  extends Omit<UserAttributes, "id" | "created_at" | "updated_at" | "email_verified"> {
+  email_verified?: boolean;
+}
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   declare id: string;

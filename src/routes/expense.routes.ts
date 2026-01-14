@@ -1,9 +1,9 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { getExpenses, getExpenseById, createExpense, updateExpense, deleteExpense, uploadExpense } from "../controllers/expense.controller.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);

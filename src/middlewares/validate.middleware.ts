@@ -14,8 +14,8 @@ export function validateRequest(req: Request, res: Response, next: NextFunction)
     // Si hay un solo error, retornarlo directamente
     if (formattedErrors.length === 1) {
       res.status(400).json({
-        error: formattedErrors[0].message,
-        field: formattedErrors[0].field,
+        error: formattedErrors[0]?.message,
+        field: formattedErrors[0]?.field,
       });
       return;
     }

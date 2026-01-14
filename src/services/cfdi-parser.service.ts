@@ -16,8 +16,6 @@ export class CFDIParserService {
       parseAttributeValue: true,
       parseTagValue: true,
       trimValues: true,
-      parseTrueNumberOnly: false,
-      arrayMode: false,
     });
   }
 

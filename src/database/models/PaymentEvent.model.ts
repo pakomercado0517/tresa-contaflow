@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config";
+import sequelize from "../config.js";
 import User from "./User.model.js";
 
 interface PaymentEventAttributes {
@@ -13,8 +13,10 @@ interface PaymentEventAttributes {
 }
 
 interface PaymentEventCreationAttributes
-  extends Omit<PaymentEventAttributes, "id" | "created_at">,
-    Partial<Pick<PaymentEventAttributes, "user_id" | "processed_at">> {}
+  extends Omit<PaymentEventAttributes, "id" | "created_at" | "user_id" | "processed_at"> {
+  user_id?: string | null;
+  processed_at?: Date | null;
+}
 
 class PaymentEvent
   extends Model<PaymentEventAttributes, PaymentEventCreationAttributes>

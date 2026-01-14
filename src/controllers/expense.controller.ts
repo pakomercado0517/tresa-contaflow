@@ -3,10 +3,11 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { Profile, Expense } from "../database/models/index.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 import { uploadInvoice } from "./invoice.controller.js";
+import { Op } from "sequelize";
 
 /**
  * Lista los gastos del usuario
- * Soporta filtros: profileId, mes, año, tipo, categoria, y paginación
+ * Soporta filtros: profileId, mes, año, tipo, categoria, search (búsqueda por texto), y paginación
  */
 export async function getExpenses(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -17,7 +18,7 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
     }
 
     // Obtener parámetros de query
-    const { profileId, mes, año, tipo, categoria, page = "1", limit = "50" } = req.query;
+    const { profileId, mes, año, tipo, categoria, search, page = "1", limit = "50" } = req.query;
 
     // Construir filtros
     const whereClause: any = {};
@@ -47,6 +48,18 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
 
     if (categoria && typeof categoria === "string") {
       whereClause.categoria = categoria;
+    }
+
+    // Búsqueda por texto (RFC, razón social, concepto)
+    if (search && typeof search === "string" && search.trim().length > 0) {
+      const searchTerm = `%${search.trim()}%`;
+      whereClause[Op.or] = [
+        { rfc_emisor: { [Op.iLike]: searchTerm } },
+        { nombre_emisor: { [Op.iLike]: searchTerm } },
+        { rfc_receptor: { [Op.iLike]: searchTerm } },
+        { nombre_receptor: { [Op.iLike]: searchTerm } },
+        { concepto: { [Op.iLike]: searchTerm } },
+      ];
     }
 
     // Paginación

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { body } from "express-validator";
 import {
   register,
@@ -8,11 +8,12 @@ import {
   verifyEmail,
   resendVerificationEmail,
   updateProfile,
+  getCurrentUser,
 } from "../controllers/auth.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // Validaciones
 const registerValidation = [
@@ -64,6 +65,7 @@ router.post("/logout", authenticateToken, logout); // Agregado middleware de aut
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
 router.post("/resend-verification-email", resendVerificationEmailValidation, validateRequest, resendVerificationEmail);
+router.get("/me", authenticateToken, getCurrentUser);
 router.patch("/profile", authenticateToken, updateProfileValidation, validateRequest, updateProfile);
 
 export default router;

@@ -1,5 +1,5 @@
 import { DataTypes, Model } from "sequelize";
-import sequelize from "../config";
+import sequelize from "../config.js";
 import User from "./User.model.js";
 
 type TipoPersona = "FISICA" | "MORAL";
@@ -17,8 +17,10 @@ interface ProfileAttributes {
 }
 
 interface ProfileCreationAttributes
-  extends Omit<ProfileAttributes, "id" | "created_at" | "updated_at">,
-    Partial<Pick<ProfileAttributes, "regimen_fiscal" | "validaciones_habilitadas">> {}
+  extends Omit<ProfileAttributes, "id" | "created_at" | "updated_at" | "regimen_fiscal" | "validaciones_habilitadas"> {
+  regimen_fiscal?: string | null;
+  validaciones_habilitadas?: object;
+}
 
 class Profile extends Model<ProfileAttributes, ProfileCreationAttributes> implements ProfileAttributes {
   declare id: string;

@@ -1,14 +1,15 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { body } from "express-validator";
 import {
   createCheckoutSession,
   getSubscription,
   createPortalSession,
+  assignFreeSubscription,
 } from "../controllers/subscription.controller.js";
-import { authenticateToken } from "../middlewares/auth.middleware.js";
+import { authenticateToken, authenticateAdmin } from "../middlewares/auth.middleware.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 
-const router = Router();
+const router: IRouter = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticateToken);
@@ -30,6 +31,22 @@ router.post(
 
 // POST /api/subscription/create-portal-session - Crear sesión del Customer Portal
 router.post("/create-portal-session", createPortalSession);
+
+// POST /api/subscription/assign-free - Asignar suscripción gratis (solo admin)
+router.post(
+  "/assign-free",
+  authenticateAdmin,
+  [
+    body("userId")
+      .isUUID()
+      .withMessage("El userId debe ser un UUID válido"),
+    body("plan")
+      .isIn(["FREE", "BASIC", "PRO", "ENTERPRISE"])
+      .withMessage("El plan debe ser FREE, BASIC, PRO o ENTERPRISE"),
+  ],
+  validateRequest,
+  assignFreeSubscription
+);
 
 export default router;
 

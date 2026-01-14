@@ -1,4 +1,4 @@
-import sequelize, { sequelize as sequelizeNamed } from "../config";
+import sequelize, { sequelize as sequelizeNamed } from "../config.js";
 import type { Sequelize } from "sequelize";
 
 // Importar modelos
