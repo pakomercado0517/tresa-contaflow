@@ -4,6 +4,7 @@ import { getStripeService } from "../services/stripe.service.js";
 import { Subscription, PaymentEvent } from "../database/models/index.js";
 import type { Plan } from "../constants/plans.constants.js";
 import { PLAN_PRICES } from "../constants/plans.constants.js";
+import { DiscountService } from "../services/discount.service.js";
 
 /**
  * Endpoint para recibir webhooks de Stripe
@@ -195,6 +196,12 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
     // Crear nueva suscripción
     await Subscription.create(subscriptionData);
     console.log(`Nueva suscripción creada para usuario ${userId}, plan: ${plan}`);
+  }
+
+  const promotionCodeId = session.metadata?.promotionCodeId;
+  if (promotionCodeId) {
+    const discountService = new DiscountService();
+    await discountService.recordRedemptionByPromotionCodeId(promotionCodeId);
   }
 }
 

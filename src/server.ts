@@ -10,6 +10,7 @@ import invoiceRoutes from "./routes/invoice.routes.js";
 import expenseRoutes from "./routes/expense.routes.js";
 import subscriptionRoutes from "./routes/subscription.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import discountRoutes from "./routes/discount.routes.js";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/api/profiles", profileRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/subscription", subscriptionRoutes);
+app.use("/api/discounts", discountRoutes);
 app.use("/api/webhooks", webhookRoutes);
 
 export default app;

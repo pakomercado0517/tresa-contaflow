@@ -5,6 +5,7 @@ import { getStripeService } from '../services/stripe.service.js';
 import { PLAN_PRICES, type Plan } from '../constants/plans.constants.js';
 import { SubscriptionService } from '../services/subscription.service.js';
 import { User } from '../database/models/index.js';
+import { DiscountService } from '../services/discount.service.js';
 
 /**
  * Crea una sesión de checkout de Stripe para suscribirse a un plan
@@ -17,7 +18,10 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const { plan } = req.body;
+    const { plan, promotionCode } = req.body as {
+      plan?: string;
+      promotionCode?: string;
+    };
 
     // Validar que el plan sea válido
     if (!plan || !['BASIC', 'PRO'].includes(plan)) {
@@ -68,6 +72,36 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
 
     const stripeCustomerId = existingSubscription?.stripe_customer_id || undefined;
 
+    const normalizedPromotionCode = promotionCode?.trim().toUpperCase();
+    let promotionCodeId: string | null = null;
+
+    if (normalizedPromotionCode) {
+      const discountService = new DiscountService();
+      const promotion = await discountService.getPromotionCodeForCheckout(
+        normalizedPromotionCode
+      );
+
+      if (!promotion) {
+        res.status(400).json({
+          error: 'Código de descuento inválido',
+          message: 'El código de descuento no es válido, ya expiró o no está activo',
+        });
+        return;
+      }
+
+      promotionCodeId = promotion.promotionCodeId;
+    }
+
+    const metadata: Record<string, string> = {
+      userId: userId,
+      plan: plan,
+    };
+
+    if (normalizedPromotionCode && promotionCodeId) {
+      metadata.promotionCode = normalizedPromotionCode;
+      metadata.promotionCodeId = promotionCodeId;
+    }
+
     // Preparar parámetros del checkout session
     // Stripe solo permite uno: customer O customer_email, no ambos
     const checkoutParams: Stripe.Checkout.SessionCreateParams = {
@@ -81,17 +115,15 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        userId: userId,
-        plan: plan,
-      },
+      metadata,
       subscription_data: {
-        metadata: {
-          userId: userId,
-          plan: plan,
-        },
+        metadata,
       },
     };
+
+    if (promotionCodeId) {
+      checkoutParams.discounts = [{ promotion_code: promotionCodeId }];
+    }
 
     // Si ya tiene un customer en Stripe, usar customer (reutilizar)
     // Si no, usar customer_email para pre-llenar el email
