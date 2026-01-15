@@ -1420,6 +1420,216 @@
       "description": "Endpoints para gestionar gastos"
     },
     {
+      "name": "Discounts",
+      "item": [
+        {
+          "name": "List Discount Codes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Listado obtenido\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('data');",
+                  "        pm.expect(jsonData).to.have.property('count');",
+                  "        pm.expect(jsonData.data).to.be.an('array');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al listar\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/discounts?active=true&code={{promotionCode}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "discounts"],
+              "query": [
+                {
+                  "key": "active",
+                  "value": "true",
+                  "description": "Filtra por activos (true/false)"
+                },
+                {
+                  "key": "code",
+                  "value": "{{promotionCode}}",
+                  "description": "Filtra por código exacto (opcional)"
+                }
+              ]
+            },
+            "description": "Listar códigos de descuento (admin)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Discount Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Código de descuento creado\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('discountCode');",
+                  "        pm.expect(jsonData.discountCode).to.have.property('id');",
+                  "        pm.expect(jsonData.discountCode).to.have.property('code');",
+                  "        ",
+                  "        pm.collectionVariables.set('discountId', jsonData.discountCode.id);",
+                  "        pm.collectionVariables.set('promotionCode', jsonData.discountCode.code);",
+                  "        ",
+                  "        console.log('✅ Código creado:', jsonData.discountCode.code);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al crear código\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"PROMO2026\",\n  \"duration\": \"once\",\n  \"percentOff\": 20,\n  \"maxRedemptions\": 100,\n  \"expiresAt\": \"2026-02-01T00:00:00.000Z\",\n  \"active\": true,\n  \"metadata\": {\n    \"campaign\": \"enero\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/discounts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "discounts"]
+            },
+            "description": "Crear un código de descuento en Stripe (admin)"
+          },
+          "response": []
+        },
+        {
+          "name": "Activate Discount Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Código activado\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('discountCode');",
+                  "        pm.expect(jsonData.discountCode).to.have.property('active', true);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al activar\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/discounts/{{discountId}}/activate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "discounts", "{{discountId}}", "activate"]
+            },
+            "description": "Activar un código de descuento (admin)"
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate Discount Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Código desactivado\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('discountCode');",
+                  "        pm.expect(jsonData.discountCode).to.have.property('active', false);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al desactivar\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "        console.log('Error:', pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/discounts/{{discountId}}/deactivate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "discounts", "{{discountId}}", "deactivate"]
+            },
+            "description": "Desactivar un código de descuento (admin)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar códigos de descuento"
+    },
+    {
       "name": "Subscription",
       "item": [
         {
@@ -1524,7 +1734,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"plan\": \"BASIC\"\n}",
+              "raw": "{\n  \"plan\": \"BASIC\",\n  \"promotionCode\": \"{{promotionCode}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1588,7 +1798,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"plan\": \"PRO\"\n}",
+              "raw": "{\n  \"plan\": \"PRO\",\n  \"promotionCode\": \"{{promotionCode}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1708,6 +1918,16 @@
     },
     {
       "key": "checkoutSessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "discountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "promotionCode",
       "value": "",
       "type": "string"
     }

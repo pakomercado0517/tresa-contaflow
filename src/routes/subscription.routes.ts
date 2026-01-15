@@ -24,6 +24,12 @@ router.post(
     body("plan")
       .isIn(["BASIC", "PRO"])
       .withMessage("El plan debe ser BASIC o PRO"),
+    body("promotionCode")
+      .optional()
+      .isString()
+      .trim()
+      .isLength({ min: 3, max: 50 })
+      .withMessage("promotionCode debe ser un string válido"),
   ],
   validateRequest,
   createCheckoutSession
