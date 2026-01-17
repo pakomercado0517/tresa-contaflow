@@ -9,6 +9,8 @@ import {
   resendVerificationEmail,
   updateProfile,
   getCurrentUser,
+  requestPasswordReset,
+  resetPassword,
 } from "../controllers/auth.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
@@ -40,6 +42,17 @@ const resendVerificationEmailValidation = [
   body("email").isEmail().withMessage("Email inválido"),
 ];
 
+const requestPasswordResetValidation = [
+  body("email").isEmail().withMessage("Email inválido"),
+];
+
+const resetPasswordValidation = [
+  body("token").notEmpty().withMessage("Token de restablecimiento requerido"),
+  body("password")
+    .isLength({ min: 8 })
+    .withMessage("La contraseña debe tener al menos 8 caracteres"),
+];
+
 const updateProfileValidation = [
   body("nombre")
     .optional()
@@ -65,6 +78,8 @@ router.post("/logout", authenticateToken, logout); // Agregado middleware de aut
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
 router.post("/resend-verification-email", resendVerificationEmailValidation, validateRequest, resendVerificationEmail);
+router.post("/forgot-password", requestPasswordResetValidation, validateRequest, requestPasswordReset);
+router.post("/reset-password", resetPasswordValidation, validateRequest, resetPassword);
 router.get("/me", authenticateToken, getCurrentUser);
 router.patch("/profile", authenticateToken, updateProfileValidation, validateRequest, updateProfile);
 

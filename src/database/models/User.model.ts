@@ -11,6 +11,8 @@ interface UserAttributes {
   email_verified: boolean;
   email_verification_token: string | null;
   email_verification_expires: Date | null;
+  password_reset_token: string | null;
+  password_reset_expires: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -30,6 +32,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   declare email_verified: boolean;
   declare email_verification_token: string | null;
   declare email_verification_expires: Date | null;
+  declare password_reset_token: string | null;
+  declare password_reset_expires: Date | null;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -72,6 +76,14 @@ User.init(
       allowNull: true,
     },
     email_verification_expires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    password_reset_token: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    password_reset_expires: {
       type: DataTypes.DATE,
       allowNull: true,
     },

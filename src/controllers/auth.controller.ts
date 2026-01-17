@@ -7,7 +7,7 @@ import {
   verifyRefreshToken,
 } from "../utils/jwt.util.js";
 import { generateVerificationToken, hashVerificationToken } from "../utils/verification.util.js";
-import { sendVerificationEmail } from "../services/email.service.js";
+import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service.js";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
@@ -144,7 +144,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     // Enviar email de verificación
     try {
-      await sendVerificationEmail(user.email, verificationToken);
+      await sendVerificationEmail(user.email, verificationToken, user.nombre);
     } catch (emailError) {
       console.error("Error al enviar email de verificación:", emailError);
       // No fallar el registro si el email falla, solo loguear el error
@@ -551,7 +551,7 @@ export async function resendVerificationEmail(req: Request, res: Response): Prom
 
     // Enviar email de verificación
     try {
-      await sendVerificationEmail(user.email, verificationToken);
+      await sendVerificationEmail(user.email, verificationToken, user.nombre);
     } catch (emailError) {
       console.error("Error al enviar email de verificación:", emailError);
       res.status(500).json({ 
@@ -772,6 +772,221 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
     res.status(500).json({ 
       error: "Internal Server Error",
       message: "Error al obtener el usuario"
+    });
+  }
+}
+
+/**
+ * Solicita el restablecimiento de contraseña
+ * Envía un email con el token de reset
+ */
+export async function requestPasswordReset(req: Request, res: Response): Promise<void> {
+  try {
+    const { email } = req.body;
+
+    // Validación
+    if (!email || typeof email !== "string") {
+      res.status(400).json({ 
+        error: "Email requerido",
+        message: "El email es obligatorio"
+      });
+      return;
+    }
+
+    // Buscar usuario
+    let user;
+    try {
+      user = await User.findOne({ 
+        where: { email: email.toLowerCase().trim() } 
+      });
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({ 
+        error: "Error de base de datos",
+        message: "No se pudo buscar el usuario. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    // Por seguridad, no revelamos si el email existe o no
+    // Siempre retornamos éxito para evitar enumeración de emails
+    if (!user) {
+      res.status(200).json({
+        message: "Si el email está registrado, se enviará un correo con las instrucciones para restablecer tu contraseña.",
+      });
+      return;
+    }
+
+    // Generar token de reset
+    const resetToken = generateVerificationToken();
+    const hashedToken = hashVerificationToken(resetToken);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // Expira en 1 hora
+
+    // Actualizar token en la BD
+    try {
+      await user.update({
+        password_reset_token: hashedToken,
+        password_reset_expires: expiresAt,
+      });
+    } catch (updateError) {
+      console.error("Error al actualizar token de reset:", updateError);
+      res.status(500).json({ 
+        error: "Error al generar token",
+        message: "No se pudo generar el token de restablecimiento. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    // Enviar email de reset
+    try {
+      await sendPasswordResetEmail(user.email, resetToken, user.nombre);
+    } catch (emailError) {
+      console.error("Error al enviar email de reset:", emailError);
+      res.status(500).json({ 
+        error: "Error al enviar email",
+        message: "No se pudo enviar el email de restablecimiento. Por favor intenta nuevamente más tarde."
+      });
+      return;
+    }
+
+    res.status(200).json({
+      message: "Si el email está registrado, se enviará un correo con las instrucciones para restablecer tu contraseña.",
+    });
+  } catch (error) {
+    console.error("Error inesperado al solicitar reset de contraseña:", error);
+    
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: "Error al solicitar reset",
+        message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    res.status(500).json({ 
+      error: "Error desconocido",
+      message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+    });
+  }
+}
+
+/**
+ * Restablece la contraseña usando el token
+ */
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { token, password } = req.body;
+
+    // Validación
+    if (!token || typeof token !== "string") {
+      res.status(400).json({ 
+        error: "Token requerido",
+        message: "El token de restablecimiento es obligatorio"
+      });
+      return;
+    }
+
+    if (!password || typeof password !== "string") {
+      res.status(400).json({ 
+        error: "Contraseña requerida",
+        message: "La nueva contraseña es obligatoria"
+      });
+      return;
+    }
+
+    // Validar longitud de contraseña
+    if (password.length < 8) {
+      res.status(400).json({ 
+        error: "Contraseña inválida",
+        message: "La contraseña debe tener al menos 8 caracteres"
+      });
+      return;
+    }
+
+    // Hashear el token recibido para comparar
+    const hashedToken = hashVerificationToken(token);
+
+    // Buscar usuario con este token
+    let user;
+    try {
+      user = await User.findOne({
+        where: {
+          password_reset_token: hashedToken,
+        },
+      });
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({ 
+        error: "Error de base de datos",
+        message: "No se pudo verificar el token. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    if (!user) {
+      res.status(400).json({ 
+        error: "Token inválido",
+        message: "El token proporcionado no es válido o ha expirado."
+      });
+      return;
+    }
+
+    // Verificar si el token expiró
+    if (!user.password_reset_expires || user.password_reset_expires < new Date()) {
+      res.status(400).json({ 
+        error: "El token ha expirado",
+        message: "El token de restablecimiento ha expirado. Por favor solicita uno nuevo."
+      });
+      return;
+    }
+
+    // Hashear nueva contraseña
+    let passwordHash: string;
+    try {
+      passwordHash = await bcrypt.hash(password, 10);
+    } catch (hashError) {
+      console.error("Error al hashear contraseña:", hashError);
+      res.status(500).json({ 
+        error: "Error al procesar contraseña",
+        message: "No se pudo procesar la nueva contraseña. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    // Actualizar contraseña y limpiar token
+    try {
+      await user.update({
+        password_hash: passwordHash,
+        password_reset_token: null,
+        password_reset_expires: null,
+      });
+    } catch (updateError) {
+      console.error("Error al actualizar contraseña:", updateError);
+      res.status(500).json({ 
+        error: "Error al restablecer contraseña",
+        message: "No se pudo restablecer la contraseña. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    res.json({
+      message: "Contraseña restablecida correctamente. Ya puedes iniciar sesión con tu nueva contraseña.",
+    });
+  } catch (error) {
+    console.error("Error inesperado al restablecer contraseña:", error);
+    
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: "Error al restablecer contraseña",
+        message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+      });
+      return;
+    }
+
+    res.status(500).json({ 
+      error: "Error desconocido",
+      message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
     });
   }
 }

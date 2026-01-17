@@ -20,13 +20,16 @@ export default defineConfig({
     },
     testTimeout: 30000,
     pool: "forks",
-    forks: {
-      singleFork: true,
-    },
     // Ejecutar tests de forma secuencial para evitar conflictos de BD
     fileParallelism: false,
     sequence: {
       shuffle: false,
+    },
+    // @ts-expect-error - poolOptions may not be in type definitions but is supported by Vitest
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
     },
   },
   resolve: {

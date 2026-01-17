@@ -75,7 +75,10 @@ El servidor estará disponible en `http://localhost:3001`
 
 - `pnpm dev` - Inicia el servidor en modo desarrollo
 - `pnpm build` - Compila TypeScript a JavaScript
-- `pnpm start` - Inicia el servidor en modo producción
+- `pnpm start` - Inicia el servidor en modo producción (ejecuta `dist/index.js`)
+- `pnpm test` - Ejecuta los tests
+- `pnpm test:watch` - Ejecuta los tests en modo watch
+- `pnpm test:coverage` - Ejecuta los tests con cobertura
 - `pnpm db:migrate` - Ejecuta las migraciones pendientes
 - `pnpm db:migrate:undo` - Revierte la última migración
 - `pnpm db:migrate:status` - Muestra el estado de las migraciones
@@ -145,6 +148,10 @@ El proyecto usa PostgreSQL con Sequelize como ORM. Las tablas principales son:
 - Validación de entrada con express-validator
 - Verificación de email obligatoria
 - Row-Level Security por user_id
+- **Helmet.js** para headers de seguridad HTTP
+- **Rate limiting** para protección contra ataques de fuerza bruta
+- **CORS** configurado según entorno
+- Manejo centralizado de errores
 
 ## 📝 Tecnologías
 
@@ -155,6 +162,44 @@ El proyecto usa PostgreSQL con Sequelize como ORM. Las tablas principales son:
 - **Validación**: express-validator
 - **Testing**: Postman Collection
 
+## 🚀 Despliegue a Producción
+
+### Requisitos Previos
+
+1. **Variables de Entorno**: Configura todas las variables de entorno necesarias (ver `.env.example`)
+2. **Base de Datos**: PostgreSQL configurado con SSL habilitado
+3. **Secrets Seguros**: Genera secrets únicos y seguros para JWT (usa `openssl rand -base64 32`)
+
+### Pasos para Desplegar
+
+```bash
+# 1. Instalar dependencias
+pnpm install --production=false
+
+# 2. Compilar TypeScript
+pnpm build
+
+# 3. Ejecutar migraciones
+pnpm db:migrate
+
+# 4. Iniciar en producción
+NODE_ENV=production pnpm start
+```
+
+### Endpoints Importantes
+
+- `GET /health` - Health check endpoint para monitoreo
+- `GET /` - Endpoint raíz con información básica
+
+### Configuración de Producción
+
+- **CORS**: Configura `FRONTEND_URL` o `APP_URL` en las variables de entorno
+- **Rate Limiting**: Configurado automáticamente (más estricto en producción)
+- **Logging**: Formato `combined` en producción (vs `dev` en desarrollo)
+- **Error Handling**: Errores no exponen detalles en producción
+
+Para más detalles, consulta [PRODUCTION_READINESS.md](./docs/PRODUCTION_READINESS.md)
+
 ## 🚧 Estado del Proyecto
 
 Este proyecto está en desarrollo activo. Las siguientes funcionalidades están implementadas:
@@ -163,14 +208,18 @@ Este proyecto está en desarrollo activo. Las siguientes funcionalidades están 
 - ✅ CRUD de perfiles (RFCs)
 - ✅ Estructura de base de datos completa
 - ✅ Integración con Brevo para emails
+- ✅ Procesamiento de XML CFDI
+- ✅ Integración con Stripe
+- ✅ Sistema de suscripciones
+- ✅ Seguridad mejorada (Helmet, Rate Limiting, CORS)
+- ✅ Health check endpoint
+- ✅ Manejo centralizado de errores
 
 Próximas funcionalidades:
 
-- 🔄 Parser XML CFDI
-- 🔄 Upload de archivos XML
-- 🔄 Validaciones fiscales
-- 🔄 Matching de complementos de pago
-- 🔄 Integración con Stripe
+- 🔄 Logging estructurado (Winston/Pino)
+- 🔄 Monitoreo y alertas
+- 🔄 Documentación de API (Swagger/OpenAPI)
 - 🔄 Frontend Next.js
 
 ## 📄 Licencia
