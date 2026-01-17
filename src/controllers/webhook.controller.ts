@@ -165,6 +165,14 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
   // Obtener el precio real de Stripe (en lugar de usar PLAN_PRICES hardcodeado)
   const actualPrice = getPriceFromStripeSubscription(subscription);
 
+  // Validar y convertir fechas de período (pueden ser undefined en algunos casos)
+  const currentPeriodStart = (subscription as any).current_period_start
+    ? new Date(((subscription as any).current_period_start as number) * 1000)
+    : null;
+  const currentPeriodEnd = (subscription as any).current_period_end
+    ? new Date(((subscription as any).current_period_end as number) * 1000)
+    : null;
+
   const subscriptionData = {
     user_id: userId,
     stripe_customer_id: subscription.customer as string,
@@ -172,10 +180,8 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
     plan: plan,
     plan_price: actualPrice,
     status: mapStripeStatusToDbStatus(subscription.status),
-    // @ts-expect-error - Stripe types issue with current_period_start
-    current_period_start: new Date((subscription.current_period_start as number) * 1000),
-    // @ts-expect-error - Stripe types issue with current_period_end
-    current_period_end: new Date((subscription.current_period_end as number) * 1000),
+    current_period_start: currentPeriodStart,
+    current_period_end: currentPeriodEnd,
     cancel_at_period_end: subscription.cancel_at_period_end || false,
     canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
   };
