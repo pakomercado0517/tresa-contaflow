@@ -1,6 +1,7 @@
-import type { CFDI, ComplementoPago, FacturaRelacionada } from "../types/cfdi.types.js";
+import type { CFDI, FacturaRelacionada } from "../types/cfdi.types.js";
 import type { MatchResult, MatchingResult } from "../types/matching.types.js";
-import { Invoice } from "../database/models/index.js";
+import type { PagoParcial } from "../types/payment.types.js";
+import { Invoice, PaymentComplementItem } from "../database/models/index.js";
 
 /**
  * Servicio para matching de complementos de pago con facturas PPD
@@ -20,10 +21,12 @@ export class PaymentMatchingService {
     const complemento = cfdi.complementoPago;
     const matches: MatchResult[] = [];
 
-    // Buscar matches para cada factura relacionada en el complemento
-    for (const facturaRel of complemento.facturasRelacionadas) {
-      const match = await this.buscarMatchFactura(facturaRel, profileId);
-      matches.push(match);
+    // Buscar matches para cada factura relacionada en los pagos del complemento
+    for (const pago of complemento.pagos) {
+      for (const facturaRel of pago.facturasRelacionadas) {
+        const match = await this.buscarMatchFactura(facturaRel, profileId);
+        matches.push(match);
+      }
     }
 
     const matchesValidos = matches.filter((m) => m.coincidencia && m.encontrada).length;
@@ -97,7 +100,7 @@ export class PaymentMatchingService {
    * Valida que el match sea correcto (montos, fechas, etc.)
    */
   private validarMatch(
-    factura: any, // Invoice model
+    factura: Invoice,
     facturaRel: FacturaRelacionada
   ): { esValido: boolean; errores: string[]; advertencias: string[] } {
     const errores: string[] = [];
@@ -189,8 +192,10 @@ export class PaymentMatchingService {
     // Por ahora, retornamos valores básicos
 
     const totalFactura = Number(factura.total);
-    const pagos = (factura.pagos as any[]) || [];
-    const totalPagado = pagos.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
+    const pagosManual = this.getPagosManual(factura.pagos);
+    const totalPagadoManual = pagosManual.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
+    const totalPagadoComplementos = await this.sumPagosComplementos(factura.uuid, profileId);
+    const totalPagado = totalPagadoManual + totalPagadoComplementos;
     const saldoPendiente = totalFactura - totalPagado;
     const porcentajePagado = totalFactura > 0 ? (totalPagado / totalFactura) * 100 : 0;
     const completamentePagado = saldoPendiente <= 0.01; // Tolerancia de 1 centavo
@@ -202,6 +207,21 @@ export class PaymentMatchingService {
       porcentajePagado: Math.round(porcentajePagado * 100) / 100,
       completamentePagado,
     };
+  }
+
+  private getPagosManual(pagos: PagoParcial[]): PagoParcial[] {
+    return pagos.filter((pago) => (pago.origen ?? "MANUAL") === "MANUAL");
+  }
+
+  private async sumPagosComplementos(facturaUUID: string, profileId: string): Promise<number> {
+    const items = await PaymentComplementItem.findAll({
+      where: {
+        profile_id: profileId,
+        factura_uuid: facturaUUID,
+      },
+    });
+
+    return items.reduce((sum, item) => sum + Number(item.imp_pagado || 0), 0);
   }
 }
 

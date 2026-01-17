@@ -1,5 +1,12 @@
 import { XMLParser } from "fast-xml-parser";
-import type { CFDI, ComplementoPago, FacturaRelacionada, Pago, TipoCFDI } from "../types/cfdi.types.js";
+import type {
+  CFDI,
+  ComplementoPago,
+  ComplementoPagoItem,
+  FacturaRelacionada,
+  Pago,
+  TipoCFDI,
+} from "../types/cfdi.types.js";
 
 /**
  * Servicio para parsear archivos XML CFDI (México)
@@ -316,48 +323,101 @@ export class CFDIParserService {
       throw new Error("No se encontró el nodo de complemento de pago");
     }
 
-    const pago = pagosNode["pago20:Pago"] || pagosNode["pago10:Pago"];
-    if (!pago) {
+    const pagosRaw = pagosNode["pago20:Pago"] || pagosNode["pago10:Pago"];
+    const pagosArray = Array.isArray(pagosRaw) ? pagosRaw : pagosRaw ? [pagosRaw] : [];
+    if (pagosArray.length === 0) {
       throw new Error("No se encontró el nodo Pago en el complemento");
     }
 
-    const fechaPago = this.parseFecha(pago["@_FechaPago"]);
-    const formaPago = pago["@_FormaDePagoP"] || pago["@_FormaPago"] || "";
-    const monedaPago = pago["@_MonedaP"] || pago["@_Moneda"] || "";
-    const tipoCambio = parseFloat(pago["@_TipoCambioP"] || pago["@_TipoCambio"] || "1");
-    const monto = parseFloat(pago["@_Monto"] || "0");
-    const numOperacion = pago["@_NumOperacion"] || undefined;
+    const pagos: ComplementoPagoItem[] = pagosArray.map((pagoNode: unknown) => {
+      const pago = this.ensureObject(pagoNode, "Pago");
+      const fechaPago = this.parseFecha(this.getStringAttr(pago, "@_FechaPago"));
+      const formaPago =
+        this.getStringAttr(pago, "@_FormaDePagoP") || this.getStringAttr(pago, "@_FormaPago");
+      const monedaPago = this.getStringAttr(pago, "@_MonedaP") || this.getStringAttr(pago, "@_Moneda");
+      const tipoCambio = this.getNumberAttr(pago, "@_TipoCambioP", this.getNumberAttr(pago, "@_TipoCambio", 1));
+      const monto = this.getNumberAttr(pago, "@_Monto", 0);
+      const numOperacion = this.getStringAttr(pago, "@_NumOperacion") || undefined;
 
-    // Extraer facturas relacionadas
-    const doctosRelacionados = pago["pago20:DoctoRelacionado"] || pago["pago10:DoctoRelacionado"];
-    const facturasRelacionadas: FacturaRelacionada[] = [];
+      // Extraer facturas relacionadas
+      const doctosRelacionados =
+        this.getNode(pago, "pago20:DoctoRelacionado") || this.getNode(pago, "pago10:DoctoRelacionado");
+      const facturasRelacionadas: FacturaRelacionada[] = [];
 
-    if (doctosRelacionados) {
-      const doctosArray = Array.isArray(doctosRelacionados) ? doctosRelacionados : [doctosRelacionados];
-      
-      for (const docto of doctosArray) {
-        facturasRelacionadas.push({
-          uuid: docto["@_IdDocumento"] || docto["@_UUID"],
-          monedaDR: docto["@_MonedaDR"] || "",
-          tipoCambioDR: parseFloat(docto["@_TipoCambioDR"] || "1"),
-          metodoPagoDR: docto["@_MetodoDePagoDR"] || "",
-          numParcialidad: parseInt(docto["@_NumParcialidad"] || "1"),
-          impSaldoAnt: parseFloat(docto["@_ImpSaldoAnt"] || "0"),
-          impPagado: parseFloat(docto["@_ImpPagado"] || "0"),
-          impSaldoInsoluto: parseFloat(docto["@_ImpSaldoInsoluto"] || "0"),
-        });
+      if (doctosRelacionados) {
+        const doctosArray = Array.isArray(doctosRelacionados)
+          ? doctosRelacionados
+          : [doctosRelacionados];
+
+        for (const doctoNode of doctosArray) {
+          const docto = this.ensureObject(doctoNode, "DoctoRelacionado");
+          facturasRelacionadas.push({
+            uuid: this.getStringAttr(docto, "@_IdDocumento") || this.getStringAttr(docto, "@_UUID"),
+            monedaDR: this.getStringAttr(docto, "@_MonedaDR"),
+            tipoCambioDR: this.getNumberAttr(docto, "@_TipoCambioDR", 1),
+            metodoPagoDR: this.getStringAttr(docto, "@_MetodoDePagoDR"),
+            numParcialidad: this.getIntAttr(docto, "@_NumParcialidad", 1),
+            impSaldoAnt: this.getNumberAttr(docto, "@_ImpSaldoAnt", 0),
+            impPagado: this.getNumberAttr(docto, "@_ImpPagado", 0),
+            impSaldoInsoluto: this.getNumberAttr(docto, "@_ImpSaldoInsoluto", 0),
+          });
+        }
       }
-    }
+
+      return {
+        fechaPago,
+        formaPago,
+        monedaPago,
+        tipoCambio,
+        monto,
+        numOperacion,
+        facturasRelacionadas,
+      };
+    });
 
     return {
-      fechaPago,
-      formaPago,
-      monedaPago,
-      tipoCambio,
-      monto,
-      numOperacion,
-      facturasRelacionadas,
+      pagos,
     };
+  }
+
+  private ensureObject(value: unknown, contexto: string): Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Estructura inválida para ${contexto}`);
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private getNode(obj: Record<string, unknown>, key: string): unknown {
+    return obj[key];
+  }
+
+  private getStringAttr(obj: Record<string, unknown>, key: string): string {
+    const value = obj[key];
+    return typeof value === "string" ? value : "";
+  }
+
+  private getNumberAttr(obj: Record<string, unknown>, key: string, fallback: number): number {
+    const value = obj[key];
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return Number.isNaN(parsed) ? fallback : parsed;
+    }
+    return fallback;
+  }
+
+  private getIntAttr(obj: Record<string, unknown>, key: string, fallback: number): number {
+    const value = obj[key];
+    if (typeof value === "number") {
+      return Math.trunc(value);
+    }
+    if (typeof value === "string") {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? fallback : parsed;
+    }
+    return fallback;
   }
 
   /**

@@ -2,6 +2,10 @@ import { DataTypes, Model } from "sequelize";
 import sequelize from "../config.js";
 import Profile from "./Profile.model.js";
 
+import type { ComplementoPago } from "../../types/cfdi.types.js";
+import type { PagoParcial } from "../../types/payment.types.js";
+import type { EstadoValidacionGasto } from "../../types/validation.types.js";
+
 type TipoOrigen = "XML" | "MANUAL";
 type TipoGasto = "PUE" | "PPD" | "COMPLEMENTO_PAGO";
 
@@ -25,9 +29,9 @@ interface ExpenseAttributes {
   rfc_receptor: string | null;
   nombre_receptor: string | null;
   regimen_fiscal_receptor: string | null;
-  pagos: unknown[];
-  complemento_pago: Record<string, unknown> | null;
-  validacion: Record<string, unknown>;
+  pagos: PagoParcial[];
+  complemento_pago: ComplementoPago | null;
+  validacion: EstadoValidacionGasto;
   created_at: Date;
   updated_at: Date;
 }
@@ -91,9 +95,9 @@ class Expense extends Model<ExpenseAttributes, ExpenseCreationAttributes> implem
   declare rfc_receptor: string | null;
   declare nombre_receptor: string | null;
   declare regimen_fiscal_receptor: string | null;
-  declare pagos: unknown[];
-  declare complemento_pago: Record<string, unknown> | null;
-  declare validacion: Record<string, unknown>;
+  declare pagos: PagoParcial[];
+  declare complemento_pago: ComplementoPago | null;
+  declare validacion: EstadoValidacionGasto;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -223,8 +227,18 @@ Expense.init(
 );
 
 // Relaciones
-Expense.belongsTo(Profile, { foreignKey: "profile_id", as: "profile" });
-Profile.hasMany(Expense, { foreignKey: "profile_id", as: "expenses" });
+Expense.belongsTo(Profile, {
+  foreignKey: "profile_id",
+  as: "profile",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Profile.hasMany(Expense, {
+  foreignKey: "profile_id",
+  as: "expenses",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 export default Expense;
 export type { ExpenseAttributes, ExpenseCreationAttributes, TipoOrigen, TipoGasto };

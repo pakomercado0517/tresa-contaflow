@@ -34,12 +34,16 @@ export interface Pago {
 }
 
 export interface ComplementoPago {
+  pagos: ComplementoPagoItem[];
+}
+
+export interface ComplementoPagoItem {
   fechaPago: Date;
   formaPago: string;
   monedaPago: string;
   tipoCambio: number;
   monto: number;
-  numOperacion?: string;
+  numOperacion?: string | undefined;
   facturasRelacionadas: FacturaRelacionada[];
 }
 

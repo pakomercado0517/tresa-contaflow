@@ -2,6 +2,10 @@ import { DataTypes, Model } from "sequelize";
 import sequelize from "../config.js";
 import Profile from "./Profile.model.js";
 
+import type { ComplementoPago } from "../../types/cfdi.types.js";
+import type { PagoParcial } from "../../types/payment.types.js";
+import type { EstadoValidacionCFDI } from "../../types/validation.types.js";
+
 type TipoFactura = "PUE" | "PPD" | "COMPLEMENTO_PAGO";
 
 interface InvoiceAttributes {
@@ -22,9 +26,9 @@ interface InvoiceAttributes {
   nombre_receptor: string;
   regimen_fiscal_receptor: string | null;
   concepto: string | null;
-  pagos: unknown[];
-  complemento_pago: Record<string, unknown> | null;
-  validacion: Record<string, unknown>;
+  pagos: PagoParcial[];
+  complemento_pago: ComplementoPago | null;
+  validacion: EstadoValidacionCFDI;
   created_at: Date;
   updated_at: Date;
 }
@@ -59,9 +63,9 @@ class Invoice extends Model<InvoiceAttributes, InvoiceCreationAttributes> implem
   declare nombre_receptor: string;
   declare regimen_fiscal_receptor: string | null;
   declare concepto: string | null;
-  declare pagos: unknown[];
-  declare complemento_pago: Record<string, unknown> | null;
-  declare validacion: Record<string, unknown>;
+  declare pagos: PagoParcial[];
+  declare complemento_pago: ComplementoPago | null;
+  declare validacion: EstadoValidacionCFDI;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -183,8 +187,18 @@ Invoice.init(
 );
 
 // Relaciones
-Invoice.belongsTo(Profile, { foreignKey: "profile_id", as: "profile" });
-Profile.hasMany(Invoice, { foreignKey: "profile_id", as: "invoices" });
+Invoice.belongsTo(Profile, {
+  foreignKey: "profile_id",
+  as: "profile",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Profile.hasMany(Invoice, {
+  foreignKey: "profile_id",
+  as: "invoices",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
 
 export default Invoice;
 export type { InvoiceAttributes, InvoiceCreationAttributes, TipoFactura };

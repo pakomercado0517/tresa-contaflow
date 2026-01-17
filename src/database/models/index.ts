@@ -9,6 +9,8 @@ import PaymentEvent from "./PaymentEvent.model.js";
 import Invoice from "./Invoice.model.js";
 import Expense from "./Expense.model.js";
 import DiscountCode from "./DiscountCode.model.js";
+import PaymentComplement from "./PaymentComplement.model.js";
+import PaymentComplementItem from "./PaymentComplementItem.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -21,5 +23,7 @@ export {
   Invoice,
   Expense,
   DiscountCode,
+  PaymentComplement,
+  PaymentComplementItem,
 };
 export type { Sequelize };

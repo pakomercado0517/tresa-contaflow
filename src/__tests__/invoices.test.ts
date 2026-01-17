@@ -2,7 +2,7 @@ import request from "supertest";
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
-import { Profile, Invoice } from "../database/models/index";
+import { Profile, Invoice, PaymentComplement, PaymentComplementItem } from "../database/models/index";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -55,9 +55,13 @@ describe("Invoices API", () => {
   });
 
   describe("GET /api/invoices/metrics", () => {
+    let ppdInvoiceUuid: string;
+
     beforeEach(async () => {
       // Limpiar facturas previas
       await Invoice.destroy({ where: { profile_id: profileId } });
+      await PaymentComplementItem.destroy({ where: { profile_id: profileId } });
+      await PaymentComplement.destroy({ where: { profile_id: profileId } });
       
       // Crear algunas facturas de prueba
       await Invoice.create({
@@ -95,6 +99,11 @@ describe("Invoices API", () => {
         pagos: [{ monto: 1000.0, fechaPago: new Date(), formaPago: "03" }],
         validacion: {},
       });
+
+      const ppdInvoice = await Invoice.findOne({
+        where: { profile_id: profileId, tipo: "PPD" },
+      });
+      ppdInvoiceUuid = ppdInvoice?.uuid ?? "";
     });
 
     it("debe obtener métricas del dashboard", async () => {
@@ -128,6 +137,46 @@ describe("Invoices API", () => {
       
       // Pendiente = 3000 - 2000 = 1000
       expect(metrics.pendientePagar).toBe(1000);
+    });
+
+    it("debe incluir pagos de complementos por fecha de pago", async () => {
+      const complemento = await PaymentComplement.create({
+        profile_id: profileId,
+        uuid: `COMP-${Date.now()}`,
+        fecha_emision: new Date("2024-12-20"),
+        rfc_emisor: "EPR123456ABC",
+        rfc_receptor: "CLI123456XYZ",
+        complemento_data: { pagos: [] },
+      });
+
+      await PaymentComplementItem.create({
+        complement_id: complemento.id,
+        profile_id: profileId,
+        factura_uuid: ppdInvoiceUuid,
+        fecha_pago: new Date("2024-12-20"),
+        forma_pago: "03",
+        moneda_pago: "MXN",
+        tipo_cambio_pago: 1,
+        monto_pago: 1000,
+        num_operacion: null,
+        moneda_dr: "MXN",
+        tipo_cambio_dr: 1,
+        metodo_pago_dr: "PPD",
+        num_parcialidad: 1,
+        imp_saldo_ant: 2000,
+        imp_pagado: 500,
+        imp_saldo_insoluto: 1500,
+      });
+
+      const response = await request(app)
+        .get(`/api/invoices/metrics?profileId=${profileId}&mes=12&año=2024`)
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expectSuccess(response, 200);
+      const { metrics } = response.body;
+
+      expect(metrics.totalPagado).toBe(2500);
+      expect(metrics.pendientePagar).toBe(500);
     });
   });
 

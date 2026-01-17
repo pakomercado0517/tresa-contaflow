@@ -3,9 +3,10 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { CFDIParserService } from "../services/cfdi-parser.service.js";
 import { FiscalValidationService } from "../services/fiscal-validation.service.js";
 import { PaymentMatchingService } from "../services/payment-matching.service.js";
+import { PaymentComplementService } from "../services/payment-complement.service.js";
 import { Profile, Invoice, Expense } from "../database/models/index.js";
 import type { UploadedFile } from "express-fileupload";
-import type { ValidacionesConfig } from "../types/validation.types.js";
+import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
 import type { CFDI } from "../types/cfdi.types.js";
 import { Op } from "sequelize";
 import { MetricsService } from "../services/metrics.service.js";
@@ -63,6 +64,7 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
     // Realizar validaciones fiscales y matching
     const validationService = new FiscalValidationService();
     const matchingService = new PaymentMatchingService();
+    const paymentComplementService = new PaymentComplementService();
     const validacionesConfig = (profile.validaciones_habilitadas || {}) as ValidacionesConfig;
 
     let estadoValidacion;
@@ -208,6 +210,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
     // Realizar validaciones fiscales y matching
     const validationService = new FiscalValidationService();
     const matchingService = new PaymentMatchingService();
+    const paymentComplementService = new PaymentComplementService();
     const validacionesConfig = (profile.validaciones_habilitadas || {}) as ValidacionesConfig;
 
     let estadoValidacion;
@@ -251,13 +254,16 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
         return;
       }
 
-      // Retornar éxito pero sin guardar (los complementos no se guardan)
+      // Guardar complemento y aplicar pagos si las facturas ya existen
+      const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId);
+
       res.json({
         message: "Complemento de pago procesado exitosamente",
         data: cfdi,
         validacion: estadoValidacion,
         matching: matchingResult,
-        saved: false, // No se guarda en BD
+        saved: true,
+        complementId: savedComplement.id,
       });
       return;
     } else {
@@ -312,6 +318,10 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
     } else {
       res.status(400).json({ error: "No se pudo determinar el tipo de CFDI" });
       return;
+    }
+
+    if (savedRecord instanceof Invoice && savedRecord.tipo === "PPD") {
+      await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
     }
 
     res.status(201).json({
@@ -626,7 +636,7 @@ export async function deleteInvoice(req: AuthRequest, res: Response): Promise<vo
 async function saveInvoice(
   cfdi: CFDI,
   profileId: string,
-  estadoValidacion: { rfcVerificado: boolean; regimenFiscalVerificado: boolean; uuidDuplicado: boolean; advertencias: string[]; errores: string[]; valido: boolean }
+  estadoValidacion: EstadoValidacionCFDI
 ): Promise<Invoice> {
   const invoiceData = {
     profile_id: profileId,
@@ -646,8 +656,8 @@ async function saveInvoice(
     regimen_fiscal_receptor: cfdi.regimenFiscalReceptor || null,
     concepto: cfdi.concepto || null,
     pagos: cfdi.pagos || [],
-    complemento_pago: cfdi.complementoPago ? (cfdi.complementoPago as unknown as Record<string, unknown>) : null,
-    validacion: estadoValidacion as unknown as Record<string, unknown>,
+    complemento_pago: cfdi.complementoPago || null,
+    validacion: estadoValidacion,
   };
 
   return await Invoice.create(invoiceData);
@@ -659,7 +669,7 @@ async function saveInvoice(
 async function saveExpense(
   cfdi: CFDI,
   profileId: string,
-  estadoValidacion: { rfcVerificado: boolean; regimenFiscalVerificado: boolean; uuidDuplicado: boolean; advertencias: string[]; errores: string[]; valido: boolean }
+  estadoValidacion: EstadoValidacionGasto
 ): Promise<Expense> {
   const expenseData = {
     profile_id: profileId,
@@ -681,8 +691,8 @@ async function saveExpense(
     nombre_receptor: cfdi.nombreReceptor,
     regimen_fiscal_receptor: cfdi.regimenFiscalReceptor || null,
     pagos: cfdi.pagos || [],
-    complemento_pago: cfdi.complementoPago ? (cfdi.complementoPago as unknown as Record<string, unknown>) : null,
-    validacion: estadoValidacion as unknown as Record<string, unknown>,
+    complemento_pago: cfdi.complementoPago || null,
+    validacion: estadoValidacion,
   };
 
   return await Expense.create(expenseData);

@@ -218,7 +218,14 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
       regimen_fiscal_receptor: null,
       pagos: [],
       complemento_pago: null,
-      validacion: {},
+      validacion: {
+        rfcVerificado: true,
+        regimenFiscalVerificado: true,
+        uuidDuplicado: false,
+        advertencias: [],
+        errores: [],
+        valido: true,
+      },
     });
 
     res.status(201).json({

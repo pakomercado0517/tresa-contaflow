@@ -1,7 +1,7 @@
 import type { CFDI } from "../types/cfdi.types.js";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
 import { compareRFCs, isValidRFCFormat, normalizeRFC } from "../utils/rfc.util.js";
-import { Invoice, Expense } from "../database/models/index.js";
+import { Invoice, Expense, PaymentComplement } from "../database/models/index.js";
 
 /**
  * Servicio para validaciones fiscales
@@ -184,20 +184,28 @@ export class FiscalValidationService {
   async checkUUIDDuplicado(
     uuid: string,
     profileId: string,
-    tipo: "invoice" | "expense" | "both" = "both"
+    tipo: "invoice" | "expense" | "complement" | "both" = "both"
   ): Promise<boolean> {
     try {
       if (tipo === "both") {
-        // Verificar en ambas tablas (útil para complementos de pago)
+        // Verificar en facturas, gastos y complementos
         const existingInvoice = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
         });
         const existingExpense = await Expense.findOne({
           where: { uuid, profile_id: profileId },
         });
-        return !!(existingInvoice || existingExpense);
+        const existingComplement = await PaymentComplement.findOne({
+          where: { uuid, profile_id: profileId },
+        });
+        return !!(existingInvoice || existingExpense || existingComplement);
       } else if (tipo === "invoice") {
         const existing = await Invoice.findOne({
+          where: { uuid, profile_id: profileId },
+        });
+        return !!existing;
+      } else if (tipo === "complement") {
+        const existing = await PaymentComplement.findOne({
           where: { uuid, profile_id: profileId },
         });
         return !!existing;
