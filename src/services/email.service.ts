@@ -46,7 +46,7 @@ export async function sendVerificationEmail(
   verificationToken: string,
   nombre?: string | null
 ): Promise<void> {
-  const verificationUrl = `${process.env.APP_URL || "http://localhost:3000"}/auth/verify-email?token=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/auth/verify-email?token=${verificationToken}`;
   const nombreUsuario = nombre ? nombre : "Usuario";
   const saludo = nombre ? `¡Hola, ${nombre}!` : "¡Hola!";
 
@@ -290,7 +290,7 @@ export async function sendPasswordResetEmail(
   resetToken: string,
   nombre?: string | null
 ): Promise<void> {
-  const resetUrl = `${process.env.APP_URL || "http://localhost:3000"}/auth/reset-password?token=${resetToken}`;
+  const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/auth/reset-password?token=${resetToken}`;
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="es">
