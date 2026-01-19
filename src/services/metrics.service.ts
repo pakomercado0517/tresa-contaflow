@@ -5,6 +5,7 @@ export interface PeriodMetrics {
   totalFacturado: number;
   totalPagado: number;
   totalCompras: number;
+  totalPagadoMenosCompras: number;
   pendientePagar: number;
   totalFacturas: number;
   totalGastos: number;
@@ -165,10 +166,14 @@ export class MetricsService {
     // Calcular pendiente
     const pendientePagar = totalFacturado - totalPagado;
 
+    // Calcular total pagado menos compras (flujo de efectivo neto)
+    const totalPagadoMenosCompras = totalPagado - totalCompras;
+
     return {
       totalFacturado: Math.round(totalFacturado * 100) / 100, // Redondear a 2 decimales
       totalPagado: Math.round(totalPagado * 100) / 100,
       totalCompras: Math.round(totalCompras * 100) / 100,
+      totalPagadoMenosCompras: Math.round(totalPagadoMenosCompras * 100) / 100,
       pendientePagar: Math.round(pendientePagar * 100) / 100,
       totalFacturas: facturas.length,
       totalGastos: gastos.length,
