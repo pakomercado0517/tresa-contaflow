@@ -5,6 +5,7 @@ import {
   getSubscription,
   createPortalSession,
   assignFreeSubscription,
+  getAvailablePlans,
 } from "../controllers/subscription.controller.js";
 import { authenticateToken, authenticateAdmin } from "../middlewares/auth.middleware.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
@@ -16,6 +17,9 @@ router.use(authenticateToken);
 
 // GET /api/subscription - Obtener suscripción actual
 router.get("/", getSubscription);
+
+// GET /api/subscription/plans - Obtener todos los planes disponibles
+router.get("/plans", getAvailablePlans);
 
 // POST /api/subscription/create-checkout - Crear sesión de checkout
 router.post(

@@ -1,7 +1,7 @@
 import { type Request, type Response } from "express";
 import Stripe from "stripe";
 import { getStripeService } from "../services/stripe.service.js";
-import { Subscription, PaymentEvent } from "../database/models/index.js";
+import { Subscription, PaymentEvent, User } from "../database/models/index.js";
 import type { Plan } from "../constants/plans.constants.js";
 import { PLAN_PRICES } from "../constants/plans.constants.js";
 import { DiscountService } from "../services/discount.service.js";
@@ -202,6 +202,15 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
     // Crear nueva suscripción
     await Subscription.create(subscriptionData);
     console.log(`Nueva suscripción creada para usuario ${userId}, plan: ${plan}`);
+  }
+
+  // Si la suscripción tiene status TRIALING, marcar que el usuario ya usó su trial
+  if (subscriptionData.status === "TRIALING") {
+    const user = await User.findByPk(userId);
+    if (user && !user.trial_used) {
+      await user.update({ trial_used: true });
+      console.log(`Usuario ${userId} marcado como trial_used`);
+    }
   }
 
   const promotionCodeId = session.metadata?.promotionCodeId;

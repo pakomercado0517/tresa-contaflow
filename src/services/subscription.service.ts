@@ -1,4 +1,4 @@
-import { Subscription } from "../database/models/index.js";
+import { Subscription, User } from "../database/models/index.js";
 import type { Plan } from "../constants/plans.constants.js";
 import { Op } from "sequelize";
 
@@ -54,6 +54,40 @@ export class SubscriptionService {
   async hasActiveSubscription(userId: string): Promise<boolean> {
     const subscription = await this.getActiveSubscription(userId);
     return subscription !== null && (subscription.status === "ACTIVE" || subscription.status === "TRIALING");
+  }
+
+  /**
+   * Verifica si un usuario es elegible para periodo de prueba
+   * Reglas:
+   * - Si el usuario viene de FREE (por primera vez) → elegible
+   * - Si el usuario ya tuvo un plan de pago (BASIC, PRO, ENTERPRISE) y canceló → NO elegible
+   * - Si el usuario ya usó su trial (trial_used = true) → NO elegible
+   */
+  async isEligibleForTrial(userId: string): Promise<boolean> {
+    // Verificar si el usuario ya usó su trial
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return false;
+    }
+
+    if (user.trial_used) {
+      return false;
+    }
+
+    // Verificar si el usuario alguna vez tuvo un plan de pago (no FREE)
+    const paidSubscription = await Subscription.findOne({
+      where: {
+        user_id: userId,
+        plan: {
+          [Op.in]: ["BASIC", "PRO", "ENTERPRISE"],
+        },
+      },
+      order: [["created_at", "DESC"]],
+    });
+
+    // Si nunca tuvo un plan de pago, es elegible para trial
+    // Si tuvo un plan de pago, no es elegible (incluso si canceló)
+    return paidSubscription === null;
   }
 
   /**

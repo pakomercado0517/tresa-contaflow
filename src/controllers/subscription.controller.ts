@@ -2,8 +2,9 @@ import { type Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import type Stripe from 'stripe';
 import { getStripeService } from '../services/stripe.service.js';
-import { PLAN_PRICES, type Plan } from '../constants/plans.constants.js';
+import { PLAN_PRICES, PLAN_LIMITS, PLAN_TRIAL_DAYS, type Plan } from '../constants/plans.constants.js';
 import { SubscriptionService } from '../services/subscription.service.js';
+import { PlanLimitsService } from '../services/plan-limits.service.js';
 import { User } from '../database/models/index.js';
 import { DiscountService } from '../services/discount.service.js';
 
@@ -102,6 +103,19 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       metadata.promotionCodeId = promotionCodeId;
     }
 
+    // Verificar si el usuario es elegible para periodo de prueba
+    const isEligibleForTrial = await subscriptionService.isEligibleForTrial(userId);
+    const trialDays = isEligibleForTrial ? PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] : undefined;
+
+    // Preparar subscription_data con trial si es elegible
+    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+      metadata,
+    };
+
+    if (trialDays !== undefined) {
+      subscriptionData.trial_period_days = trialDays;
+    }
+
     // Preparar parámetros del checkout session
     // Stripe solo permite uno: customer O customer_email, no ambos
     const checkoutParams: Stripe.Checkout.SessionCreateParams = {
@@ -116,9 +130,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata,
-      subscription_data: {
-        metadata,
-      },
+      subscription_data: subscriptionData,
     };
 
     if (promotionCodeId) {
@@ -168,10 +180,17 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
     }
 
     const subscriptionService = new SubscriptionService();
+    const limitsService = new PlanLimitsService();
     const subscription = await subscriptionService.getActiveSubscription(userId);
 
+    // Obtener el plan actual (FREE si no tiene suscripción)
+    const currentPlan = subscription?.plan || 'FREE';
+    
+    // Obtener los límites del plan
+    const limits = await limitsService.getUserLimits(userId);
+
     if (!subscription) {
-      // Si no tiene suscripción activa, retornar plan FREE
+      // Si no tiene suscripción activa, retornar plan FREE con límites
       res.json({
         plan: 'FREE',
         status: 'ACTIVE',
@@ -179,6 +198,16 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
         currentPeriodStart: null,
         currentPeriodEnd: null,
         cancelAtPeriodEnd: false,
+        limits: {
+          profiles: limits.profiles,
+          invoicesPerMonth: limits.invoicesPerMonth,
+          expensesPerMonth: limits.expensesPerMonth,
+          exportPDF: limits.exportPDF,
+          exportExcel: limits.exportExcel,
+          reports: limits.reports,
+          support: limits.support,
+          apiAccess: limits.apiAccess,
+        },
       });
       return;
     }
@@ -192,6 +221,16 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
       stripeCustomerId: subscription.stripe_customer_id,
       stripeSubscriptionId: subscription.stripe_subscription_id,
+      limits: {
+        profiles: limits.profiles,
+        invoicesPerMonth: limits.invoicesPerMonth,
+        expensesPerMonth: limits.expensesPerMonth,
+        exportPDF: limits.exportPDF,
+        exportExcel: limits.exportExcel,
+        reports: limits.reports,
+        support: limits.support,
+        apiAccess: limits.apiAccess,
+      },
     });
   } catch (error) {
     console.error('Error al obtener suscripción:', error);
@@ -359,5 +398,70 @@ export async function assignFreeSubscription(req: AuthRequest, res: Response): P
     }
 
     res.status(500).json({ error: 'Error desconocido al asignar suscripción' });
+  }
+}
+
+/**
+ * Obtiene información de todos los planes disponibles
+ * Útil para mostrar cards de planes en el frontend
+ */
+export async function getAvailablePlans(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const billing = (req.query.billing as string) || 'monthly';
+    const isAnnual = billing === 'annual';
+
+    const plans: Plan[] = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'];
+    const plansData = plans.map((plan) => {
+      const limits = PLAN_LIMITS[plan];
+      const monthlyPrice = PLAN_PRICES[plan];
+      
+      // Calcular precio anual con 15% de descuento
+      let price: number;
+      let originalPrice: number | null = null;
+      
+      if (isAnnual && monthlyPrice > 0) {
+        originalPrice = monthlyPrice * 12;
+        const discount = originalPrice * 0.15; // 15% de descuento
+        price = originalPrice - discount;
+      } else {
+        price = monthlyPrice;
+      }
+
+      return {
+        id: plan,
+        name: plan,
+        price: Math.round(price * 100) / 100, // Redondear a 2 decimales
+        originalPrice: originalPrice ? Math.round(originalPrice * 100) / 100 : null,
+        billing: isAnnual ? 'annual' : 'monthly',
+        limits: {
+          profiles: limits.profiles,
+          invoicesPerMonth: limits.invoicesPerMonth,
+          expensesPerMonth: limits.expensesPerMonth,
+          exportPDF: limits.exportPDF,
+          exportExcel: limits.exportExcel,
+          reports: limits.reports,
+          support: limits.support,
+          apiAccess: limits.apiAccess,
+        },
+        trialDays: PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] || null,
+      };
+    });
+
+    res.json({
+      plans: plansData,
+      billing: isAnnual ? 'annual' : 'monthly',
+    });
+  } catch (error) {
+    console.error('Error al obtener planes disponibles:', error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: 'Error al obtener planes disponibles',
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'Error desconocido al obtener planes disponibles' });
   }
 }

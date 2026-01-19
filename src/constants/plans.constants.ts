@@ -18,8 +18,8 @@ export interface PlanLimits {
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   FREE: {
     profiles: 1,
-    invoicesPerMonth: 50,
-    expensesPerMonth: 50,
+    invoicesPerMonth: 25,
+    expensesPerMonth: 25,
     exportPDF: false,
     exportExcel: false,
     reports: "basic",
@@ -28,8 +28,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   },
   BASIC: {
     profiles: 3,
-    invoicesPerMonth: 500,
-    expensesPerMonth: 500,
+    invoicesPerMonth: 300,
+    expensesPerMonth: 300,
     exportPDF: true,
     exportExcel: false,
     reports: "complete",
@@ -67,5 +67,14 @@ export const PLAN_PRICES: Record<Plan, number> = {
   BASIC: 300,
   PRO: 800,
   ENTERPRISE: 1200,
+};
+
+/**
+ * Días de periodo de prueba por plan
+ * Solo aplica a planes de pago (BASIC, PRO)
+ */
+export const PLAN_TRIAL_DAYS: Record<"BASIC" | "PRO", number> = {
+  BASIC: 30,
+  PRO: 30,
 };
 
