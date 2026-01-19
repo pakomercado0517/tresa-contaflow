@@ -11,6 +11,7 @@ import {
   getCurrentUser,
   requestPasswordReset,
   resetPassword,
+  completeTour,
 } from "../controllers/auth.controller.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
@@ -23,6 +24,21 @@ const registerValidation = [
   body("password")
     .isLength({ min: 8 })
     .withMessage("La contraseña debe tener al menos 8 caracteres"),
+  body("nombre")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El nombre debe ser una cadena de texto"),
+  body("apellido")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El apellido debe ser una cadena de texto"),
+  body("telefono")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El teléfono debe ser una cadena de texto"),
 ];
 
 const loginValidation = [
@@ -71,6 +87,14 @@ const updateProfileValidation = [
     .withMessage("El teléfono debe ser una cadena de texto"),
 ];
 
+const completeTourValidation = [
+  body("tour_version")
+    .trim()
+    .isString()
+    .isLength({ min: 1, max: 50 })
+    .withMessage("El campo tour_version es obligatorio y debe tener entre 1 y 50 caracteres"),
+];
+
 // Rutas
 router.post("/register", registerValidation, validateRequest, register);
 router.post("/login", loginValidation, validateRequest, login);
@@ -82,6 +106,7 @@ router.post("/forgot-password", requestPasswordResetValidation, validateRequest,
 router.post("/reset-password", resetPasswordValidation, validateRequest, resetPassword);
 router.get("/me", authenticateToken, getCurrentUser);
 router.patch("/profile", authenticateToken, updateProfileValidation, validateRequest, updateProfile);
+router.patch("/tour-complete", authenticateToken, completeTourValidation, validateRequest, completeTour);
 
 export default router;
 

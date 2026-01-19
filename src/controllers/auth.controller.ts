@@ -12,7 +12,7 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
-    const { email, password } = req.body;
+    const { email, password, nombre, apellido, telefono } = req.body;
 
     // Validación defensiva (aunque el middleware ya valida)
     if (!email || typeof email !== "string") {
@@ -86,6 +86,9 @@ export async function register(req: Request, res: Response): Promise<void> {
       user = await User.create({
         email: email.toLowerCase().trim(),
         password_hash: passwordHash,
+        nombre: nombre ? nombre.trim() : null,
+        apellido: apellido ? apellido.trim() : null,
+        telefono: telefono ? telefono.trim() : null,
         email_verified: false,
         email_verification_token: hashedToken,
         email_verification_expires: expiresAt,
@@ -756,6 +759,8 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
         apellido: user.apellido,
         telefono: user.telefono,
         email_verified: user.email_verified,
+        tour_version: user.tour_version,
+        tour_completed_at: user.tour_completed_at,
       },
     });
   } catch (error) {
@@ -987,6 +992,101 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     res.status(500).json({ 
       error: "Error desconocido",
       message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+    });
+  }
+}
+
+/**
+ * Marca el tour como completado para el usuario autenticado
+ */
+export async function completeTour(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ 
+        error: "Unauthorized",
+        message: "Token inválido o expirado"
+      });
+      return;
+    }
+
+    const { tour_version } = req.body;
+
+    // Validación
+    if (!tour_version || typeof tour_version !== "string" || tour_version.trim().length === 0) {
+      res.status(400).json({ 
+        error: "Tour version requerida",
+        message: "El campo tour_version es obligatorio y debe ser una cadena de texto válida"
+      });
+      return;
+    }
+
+    // Validar longitud máxima (50 caracteres)
+    if (tour_version.length > 50) {
+      res.status(400).json({ 
+        error: "Tour version inválida",
+        message: "El campo tour_version no puede exceder 50 caracteres"
+      });
+      return;
+    }
+
+    // Buscar usuario
+    let user;
+    try {
+      user = await User.findByPk(userId);
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Error al obtener el usuario"
+      });
+      return;
+    }
+
+    if (!user) {
+      res.status(401).json({ 
+        error: "Unauthorized",
+        message: "Usuario no encontrado"
+      });
+      return;
+    }
+
+    // Actualizar tour completado
+    try {
+      await user.update({
+        tour_version: tour_version.trim(),
+        tour_completed_at: new Date(),
+      });
+    } catch (updateError) {
+      console.error("Error al actualizar tour:", updateError);
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Error al actualizar el estado del tour"
+      });
+      return;
+    }
+
+    res.json({
+      message: "Tour marcado como completado exitosamente",
+      data: {
+        tour_version: user.tour_version,
+        tour_completed_at: user.tour_completed_at,
+      },
+    });
+  } catch (error) {
+    console.error("Error inesperado al completar tour:", error);
+    
+    if (error instanceof Error) {
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Error al completar el tour"
+      });
+      return;
+    }
+
+    res.status(500).json({ 
+      error: "Internal Server Error",
+      message: "Error al completar el tour"
     });
   }
 }

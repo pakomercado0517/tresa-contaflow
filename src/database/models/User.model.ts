@@ -14,14 +14,18 @@ interface UserAttributes {
   password_reset_token: string | null;
   password_reset_expires: Date | null;
   trial_used: boolean;
+  tour_version: string | null;
+  tour_completed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
 interface UserCreationAttributes
-  extends Omit<UserAttributes, "id" | "created_at" | "updated_at" | "email_verified" | "trial_used"> {
+  extends Omit<UserAttributes, "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at"> {
   email_verified?: boolean;
   trial_used?: boolean;
+  tour_version?: string | null;
+  tour_completed_at?: Date | null;
 }
 
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
@@ -37,6 +41,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   declare password_reset_token: string | null;
   declare password_reset_expires: Date | null;
   declare trial_used: boolean;
+  declare tour_version: string | null;
+  declare tour_completed_at: Date | null;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -94,6 +100,16 @@ User.init(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false,
+    },
+    tour_version: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: null,
+    },
+    tour_completed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
     },
     created_at: {
       type: DataTypes.DATE,
