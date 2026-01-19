@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage",
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
+    "lint": "eslint",
     "start": "node dist/index.js",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
