@@ -1,15 +1,17 @@
-import { Router, type IRouter } from "express";
-import { body, param } from "express-validator";
+import { Router, type IRouter } from 'express';
+import { body, param } from 'express-validator';
 import {
   getProfiles,
   getProfileById,
   createProfile,
   updateProfile,
   deleteProfile,
-} from "../controllers/profile.controller.js";
-import { validateRequest } from "../middlewares/validate.middleware.js";
-import { authenticateToken } from "../middlewares/auth.middleware.js";
-import { validateProfileLimit } from "../middlewares/plan-limits.middleware.js";
+  freezeOtherProfiles,
+  unfreezeProfile,
+} from '../controllers/profile.controller.js';
+import { validateRequest } from '../middlewares/validate.middleware.js';
+import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { validateProfileLimit } from '../middlewares/plan-limits.middleware.js';
 
 const router: IRouter = Router();
 
@@ -18,67 +20,80 @@ router.use(authenticateToken);
 
 // Validaciones
 const createProfileValidation = [
-  body("nombre")
+  body('nombre')
     .trim()
     .notEmpty()
-    .withMessage("El nombre es requerido")
+    .withMessage('El nombre es requerido')
     .isLength({ min: 2, max: 255 })
-    .withMessage("El nombre debe tener entre 2 y 255 caracteres"),
-  body("rfc")
+    .withMessage('El nombre debe tener entre 2 y 255 caracteres'),
+  body('rfc')
     .trim()
     .notEmpty()
-    .withMessage("El RFC es requerido")
+    .withMessage('El RFC es requerido')
     .matches(/^[A-Z&Ñ]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]$/i)
-    .withMessage("Formato de RFC inválido"),
-  body("tipo_persona")
-    .isIn(["FISICA", "MORAL"])
-    .withMessage("El tipo de persona debe ser FISICA o MORAL"),
-  body("regimen_fiscal")
+    .withMessage('Formato de RFC inválido'),
+  body('tipo_persona')
+    .isIn(['FISICA', 'MORAL'])
+    .withMessage('El tipo de persona debe ser FISICA o MORAL'),
+  body('regimen_fiscal')
     .optional()
     .isString()
-    .withMessage("El régimen fiscal debe ser una cadena de texto"),
-  body("validaciones_habilitadas")
+    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+  body('validaciones_habilitadas')
     .optional()
     .isObject()
-    .withMessage("Las validaciones habilitadas deben ser un objeto"),
+    .withMessage('Las validaciones habilitadas deben ser un objeto'),
 ];
 
 const updateProfileValidation = [
-  param("id").isUUID().withMessage("ID de perfil inválido"),
-  body("nombre")
+  param('id').isUUID().withMessage('ID de perfil inválido'),
+  body('nombre')
     .optional()
     .trim()
     .isLength({ min: 2, max: 255 })
-    .withMessage("El nombre debe tener entre 2 y 255 caracteres"),
-  body("rfc")
+    .withMessage('El nombre debe tener entre 2 y 255 caracteres'),
+  body('rfc')
     .optional()
     .trim()
     .matches(/^[A-Z&Ñ]{3,4}\d{6}[A-V1-9][A-Z1-9][0-9A]$/i)
-    .withMessage("Formato de RFC inválido"),
-  body("tipo_persona")
+    .withMessage('Formato de RFC inválido'),
+  body('tipo_persona')
     .optional()
-    .isIn(["FISICA", "MORAL"])
-    .withMessage("El tipo de persona debe ser FISICA o MORAL"),
-  body("regimen_fiscal")
+    .isIn(['FISICA', 'MORAL'])
+    .withMessage('El tipo de persona debe ser FISICA o MORAL'),
+  body('regimen_fiscal')
     .optional()
     .isString()
-    .withMessage("El régimen fiscal debe ser una cadena de texto"),
-  body("validaciones_habilitadas")
+    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+  body('validaciones_habilitadas')
     .optional()
     .isObject()
-    .withMessage("Las validaciones habilitadas deben ser un objeto"),
+    .withMessage('Las validaciones habilitadas deben ser un objeto'),
 ];
 
-const profileIdValidation = [
-  param("id").isUUID().withMessage("ID de perfil inválido"),
+const profileIdValidation = [param('id').isUUID().withMessage('ID de perfil inválido')];
+
+const freezeOthersValidation = [
+  body('preserveProfileId')
+    .notEmpty()
+    .withMessage("El campo 'preserveProfileId' es requerido")
+    .isUUID()
+    .withMessage("El 'preserveProfileId' debe ser un UUID válido"),
+  body('targetPlan')
+    .optional()
+    .isIn(['FREE', 'BASIC', 'PRO', 'ENTERPRISE'])
+    .withMessage("El 'targetPlan' debe ser FREE, BASIC, PRO o ENTERPRISE"),
 ];
 
 // Rutas
-router.get("/", getProfiles);
-router.get("/:id", profileIdValidation, validateRequest, getProfileById);
-router.post("/", createProfileValidation, validateRequest, validateProfileLimit, createProfile);
-router.put("/:id", updateProfileValidation, validateRequest, updateProfile);
-router.delete("/:id", profileIdValidation, validateRequest, deleteProfile);
+router.get('/', getProfiles);
+router.get('/:id', profileIdValidation, validateRequest, getProfileById);
+router.post('/', createProfileValidation, validateRequest, validateProfileLimit, createProfile);
+router.put('/:id', updateProfileValidation, validateRequest, updateProfile);
+router.delete('/:id', profileIdValidation, validateRequest, deleteProfile);
+
+// Rutas de freeze/unfreeze
+router.post('/freeze-others', freezeOthersValidation, validateRequest, freezeOtherProfiles);
+router.put('/:id/unfreeze', profileIdValidation, validateRequest, unfreezeProfile);
 
 export default router;
-
