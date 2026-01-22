@@ -12,18 +12,32 @@ if (!process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
   // Logger desactivado
 }
 
+// Detectar si es Railway (requiere SSL)
+const isRailway = databaseUrl.includes("railway.app") || databaseUrl.includes("rlwy.net");
+
 const sequelize = new Sequelize(databaseUrl, {
   dialect: "postgres",
   logging: false,
   dialectOptions: {
-    ssl: process.env.NODE_ENV === "production" ? { require: true, rejectUnauthorized: false } : false,
+    ssl: isRailway || process.env.NODE_ENV === "production" 
+      ? { 
+          require: true, 
+          rejectUnauthorized: false 
+        } 
+      : false,
+    // Mantener conexiones vivas para evitar ECONNRESET
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   },
   pool: {
     max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000,
+    min: 1, // Mantener al menos 1 conexión viva
+    acquire: 60000, // 60 segundos para adquirir conexión
+    idle: 30000, // 30 segundos antes de cerrar conexión inactiva
+    evict: 10000, // Revisar conexiones cada 10 segundos
+    // Nota: handleDisconnects no existe en Sequelize, pero el pool maneja reconexiones automáticamente
   },
+  // Sequelize maneja reconexiones automáticamente en caso de errores de conexión
 });
 
 // Exportar tanto default como named export para compatibilidad
