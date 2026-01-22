@@ -135,3 +135,43 @@ export function validateExpenseLimit(
     });
 }
 
+/**
+ * Middleware para validar límite de búsquedas con IA del SAT
+ */
+export function validateSATSearchLimit(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Usuario no autenticado" });
+    return;
+  }
+
+  const limitsService = new PlanLimitsService();
+
+  limitsService
+    .canUseAISearch(userId)
+    .then((result) => {
+      if (!result.allowed) {
+        res.status(403).json({
+          error: "Límite de plan alcanzado",
+          message: result.reason,
+          limit: result.limit,
+          currentCount: result.currentCount,
+          remaining: result.remaining,
+        });
+        return;
+      }
+
+      // Agregar información del límite al request para uso posterior
+      (req as any).satSearchLimit = result;
+      next();
+    })
+    .catch((error) => {
+      console.error("Error al validar límite de búsquedas SAT:", error);
+      res.status(500).json({ error: "Error al validar límite de plan" });
+    });
+}
+

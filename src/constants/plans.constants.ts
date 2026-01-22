@@ -13,6 +13,17 @@ export interface PlanLimits {
   reports: "basic" | "complete" | "advanced";
   support: "none" | "email" | "priority";
   apiAccess: boolean;
+  // Catálogo SAT - Búsquedas
+  satBasicSearchesPerMonth: number | null; // Búsquedas básicas (sin IA) - null = ilimitado
+  satAISearchesPerMonth: number | null; // Búsquedas con IA - null = ilimitado
+  satMaxResults: number | null; // Máximo de resultados por búsqueda - null = ilimitado
+  // Catálogo SAT - Features
+  satHasAIExplanations: boolean; // Explicación de sugerencia
+  satHasHistory: boolean; // Historial de búsquedas
+  satHasFavorites: boolean; // Favoritos
+  satHasAlerts: boolean; // Alertas fiscales
+  satHasLearning: boolean; // Aprendizaje por RFC
+  satHasAdvancedRanking: boolean; // Ranking avanzado
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
@@ -25,6 +36,15 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     reports: "basic",
     support: "none",
     apiAccess: false,
+    satBasicSearchesPerMonth: null, // Ilimitadas (búsqueda básica)
+    satAISearchesPerMonth: 5, // 5 búsquedas IA/mes
+    satMaxResults: 2, // Hasta 2 resultados
+    satHasAIExplanations: false,
+    satHasHistory: false,
+    satHasFavorites: false,
+    satHasAlerts: false,
+    satHasLearning: false,
+    satHasAdvancedRanking: false,
   },
   BASIC: {
     profiles: 3,
@@ -35,6 +55,15 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     reports: "complete",
     support: "email",
     apiAccess: false,
+    satBasicSearchesPerMonth: null, // Ilimitadas
+    satAISearchesPerMonth: 100, // 100 búsquedas IA/mes
+    satMaxResults: 5, // Top 5 resultados
+    satHasAIExplanations: true,
+    satHasHistory: true, // Historial básico
+    satHasFavorites: false,
+    satHasAlerts: false,
+    satHasLearning: false,
+    satHasAdvancedRanking: false,
   },
   PRO: {
     profiles: 10,
@@ -45,6 +74,15 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     reports: "advanced",
     support: "priority",
     apiAccess: true,
+    satBasicSearchesPerMonth: null, // Ilimitadas
+    satAISearchesPerMonth: null, // IA ilimitada
+    satMaxResults: null, // Sin límite
+    satHasAIExplanations: true,
+    satHasHistory: true,
+    satHasFavorites: true,
+    satHasAlerts: true,
+    satHasLearning: true,
+    satHasAdvancedRanking: true,
   },
   ENTERPRISE: {
     profiles: null, // ilimitado
@@ -55,6 +93,15 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     reports: "advanced",
     support: "priority",
     apiAccess: true,
+    satBasicSearchesPerMonth: null, // Ilimitadas
+    satAISearchesPerMonth: null, // IA ilimitada
+    satMaxResults: null, // Sin límite
+    satHasAIExplanations: true,
+    satHasHistory: true,
+    satHasFavorites: true,
+    satHasAlerts: true,
+    satHasLearning: true,
+    satHasAdvancedRanking: true,
   },
 };
 

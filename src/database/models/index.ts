@@ -11,6 +11,8 @@ import Expense from "./Expense.model.js";
 import DiscountCode from "./DiscountCode.model.js";
 import PaymentComplement from "./PaymentComplement.model.js";
 import PaymentComplementItem from "./PaymentComplementItem.model.js";
+import SatProductService from "./SatProductService.model.js";
+import SatSearchLog from "./SatSearchLog.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -25,5 +27,7 @@ export {
   DiscountCode,
   PaymentComplement,
   PaymentComplementItem,
+  SatProductService,
+  SatSearchLog,
 };
 export type { Sequelize };

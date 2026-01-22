@@ -442,6 +442,16 @@ export async function getAvailablePlans(req: AuthRequest, res: Response): Promis
           reports: limits.reports,
           support: limits.support,
           apiAccess: limits.apiAccess,
+          // Límites del catálogo SAT
+          satBasicSearchesPerMonth: limits.satBasicSearchesPerMonth,
+          satAISearchesPerMonth: limits.satAISearchesPerMonth,
+          satMaxResults: limits.satMaxResults,
+          satHasAIExplanations: limits.satHasAIExplanations,
+          satHasHistory: limits.satHasHistory,
+          satHasFavorites: limits.satHasFavorites,
+          satHasAlerts: limits.satHasAlerts,
+          satHasLearning: limits.satHasLearning,
+          satHasAdvancedRanking: limits.satHasAdvancedRanking,
         },
         trialDays: PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] || null,
       };

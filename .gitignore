@@ -61,3 +61,6 @@ temp/
 # cursor
 .cursor/
 
+# data
+data/
+

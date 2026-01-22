@@ -10,3 +10,10 @@ export type {
   PaymentComplementItemAttributes,
   PaymentComplementItemCreationAttributes,
 } from "./payment.types.js";
+export type {
+  SATProductServiceJSON,
+  SATProductServiceAttributes,
+  SATProductServiceCreationAttributes,
+  SATProductServiceSearchParams,
+  SATProductServiceSearchResponse,
+} from "./sat.types.js";
