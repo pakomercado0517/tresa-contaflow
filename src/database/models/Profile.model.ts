@@ -1,8 +1,9 @@
-import { DataTypes, Model } from "sequelize";
-import sequelize from "../config.js";
-import User from "./User.model.js";
+import { DataTypes, Model } from 'sequelize';
+import sequelize from '../config.js';
+import User from './User.model.js';
 
-type TipoPersona = "FISICA" | "MORAL";
+type TipoPersona = 'FISICA' | 'MORAL';
+type FrozenReason = 'plan_limit' | 'user_suspension' | 'payment_issue';
 
 interface ProfileAttributes {
   id: string;
@@ -12,17 +13,35 @@ interface ProfileAttributes {
   tipo_persona: TipoPersona;
   regimen_fiscal: string | null;
   validaciones_habilitadas: Record<string, unknown>;
+  frozen: boolean;
+  frozen_reason: FrozenReason | null;
+  frozen_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
-interface ProfileCreationAttributes
-  extends Omit<ProfileAttributes, "id" | "created_at" | "updated_at" | "regimen_fiscal" | "validaciones_habilitadas"> {
+interface ProfileCreationAttributes extends Omit<
+  ProfileAttributes,
+  | 'id'
+  | 'created_at'
+  | 'updated_at'
+  | 'regimen_fiscal'
+  | 'validaciones_habilitadas'
+  | 'frozen'
+  | 'frozen_reason'
+  | 'frozen_at'
+> {
   regimen_fiscal?: string | null;
   validaciones_habilitadas?: object;
+  frozen?: boolean;
+  frozen_reason?: FrozenReason | null;
+  frozen_at?: Date | null;
 }
 
-class Profile extends Model<ProfileAttributes, ProfileCreationAttributes> implements ProfileAttributes {
+class Profile
+  extends Model<ProfileAttributes, ProfileCreationAttributes>
+  implements ProfileAttributes
+{
   declare id: string;
   declare user_id: string;
   declare nombre: string;
@@ -30,6 +49,9 @@ class Profile extends Model<ProfileAttributes, ProfileCreationAttributes> implem
   declare tipo_persona: TipoPersona;
   declare regimen_fiscal: string | null;
   declare validaciones_habilitadas: Record<string, unknown>;
+  declare frozen: boolean;
+  declare frozen_reason: FrozenReason | null;
+  declare frozen_at: Date | null;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -45,8 +67,8 @@ Profile.init(
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: "users",
-        key: "id",
+        model: 'users',
+        key: 'id',
       },
     },
     nombre: {
@@ -58,7 +80,7 @@ Profile.init(
       allowNull: false,
     },
     tipo_persona: {
-      type: DataTypes.ENUM("FISICA", "MORAL"),
+      type: DataTypes.ENUM('FISICA', 'MORAL'),
       allowNull: false,
     },
     regimen_fiscal: {
@@ -69,6 +91,19 @@ Profile.init(
       type: DataTypes.JSONB,
       defaultValue: {},
       allowNull: false,
+    },
+    frozen: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    frozen_reason: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    frozen_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     created_at: {
       type: DataTypes.DATE,
@@ -83,21 +118,17 @@ Profile.init(
   },
   {
     sequelize,
-    tableName: "profiles",
+    tableName: 'profiles',
     timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-    indexes: [
-      { fields: ["user_id"] },
-      { unique: true, fields: ["user_id", "rfc"] },
-    ],
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+    indexes: [{ fields: ['user_id'] }, { unique: true, fields: ['user_id', 'rfc'] }],
   }
 );
 
 // Relaciones
-Profile.belongsTo(User, { foreignKey: "user_id", as: "user" });
-User.hasMany(Profile, { foreignKey: "user_id", as: "profiles" });
+Profile.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasMany(Profile, { foreignKey: 'user_id', as: 'profiles' });
 
 export default Profile;
 export type { ProfileAttributes, ProfileCreationAttributes, TipoPersona };
-

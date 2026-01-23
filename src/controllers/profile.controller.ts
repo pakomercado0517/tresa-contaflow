@@ -1,6 +1,9 @@
-import { type Response } from "express";
-import { Profile } from "../database/models/index.js";
-import type { AuthRequest } from "../middlewares/auth.middleware.js";
+import { type Response } from 'express';
+import { Profile, Subscription } from '../database/models/index.js';
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+import { ProfileService } from '../services/profile.service.js';
+import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
+import type { ProfileServiceError, FreezeOthersRequest } from '../types/index.js';
 
 /**
  * Obtener todos los perfiles del usuario autenticado
@@ -9,23 +12,23 @@ export async function getProfiles(req: AuthRequest, res: Response): Promise<void
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
     const profiles = await Profile.findAll({
       where: { user_id: userId },
-      order: [["created_at", "DESC"]],
+      order: [['created_at', 'DESC']],
     });
 
     res.json({
-      message: "Perfiles obtenidos exitosamente",
+      message: 'Perfiles obtenidos exitosamente',
       data: profiles,
       count: profiles.length,
     });
   } catch (error) {
-    console.error("Error al obtener perfiles:", error);
-    res.status(500).json({ error: "Error al obtener perfiles" });
+    console.error('Error al obtener perfiles:', error);
+    res.status(500).json({ error: 'Error al obtener perfiles' });
   }
 }
 
@@ -38,7 +41,7 @@ export async function getProfileById(req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
 
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -47,17 +50,17 @@ export async function getProfileById(req: AuthRequest, res: Response): Promise<v
     });
 
     if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
+      res.status(404).json({ error: 'Perfil no encontrado' });
       return;
     }
 
     res.json({
-      message: "Perfil obtenido exitosamente",
+      message: 'Perfil obtenido exitosamente',
       data: profile,
     });
   } catch (error) {
-    console.error("Error al obtener perfil:", error);
-    res.status(500).json({ error: "Error al obtener perfil" });
+    console.error('Error al obtener perfil:', error);
+    res.status(500).json({ error: 'Error al obtener perfil' });
   }
 }
 
@@ -70,7 +73,29 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
     const { nombre, rfc, tipo_persona, regimen_fiscal, validaciones_habilitadas } = req.body;
 
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
+      return;
+    }
+
+    // Obtener el plan actual del usuario
+    const subscription = await Subscription.findOne({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+    });
+
+    const currentPlan = subscription?.plan || 'FREE';
+
+    // Verificar límite de perfiles usando el servicio
+    const canCreate = await ProfileService.canCreateProfile(userId, currentPlan);
+    if (!canCreate) {
+      const activeCount = await ProfileService.countActiveProfiles(userId);
+      const limit = ProfileService.getProfileLimitForPlan(currentPlan);
+      res.status(403).json({
+        error: `Has alcanzado el límite de perfiles para tu plan ${currentPlan}`,
+        limit,
+        current: activeCount,
+        code: 'PROFILE_LIMIT_REACHED',
+      });
       return;
     }
 
@@ -80,7 +105,7 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
     });
 
     if (existingProfile) {
-      res.status(409).json({ error: "Ya existe un perfil con este RFC" });
+      res.status(409).json({ error: 'Ya existe un perfil con este RFC' });
       return;
     }
 
@@ -95,19 +120,19 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
     });
 
     res.status(201).json({
-      message: "Perfil creado exitosamente",
+      message: 'Perfil creado exitosamente',
       data: profile,
     });
   } catch (error: unknown) {
-    console.error("Error al crear perfil:", error);
-    
+    console.error('Error al crear perfil:', error);
+
     // Manejar error de validación única (RFC duplicado)
-    if (error instanceof Error && error.name === "SequelizeUniqueConstraintError") {
-      res.status(409).json({ error: "Ya existe un perfil con este RFC" });
+    if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
+      res.status(409).json({ error: 'Ya existe un perfil con este RFC' });
       return;
     }
 
-    res.status(500).json({ error: "Error al crear perfil" });
+    res.status(500).json({ error: 'Error al crear perfil' });
   }
 }
 
@@ -121,7 +146,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     const { nombre, rfc, tipo_persona, regimen_fiscal, validaciones_habilitadas } = req.body;
 
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -131,7 +156,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     });
 
     if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
+      res.status(404).json({ error: 'Perfil no encontrado' });
       return;
     }
 
@@ -142,7 +167,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       });
 
       if (existingProfile) {
-        res.status(409).json({ error: "Ya existe otro perfil con este RFC" });
+        res.status(409).json({ error: 'Ya existe otro perfil con este RFC' });
         return;
       }
     }
@@ -153,23 +178,26 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       rfc: rfc ? rfc.toUpperCase() : profile.rfc,
       tipo_persona: tipo_persona || profile.tipo_persona,
       regimen_fiscal: regimen_fiscal !== undefined ? regimen_fiscal : profile.regimen_fiscal,
-      validaciones_habilitadas: validaciones_habilitadas !== undefined ? validaciones_habilitadas : profile.validaciones_habilitadas,
+      validaciones_habilitadas:
+        validaciones_habilitadas !== undefined
+          ? validaciones_habilitadas
+          : profile.validaciones_habilitadas,
     });
 
     res.json({
-      message: "Perfil actualizado exitosamente",
+      message: 'Perfil actualizado exitosamente',
       data: profile,
     });
   } catch (error: unknown) {
-    console.error("Error al actualizar perfil:", error);
+    console.error('Error al actualizar perfil:', error);
 
     // Manejar error de validación única (RFC duplicado)
-    if (error instanceof Error && error.name === "SequelizeUniqueConstraintError") {
-      res.status(409).json({ error: "Ya existe otro perfil con este RFC" });
+    if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
+      res.status(409).json({ error: 'Ya existe otro perfil con este RFC' });
       return;
     }
 
-    res.status(500).json({ error: "Error al actualizar perfil" });
+    res.status(500).json({ error: 'Error al actualizar perfil' });
   }
 }
 
@@ -182,7 +210,7 @@ export async function deleteProfile(req: AuthRequest, res: Response): Promise<vo
     const { id } = req.params;
 
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -192,7 +220,7 @@ export async function deleteProfile(req: AuthRequest, res: Response): Promise<vo
     });
 
     if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
+      res.status(404).json({ error: 'Perfil no encontrado' });
       return;
     }
 
@@ -200,11 +228,152 @@ export async function deleteProfile(req: AuthRequest, res: Response): Promise<vo
     await profile.destroy();
 
     res.json({
-      message: "Perfil eliminado exitosamente",
+      message: 'Perfil eliminado exitosamente',
     });
   } catch (error) {
-    console.error("Error al eliminar perfil:", error);
-    res.status(500).json({ error: "Error al eliminar perfil" });
+    console.error('Error al eliminar perfil:', error);
+    res.status(500).json({ error: 'Error al eliminar perfil' });
   }
 }
 
+/**
+ * Congelar perfiles excedentes cuando el usuario hace downgrade
+ * POST /api/profiles/freeze-others
+ */
+export async function freezeOtherProfiles(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    const { preserveProfileId, targetPlan }: FreezeOthersRequest = req.body;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuario no autenticado' });
+      return;
+    }
+
+    // Validar que preserveProfileId fue enviado
+    if (!preserveProfileId) {
+      res.status(400).json({
+        error: "El campo 'preserveProfileId' es requerido",
+        code: 'MISSING_PROFILE_ID',
+      });
+      return;
+    }
+
+    // Validar targetPlan si se envía
+    let requestedPlan: Plan | undefined;
+    if (targetPlan) {
+      if (!(targetPlan in PLAN_LIMITS)) {
+        res.status(400).json({
+          error: "El campo 'targetPlan' es inválido",
+          code: 'INVALID_PLAN',
+        });
+        return;
+      }
+      requestedPlan = targetPlan;
+    }
+
+    // Obtener el plan actual del usuario desde su suscripción
+    const subscription = await Subscription.findOne({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+    });
+
+    const currentPlan = subscription?.plan || 'FREE';
+    const effectivePlan = requestedPlan || currentPlan;
+
+    // Ejecutar la lógica de congelación usando el servicio
+    const result = await ProfileService.freezeExcessProfiles(
+      userId,
+      preserveProfileId,
+      effectivePlan,
+      'plan_limit'
+    );
+
+    res.status(200).json({
+      message: 'Perfiles congelados exitosamente',
+      frozen: result.frozen.map((p) => ({
+        id: p.id,
+        nombre: p.nombre,
+        rfc: p.rfc,
+        frozen: p.frozen,
+        frozen_reason: p.frozen_reason,
+        frozen_at: p.frozen_at?.toISOString(),
+      })),
+      active: {
+        id: result.active.id,
+        nombre: result.active.nombre,
+        rfc: result.active.rfc,
+        frozen: result.active.frozen,
+      },
+      count: {
+        frozen: result.frozen.length,
+        total: result.frozen.length + 1, // +1 por el activo
+      },
+    });
+  } catch (error) {
+    console.error('Error al congelar perfiles:', error);
+
+    // Manejar errores del servicio
+    if (error && typeof error === 'object' && 'code' in error) {
+      const serviceError = error as ProfileServiceError;
+      res.status(serviceError.statusCode).json({
+        error: serviceError.message,
+        code: serviceError.code,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'Error al congelar perfiles' });
+  }
+}
+
+/**
+ * Descongelar un perfil
+ * PUT /api/profiles/:id/unfreeze
+ */
+export async function unfreezeProfile(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    const { id } = req.params;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuario no autenticado' });
+      return;
+    }
+
+    if (!id) {
+      res.status(400).json({ error: 'ID de perfil requerido' });
+      return;
+    }
+
+    // Obtener el plan actual del usuario
+    const subscription = await Subscription.findOne({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+    });
+
+    const currentPlan = subscription?.plan || 'FREE';
+
+    // Descongelar usando el servicio
+    const profile = await ProfileService.unfreezeProfile(userId, id, currentPlan);
+
+    res.json({
+      message: 'Perfil descongelado exitosamente',
+      data: profile,
+    });
+  } catch (error) {
+    console.error('Error al descongelar perfil:', error);
+
+    // Manejar errores del servicio
+    if (error && typeof error === 'object' && 'code' in error) {
+      const serviceError = error as ProfileServiceError;
+      res.status(serviceError.statusCode).json({
+        error: serviceError.message,
+        code: serviceError.code,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'Error al descongelar perfil' });
+  }
+}
