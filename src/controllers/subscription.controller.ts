@@ -2,7 +2,13 @@ import { type Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import type Stripe from 'stripe';
 import { getStripeService } from '../services/stripe.service.js';
-import { PLAN_PRICES, PLAN_LIMITS, PLAN_TRIAL_DAYS, type Plan } from '../constants/plans.constants.js';
+import {
+  PLAN_PRICES,
+  PLAN_PRICES_ANNUAL,
+  PLAN_LIMITS,
+  PLAN_TRIAL_DAYS,
+  type Plan,
+} from '../constants/plans.constants.js';
 import { SubscriptionService } from '../services/subscription.service.js';
 import { PlanLimitsService } from '../services/plan-limits.service.js';
 import { User } from '../database/models/index.js';
@@ -19,9 +25,10 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       return;
     }
 
-    const { plan, promotionCode } = req.body as {
+    const { plan, promotionCode, billing } = req.body as {
       plan?: string;
       promotionCode?: string;
+      billing?: string;
     };
 
     // Validar que el plan sea válido
@@ -59,8 +66,9 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
     const stripeService = getStripeService();
     const stripe = stripeService.getClient();
 
-    // Obtener Price ID del plan
-    const priceId = stripeService.getPriceId(plan as 'BASIC' | 'PRO');
+    // Obtener Price ID del plan (respeta billing: 'monthly' | 'annual')
+    const billingMode = billing === 'annual' ? 'annual' : 'monthly';
+    const priceId = stripeService.getPriceId(plan as 'BASIC' | 'PRO', billingMode);
 
     // Obtener URLs de éxito y cancelación desde variables de entorno o usar defaults
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -78,9 +86,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
 
     if (normalizedPromotionCode) {
       const discountService = new DiscountService();
-      const promotion = await discountService.getPromotionCodeForCheckout(
-        normalizedPromotionCode
-      );
+      const promotion = await discountService.getPromotionCodeForCheckout(normalizedPromotionCode);
 
       if (!promotion) {
         res.status(400).json({
@@ -96,6 +102,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
     const metadata: Record<string, string> = {
       userId: userId,
       plan: plan,
+      billing: billing === 'annual' ? 'annual' : 'monthly',
     };
 
     if (normalizedPromotionCode && promotionCodeId) {
@@ -185,7 +192,7 @@ export async function getSubscription(req: AuthRequest, res: Response): Promise<
 
     // Obtener el plan actual (FREE si no tiene suscripción)
     const currentPlan = subscription?.plan || 'FREE';
-    
+
     // Obtener los límites del plan
     const limits = await limitsService.getUserLimits(userId);
 
@@ -414,15 +421,16 @@ export async function getAvailablePlans(req: AuthRequest, res: Response): Promis
     const plansData = plans.map((plan) => {
       const limits = PLAN_LIMITS[plan];
       const monthlyPrice = PLAN_PRICES[plan];
-      
-      // Calcular precio anual con 15% de descuento
+
+      // Usar precios anuales fijos cuando se solicite billing=annual
       let price: number;
       let originalPrice: number | null = null;
-      
+
       if (isAnnual && monthlyPrice > 0) {
+        // Precio anual fijo (definido en PLAN_PRICES_ANNUAL)
+        price = PLAN_PRICES_ANNUAL[plan];
+        // Mostrar precio original sin descuento (12 * mensual) para referencia en UI
         originalPrice = monthlyPrice * 12;
-        const discount = originalPrice * 0.15; // 15% de descuento
-        price = originalPrice - discount;
       } else {
         price = monthlyPrice;
       }

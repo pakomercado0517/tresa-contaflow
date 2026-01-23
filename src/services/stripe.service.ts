@@ -1,4 +1,4 @@
-import Stripe from "stripe";
+import Stripe from 'stripe';
 
 /**
  * Servicio base de Stripe
@@ -11,13 +11,11 @@ export class StripeService {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
     if (!secretKey) {
-      throw new Error(
-        "STRIPE_SECRET_KEY no está definida en las variables de entorno"
-      );
+      throw new Error('STRIPE_SECRET_KEY no está definida en las variables de entorno');
     }
 
     this.stripe = new Stripe(secretKey, {
-      apiVersion: "2025-12-15.clover", // Usar la versión más reciente estable
+      apiVersion: '2025-12-15.clover', // Usar la versión más reciente estable
       typescript: true,
     });
   }
@@ -38,9 +36,7 @@ export class StripeService {
 
     if (!webhookSecret) {
       if (required) {
-        throw new Error(
-          "STRIPE_WEBHOOK_SECRET no está definida en las variables de entorno"
-        );
+        throw new Error('STRIPE_WEBHOOK_SECRET no está definida en las variables de entorno');
       }
       return null;
     }
@@ -50,16 +46,18 @@ export class StripeService {
 
   /**
    * Obtiene el Price ID de un plan desde las variables de entorno
+   * Soporta planes BASIC, PRO y ENTERPRISE y billing mensual o anual.
    */
-  getPriceId(plan: "BASIC" | "PRO"): string {
+  getPriceId(
+    plan: 'BASIC' | 'PRO' | 'ENTERPRISE',
+    billing: 'monthly' | 'annual' = 'monthly'
+  ): string {
     const envVar =
-      plan === "BASIC" ? "STRIPE_PRICE_ID_BASIC" : "STRIPE_PRICE_ID_PRO";
+      billing === 'annual' ? `STRIPE_PRICE_ID_${plan}_ANNUAL` : `STRIPE_PRICE_ID_${plan}`;
     const priceId = process.env[envVar];
 
     if (!priceId) {
-      throw new Error(
-        `${envVar} no está definida en las variables de entorno`
-      );
+      throw new Error(`${envVar} no está definida en las variables de entorno`);
     }
 
     return priceId;
@@ -78,4 +76,3 @@ export function getStripeService(): StripeService {
   }
   return stripeServiceInstance;
 }
-

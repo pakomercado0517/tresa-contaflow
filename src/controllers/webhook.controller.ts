@@ -1,24 +1,21 @@
-import { type Request, type Response } from "express";
-import Stripe from "stripe";
-import { getStripeService } from "../services/stripe.service.js";
-import { Subscription, PaymentEvent, User } from "../database/models/index.js";
-import type { Plan } from "../constants/plans.constants.js";
-import { PLAN_PRICES } from "../constants/plans.constants.js";
-import { DiscountService } from "../services/discount.service.js";
+import { type Request, type Response } from 'express';
+import Stripe from 'stripe';
+import { getStripeService } from '../services/stripe.service.js';
+import { Subscription, PaymentEvent, User } from '../database/models/index.js';
+import type { Plan } from '../constants/plans.constants.js';
+import { PLAN_PRICES } from '../constants/plans.constants.js';
+import { DiscountService } from '../services/discount.service.js';
 
 /**
  * Endpoint para recibir webhooks de Stripe
  * IMPORTANTE: Este endpoint NO debe usar el middleware de autenticación
  * Stripe usa su propia firma para autenticar los webhooks
  */
-export async function handleStripeWebhook(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const sig = req.headers["stripe-signature"];
+export async function handleStripeWebhook(req: Request, res: Response): Promise<void> {
+  const sig = req.headers['stripe-signature'];
 
-  if (!sig || typeof sig !== "string") {
-    res.status(400).json({ error: "Missing stripe-signature header" });
+  if (!sig || typeof sig !== 'string') {
+    res.status(400).json({ error: 'Missing stripe-signature header' });
     return;
   }
 
@@ -29,8 +26,8 @@ export async function handleStripeWebhook(
 
     // Si no hay webhook secret, retornar error (o permitir en desarrollo)
     if (!webhookSecret) {
-      console.warn("STRIPE_WEBHOOK_SECRET no configurado, ignorando webhook");
-      res.status(200).json({ received: true, warning: "Webhook secret not configured" });
+      console.warn('STRIPE_WEBHOOK_SECRET no configurado, ignorando webhook');
+      res.status(200).json({ received: true, warning: 'Webhook secret not configured' });
       return;
     }
 
@@ -39,8 +36,10 @@ export async function handleStripeWebhook(
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-      console.error("Error verificando webhook:", err);
-      res.status(400).json({ error: `Webhook Error: ${err instanceof Error ? err.message : "Unknown error"}` });
+      console.error('Error verificando webhook:', err);
+      res
+        .status(400)
+        .json({ error: `Webhook Error: ${err instanceof Error ? err.message : 'Unknown error'}` });
       return;
     }
 
@@ -54,47 +53,47 @@ export async function handleStripeWebhook(
 
     // Manejar diferentes tipos de eventos
     switch (event.type) {
-      case "checkout.session.completed":
+      case 'checkout.session.completed':
         try {
           await handleCheckoutSessionCompleted(event);
         } catch (error) {
-          console.error("Error en handleCheckoutSessionCompleted:", error);
+          console.error('Error en handleCheckoutSessionCompleted:', error);
           throw error; // Re-lanzar para que se capture en el catch general
         }
         break;
 
-      case "customer.subscription.updated":
+      case 'customer.subscription.updated':
         try {
           await handleSubscriptionUpdated(event);
         } catch (error) {
-          console.error("Error en handleSubscriptionUpdated:", error);
+          console.error('Error en handleSubscriptionUpdated:', error);
           throw error;
         }
         break;
 
-      case "customer.subscription.deleted":
+      case 'customer.subscription.deleted':
         try {
           await handleSubscriptionDeleted(event);
         } catch (error) {
-          console.error("Error en handleSubscriptionDeleted:", error);
+          console.error('Error en handleSubscriptionDeleted:', error);
           throw error;
         }
         break;
 
-      case "invoice.payment_succeeded":
+      case 'invoice.payment_succeeded':
         try {
           await handleInvoicePaymentSucceeded(event);
         } catch (error) {
-          console.error("Error en handleInvoicePaymentSucceeded:", error);
+          console.error('Error en handleInvoicePaymentSucceeded:', error);
           throw error;
         }
         break;
 
-      case "invoice.payment_failed":
+      case 'invoice.payment_failed':
         try {
           await handleInvoicePaymentFailed(event);
         } catch (error) {
-          console.error("Error en handleInvoicePaymentFailed:", error);
+          console.error('Error en handleInvoicePaymentFailed:', error);
           throw error;
         }
         break;
@@ -106,8 +105,8 @@ export async function handleStripeWebhook(
     // Retornar respuesta exitosa a Stripe
     res.json({ received: true });
   } catch (error) {
-    console.error("Error procesando webhook:", error);
-    res.status(500).json({ error: "Error processing webhook" });
+    console.error('Error procesando webhook:', error);
+    res.status(500).json({ error: 'Error processing webhook' });
   }
 }
 
@@ -118,8 +117,8 @@ export async function handleStripeWebhook(
 async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void> {
   const session = event.data.object as Stripe.Checkout.Session;
 
-  if (session.mode !== "subscription") {
-    console.log("Checkout session no es una suscripción, ignorando");
+  if (session.mode !== 'subscription') {
+    console.log('Checkout session no es una suscripción, ignorando');
     return;
   }
 
@@ -127,14 +126,14 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
   const planFromMetadata = session.metadata?.plan as Plan | undefined;
 
   if (!userId) {
-    console.error("No se encontró userId en metadata del checkout session");
+    console.error('No se encontró userId en metadata del checkout session');
     return;
   }
 
   // Obtener la suscripción de Stripe
   const subscriptionId = session.subscription as string;
   if (!subscriptionId) {
-    console.error("No se encontró subscription ID en checkout session");
+    console.error('No se encontró subscription ID en checkout session');
     return;
   }
 
@@ -146,7 +145,7 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
   const plan = planFromMetadata || getPlanFromPriceId(subscription.items.data[0]?.price.id);
 
   if (!plan) {
-    console.error("No se pudo determinar el plan");
+    console.error('No se pudo determinar el plan');
     return;
   }
 
@@ -158,7 +157,7 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
   // Si no existe por stripe_subscription_id, buscar por user_id y status ACTIVE
   if (!existingSubscription) {
     existingSubscription = await Subscription.findOne({
-      where: { user_id: userId, status: "ACTIVE" },
+      where: { user_id: userId, status: 'ACTIVE' },
     });
   }
 
@@ -188,11 +187,13 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
 
   if (existingSubscription) {
     // Si la suscripción existente es FREE y estamos creando una de pago, cancelar la FREE
-    if (existingSubscription.plan === "FREE" && plan !== "FREE") {
-      await existingSubscription.update({ status: "CANCELLED" });
+    if (existingSubscription.plan === 'FREE' && plan !== 'FREE') {
+      await existingSubscription.update({ status: 'CANCELLED' });
       // Crear nueva suscripción de pago
       await Subscription.create(subscriptionData);
-      console.log(`Suscripción FREE cancelada y nueva suscripción ${plan} creada para usuario ${userId}`);
+      console.log(
+        `Suscripción FREE cancelada y nueva suscripción ${plan} creada para usuario ${userId}`
+      );
     } else {
       // Actualizar suscripción existente
       await existingSubscription.update(subscriptionData);
@@ -205,7 +206,7 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
   }
 
   // Si la suscripción tiene status TRIALING, marcar que el usuario ya usó su trial
-  if (subscriptionData.status === "TRIALING") {
+  if (subscriptionData.status === 'TRIALING') {
     const user = await User.findByPk(userId);
     if (user && !user.trial_used) {
       await user.update({ trial_used: true });
@@ -229,16 +230,17 @@ async function handleSubscriptionUpdated(event: Stripe.Event): Promise<void> {
 
   const userId = subscription.metadata?.userId;
   if (!userId) {
-    console.error("No se encontró userId en metadata de la suscripción");
+    console.error('No se encontró userId en metadata de la suscripción');
     return;
   }
 
   // Determinar el plan desde metadata o desde el price ID
-  const plan = (subscription.metadata?.plan as Plan | undefined) || 
-               getPlanFromPriceId(subscription.items.data[0]?.price.id);
+  const plan =
+    (subscription.metadata?.plan as Plan | undefined) ||
+    getPlanFromPriceId(subscription.items.data[0]?.price.id);
 
   if (!plan) {
-    console.error("No se pudo determinar el plan");
+    console.error('No se pudo determinar el plan');
     return;
   }
 
@@ -248,7 +250,9 @@ async function handleSubscriptionUpdated(event: Stripe.Event): Promise<void> {
   });
 
   if (!dbSubscription) {
-    console.error(`No se encontró suscripción en BD con stripe_subscription_id: ${subscription.id}`);
+    console.error(
+      `No se encontró suscripción en BD con stripe_subscription_id: ${subscription.id}`
+    );
     return;
   }
 
@@ -260,11 +264,11 @@ async function handleSubscriptionUpdated(event: Stripe.Event): Promise<void> {
     plan: plan,
     plan_price: actualPrice,
     status: mapStripeStatusToDbStatus(subscription.status),
-    current_period_start: (subscription as any).current_period_start 
-      ? new Date(((subscription as any).current_period_start as number) * 1000) 
+    current_period_start: (subscription as any).current_period_start
+      ? new Date(((subscription as any).current_period_start as number) * 1000)
       : dbSubscription.current_period_start,
-    current_period_end: (subscription as any).current_period_end 
-      ? new Date(((subscription as any).current_period_end as number) * 1000) 
+    current_period_end: (subscription as any).current_period_end
+      ? new Date(((subscription as any).current_period_end as number) * 1000)
       : dbSubscription.current_period_end,
     cancel_at_period_end: subscription.cancel_at_period_end || false,
     canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
@@ -286,13 +290,15 @@ async function handleSubscriptionDeleted(event: Stripe.Event): Promise<void> {
   });
 
   if (!dbSubscription) {
-    console.error(`No se encontró suscripción en BD con stripe_subscription_id: ${subscription.id}`);
+    console.error(
+      `No se encontró suscripción en BD con stripe_subscription_id: ${subscription.id}`
+    );
     return;
   }
 
   // Marcar como cancelada y downgrade a FREE
   await dbSubscription.update({
-    status: "CANCELLED",
+    status: 'CANCELLED',
     canceled_at: new Date(),
     cancel_at_period_end: false,
   });
@@ -300,9 +306,9 @@ async function handleSubscriptionDeleted(event: Stripe.Event): Promise<void> {
   // Crear nueva suscripción FREE
   await Subscription.create({
     user_id: dbSubscription.user_id,
-    plan: "FREE",
+    plan: 'FREE',
     plan_price: PLAN_PRICES.FREE,
-    status: "ACTIVE",
+    status: 'ACTIVE',
   });
 
   console.log(`Suscripción cancelada para usuario ${dbSubscription.user_id}, downgrade a FREE`);
@@ -338,7 +344,7 @@ async function handleInvoicePaymentSucceeded(event: Stripe.Event): Promise<void>
   await dbSubscription.update({
     current_period_start: new Date((subscription as any).current_period_start * 1000),
     current_period_end: new Date((subscription as any).current_period_end * 1000),
-    status: "ACTIVE", // Asegurar que está activa si el pago fue exitoso
+    status: 'ACTIVE', // Asegurar que está activa si el pago fue exitoso
   });
 
   console.log(`Pago exitoso para suscripción ${subscription.id}`);
@@ -372,7 +378,7 @@ async function handleInvoicePaymentFailed(event: Stripe.Event): Promise<void> {
 
   // Actualizar estado a PAST_DUE
   await dbSubscription.update({
-    status: "PAST_DUE",
+    status: 'PAST_DUE',
   });
 
   console.log(`Pago fallido para suscripción ${subscription.id}`);
@@ -383,19 +389,22 @@ async function handleInvoicePaymentFailed(event: Stripe.Event): Promise<void> {
  */
 function mapStripeStatusToDbStatus(
   stripeStatus: string
-): "ACTIVE" | "CANCELLED" | "EXPIRED" | "PAST_DUE" | "UNPAID" | "TRIALING" {
-  const statusMap: Record<string, "ACTIVE" | "CANCELLED" | "EXPIRED" | "PAST_DUE" | "UNPAID" | "TRIALING"> = {
-    active: "ACTIVE",
-    canceled: "CANCELLED",
-    incomplete: "UNPAID",
-    incomplete_expired: "EXPIRED",
-    past_due: "PAST_DUE",
-    trialing: "TRIALING",
-    unpaid: "UNPAID",
-    paused: "CANCELLED",
+): 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PAST_DUE' | 'UNPAID' | 'TRIALING' {
+  const statusMap: Record<
+    string,
+    'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'PAST_DUE' | 'UNPAID' | 'TRIALING'
+  > = {
+    active: 'ACTIVE',
+    canceled: 'CANCELLED',
+    incomplete: 'UNPAID',
+    incomplete_expired: 'EXPIRED',
+    past_due: 'PAST_DUE',
+    trialing: 'TRIALING',
+    unpaid: 'UNPAID',
+    paused: 'CANCELLED',
   };
 
-  return statusMap[stripeStatus] || "ACTIVE";
+  return statusMap[stripeStatus] || 'ACTIVE';
 }
 
 /**
@@ -407,19 +416,22 @@ function getPlanFromPriceId(priceId: string | undefined): Plan | null {
   }
 
   const stripeService = getStripeService();
-  
-  try {
-    const basicPriceId = stripeService.getPriceId("BASIC");
-    const proPriceId = stripeService.getPriceId("PRO");
+  const plans: Array<'BASIC' | 'PRO' | 'ENTERPRISE'> = ['BASIC', 'PRO', 'ENTERPRISE'];
 
-    if (priceId === basicPriceId) {
-      return "BASIC";
+  for (const p of plans) {
+    try {
+      const monthly = stripeService.getPriceId(p, 'monthly');
+      if (priceId === monthly) return p as Plan;
+    } catch (err) {
+      // ignore if env var not present
     }
-    if (priceId === proPriceId) {
-      return "PRO";
+
+    try {
+      const annual = stripeService.getPriceId(p, 'annual');
+      if (priceId === annual) return p as Plan;
+    } catch (err) {
+      // ignore if env var not present
     }
-  } catch (error) {
-    console.error("Error obteniendo Price IDs:", error);
   }
 
   return null;
@@ -429,9 +441,7 @@ function getPlanFromPriceId(priceId: string | undefined): Plan | null {
  * Obtiene el precio real de una suscripción de Stripe
  * El precio viene en la menor unidad (centavos para MXN), así que dividimos por 100
  */
-function getPriceFromStripeSubscription(
-  subscription: Stripe.Subscription
-): number {
+function getPriceFromStripeSubscription(subscription: Stripe.Subscription): number {
   const priceItem = subscription.items.data[0];
   if (!priceItem?.price?.unit_amount) {
     // Si no hay precio, retornar 0 (no debería pasar, pero por seguridad)
@@ -442,4 +452,3 @@ function getPriceFromStripeSubscription(
   // Dividimos por 100 para obtener el precio en la unidad normal
   return priceItem.price.unit_amount / 100;
 }
-

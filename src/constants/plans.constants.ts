@@ -2,7 +2,7 @@
  * Constantes de planes y límites
  */
 
-export type Plan = "FREE" | "BASIC" | "PRO" | "ENTERPRISE";
+export type Plan = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE';
 
 export interface PlanLimits {
   profiles: number | null; // null = ilimitado
@@ -10,8 +10,8 @@ export interface PlanLimits {
   expensesPerMonth: number | null; // null = ilimitado
   exportPDF: boolean;
   exportExcel: boolean;
-  reports: "basic" | "complete" | "advanced";
-  support: "none" | "email" | "priority";
+  reports: 'basic' | 'complete' | 'advanced';
+  support: 'none' | 'email' | 'priority';
   apiAccess: boolean;
   // Catálogo SAT - Búsquedas
   satBasicSearchesPerMonth: number | null; // Búsquedas básicas (sin IA) - null = ilimitado
@@ -33,8 +33,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     expensesPerMonth: 25,
     exportPDF: false,
     exportExcel: false,
-    reports: "basic",
-    support: "none",
+    reports: 'basic',
+    support: 'none',
     apiAccess: false,
     satBasicSearchesPerMonth: null, // Ilimitadas (búsqueda básica)
     satAISearchesPerMonth: 5, // 5 búsquedas IA/mes
@@ -52,8 +52,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     expensesPerMonth: 300,
     exportPDF: true,
     exportExcel: false,
-    reports: "complete",
-    support: "email",
+    reports: 'complete',
+    support: 'email',
     apiAccess: false,
     satBasicSearchesPerMonth: null, // Ilimitadas
     satAISearchesPerMonth: 100, // 100 búsquedas IA/mes
@@ -71,8 +71,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     expensesPerMonth: null, // ilimitado
     exportPDF: true,
     exportExcel: true,
-    reports: "advanced",
-    support: "priority",
+    reports: 'advanced',
+    support: 'priority',
     apiAccess: true,
     satBasicSearchesPerMonth: null, // Ilimitadas
     satAISearchesPerMonth: null, // IA ilimitada
@@ -90,8 +90,8 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     expensesPerMonth: null, // ilimitado
     exportPDF: true,
     exportExcel: true,
-    reports: "advanced",
-    support: "priority",
+    reports: 'advanced',
+    support: 'priority',
     apiAccess: true,
     satBasicSearchesPerMonth: null, // Ilimitadas
     satAISearchesPerMonth: null, // IA ilimitada
@@ -117,11 +117,21 @@ export const PLAN_PRICES: Record<Plan, number> = {
 };
 
 /**
+ * Precios anuales fijos de los planes (en MXN)
+ * Usados cuando se solicita `billing=annual` desde el frontend
+ */
+export const PLAN_PRICES_ANNUAL: Record<Plan, number> = {
+  FREE: 0,
+  BASIC: 3000,
+  PRO: 8000,
+  ENTERPRISE: 12000,
+};
+
+/**
  * Días de periodo de prueba por plan
  * Solo aplica a planes de pago (BASIC, PRO)
  */
-export const PLAN_TRIAL_DAYS: Record<"BASIC" | "PRO", number> = {
+export const PLAN_TRIAL_DAYS: Record<'BASIC' | 'PRO', number> = {
   BASIC: 30,
   PRO: 30,
 };
-
