@@ -1,11 +1,13 @@
 import { Invoice, Expense, Profile, PaymentComplementItem } from "../database/models/index.js";
+import { PaymentStatusService } from "./payment-status.service.js";
 import { Op } from "sequelize";
 
 export interface PeriodMetrics {
   totalFacturado: number;
   totalPagado: number;
-  totalCompras: number;
-  totalPagadoMenosCompras: number;
+  totalCompras: number; // Total de gastos registrados (contable) - suma completa de PUE + PPD
+  totalComprasPagadas: number; // Solo lo pagado de gastos (efectivo) - PUE completo + PPD pagado
+  totalPagadoMenosCompras: number; // Flujo de efectivo neto: totalPagado - totalComprasPagadas
   pendientePagar: number;
   totalFacturas: number;
   totalGastos: number;
@@ -13,6 +15,10 @@ export interface PeriodMetrics {
   facturasPPD: number;
   facturasPagadasCompletamente: number;
   facturasParcialmentePagadas: number;
+  gastosPUE: number;
+  gastosPPD: number;
+  gastosPagadosCompletamente: number;
+  gastosParcialmentePagados: number;
 }
 
 interface PaymentContext {
@@ -110,25 +116,30 @@ export class MetricsService {
     };
 
     // Calcular métricas
-    return this.calculateMetricsFromData(facturas, gastos, paymentContext);
+    return await this.calculateMetricsFromData(facturas, gastos, paymentContext);
   }
 
   /**
    * Calcula métricas a partir de arrays de facturas y gastos
    */
-  private calculateMetricsFromData(
+  private async calculateMetricsFromData(
     facturas: Invoice[],
     gastos: Expense[],
     paymentContext: PaymentContext
-  ): PeriodMetrics {
+  ): Promise<PeriodMetrics> {
     // Inicializar contadores
     let totalFacturado = 0;
     let totalPagado = paymentContext.totalPagadoComplementosPeriodo + paymentContext.totalPagadoManualPeriodo;
-    let totalCompras = 0;
+    let totalCompras = 0; // Total contable (completo)
+    let totalComprasPagadas = 0; // Solo lo pagado (efectivo)
     let facturasPUE = 0;
     let facturasPPD = 0;
     let facturasPagadasCompletamente = 0;
     let facturasParcialmentePagadas = 0;
+    let gastosPUE = 0;
+    let gastosPPD = 0;
+    let gastosPagadosCompletamente = 0;
+    let gastosParcialmentePagados = 0;
 
     // Procesar facturas
     facturas.forEach((factura) => {
@@ -159,20 +170,50 @@ export class MetricsService {
     });
 
     // Procesar gastos
-    gastos.forEach((gasto) => {
-      totalCompras += Number(gasto.total);
-    });
+    const paymentStatusService = new PaymentStatusService();
+    const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : "";
+    
+    for (const gasto of gastos) {
+      const totalGasto = Number(gasto.total);
+      totalCompras += totalGasto; // Suma completa (contable)
+
+      // Calcular estado de pago si es gasto de XML (tiene tipo)
+      if (gasto.tipo && gasto.uuid) {
+        if (gasto.tipo === "PUE") {
+          gastosPUE++;
+          totalComprasPagadas += totalGasto; // PUE está pagado completamente
+          gastosPagadosCompletamente++;
+        } else if (gasto.tipo === "PPD") {
+          gastosPPD++;
+          // Calcular estado de pago para obtener lo pagado
+          const estadoPago = await paymentStatusService.calcularEstadoPagoGasto(gasto, gasto.profile_id);
+          totalComprasPagadas += estadoPago.totalPagado; // Solo lo pagado
+          
+          if (estadoPago.completamentePagado) {
+            gastosPagadosCompletamente++;
+          } else if (estadoPago.totalPagado > 0) {
+            gastosParcialmentePagados++;
+          }
+        }
+      } else {
+        // Gastos manuales (sin tipo) se consideran pagados completamente
+        totalComprasPagadas += totalGasto;
+        gastosPagadosCompletamente++;
+      }
+    }
 
     // Calcular pendiente
     const pendientePagar = totalFacturado - totalPagado;
 
     // Calcular total pagado menos compras (flujo de efectivo neto)
-    const totalPagadoMenosCompras = totalPagado - totalCompras;
+    // Usa totalComprasPagadas en lugar de totalCompras para reflejar el flujo real
+    const totalPagadoMenosCompras = totalPagado - totalComprasPagadas;
 
     return {
       totalFacturado: Math.round(totalFacturado * 100) / 100, // Redondear a 2 decimales
       totalPagado: Math.round(totalPagado * 100) / 100,
       totalCompras: Math.round(totalCompras * 100) / 100,
+      totalComprasPagadas: Math.round(totalComprasPagadas * 100) / 100,
       totalPagadoMenosCompras: Math.round(totalPagadoMenosCompras * 100) / 100,
       pendientePagar: Math.round(pendientePagar * 100) / 100,
       totalFacturas: facturas.length,
@@ -181,6 +222,10 @@ export class MetricsService {
       facturasPPD,
       facturasPagadasCompletamente,
       facturasParcialmentePagadas,
+      gastosPUE,
+      gastosPPD,
+      gastosPagadosCompletamente,
+      gastosParcialmentePagados,
     };
   }
 
