@@ -52,3 +52,18 @@ export interface PaymentComplementItemAttributes {
 
 export interface PaymentComplementItemCreationAttributes
   extends Omit<PaymentComplementItemAttributes, "id" | "created_at" | "updated_at"> {}
+
+// Tipos para estado de pago
+export type EstadoPago = "PAGADO" | "PAGO_PARCIAL" | "NO_PAGADO";
+
+export interface EstadoPagoDetalle {
+  estado: EstadoPago;
+  totalFactura: number;
+  totalPagado: number;
+  saldoPendiente: number;
+  porcentajePagado: number;
+  completamentePagado: boolean;
+  ultimoSaldoInsoluto: number | null; // Del último complemento de pago
+  tieneComplementos: boolean;
+  tienePagosManuales: boolean;
+}

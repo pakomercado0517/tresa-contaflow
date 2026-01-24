@@ -4,6 +4,7 @@ import { CFDIParserService } from "../services/cfdi-parser.service.js";
 import { FiscalValidationService } from "../services/fiscal-validation.service.js";
 import { PaymentMatchingService } from "../services/payment-matching.service.js";
 import { PaymentComplementService } from "../services/payment-complement.service.js";
+import { PaymentStatusService } from "../services/payment-status.service.js";
 import { Profile, Invoice, Expense } from "../database/models/index.js";
 import type { UploadedFile } from "express-fileupload";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
@@ -324,9 +325,19 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
       await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
     }
 
+    // Calcular estado de pago
+    const paymentStatusService = new PaymentStatusService();
+    let estadoPago = null;
+    if (savedRecord instanceof Invoice) {
+      estadoPago = await paymentStatusService.calcularEstadoPagoFactura(savedRecord, profileId);
+    } else if (savedRecord instanceof Expense) {
+      estadoPago = await paymentStatusService.calcularEstadoPagoGasto(savedRecord, profileId);
+    }
+
     res.status(201).json({
       message: esFacturaIngreso ? "Factura guardada exitosamente" : "Gasto guardado exitosamente",
       data: savedRecord,
+      estadoPago,
       validacion: estadoValidacion,
       tipo: esFacturaIngreso ? "factura" : "gasto",
     });
@@ -428,8 +439,29 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
       offset: offset,
     });
 
+    // Calcular estado de pago para todas las facturas
+    const paymentStatusService = new PaymentStatusService();
+    const profileIdParaCalculo = invoices.length > 0 && invoices[0] ? invoices[0].profile_id : "";
+    const estadosPago = await paymentStatusService.calcularEstadoPagoFacturas(
+      invoices,
+      profileIdParaCalculo
+    );
+
+    // Agregar estado de pago a cada factura
+    const invoicesConEstado = await Promise.all(
+      invoices.map(async (invoice) => {
+        const estado = estadosPago.get(invoice.id);
+        // Si no se calculó en el batch (por ejemplo, si no hay facturas), calcular individualmente
+        const estadoFinal = estado || await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id);
+        return {
+          ...invoice.toJSON(),
+          estadoPago: estadoFinal,
+        };
+      })
+    );
+
     res.json({
-      data: invoices,
+      data: invoicesConEstado,
       pagination: {
         total: count,
         page: pageNum,
@@ -483,7 +515,16 @@ export async function getInvoiceById(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    res.json({ data: invoice });
+    // Calcular estado de pago
+    const paymentStatusService = new PaymentStatusService();
+    const estadoPago = await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id);
+
+    res.json({
+      data: {
+        ...invoice.toJSON(),
+        estadoPago,
+      },
+    });
   } catch (error) {
     console.error("Error al obtener factura:", error);
     

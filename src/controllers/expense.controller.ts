@@ -3,6 +3,7 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { Profile, Expense } from "../database/models/index.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 import { uploadInvoice } from "./invoice.controller.js";
+import { PaymentStatusService } from "../services/payment-status.service.js";
 import { Op } from "sequelize";
 
 /**
@@ -83,8 +84,24 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
       offset: offset,
     });
 
+    // Calcular estado de pago para todos los gastos
+    const paymentStatusService = new PaymentStatusService();
+    const expensesConEstado = await Promise.all(
+      expenses.map(async (expense) => {
+        // Solo calcular estado de pago si tiene tipo PUE/PPD (gastos de XML)
+        let estadoPago = null;
+        if (expense.tipo && expense.uuid) {
+          estadoPago = await paymentStatusService.calcularEstadoPagoGasto(expense, expense.profile_id);
+        }
+        return {
+          ...expense.toJSON(),
+          estadoPago,
+        };
+      })
+    );
+
     res.json({
-      data: expenses,
+      data: expensesConEstado,
       pagination: {
         total: count,
         page: pageNum,
@@ -138,7 +155,19 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    res.json({ data: expense });
+    // Calcular estado de pago si aplica
+    let estadoPago = null;
+    if (expense.tipo && expense.uuid) {
+      const paymentStatusService = new PaymentStatusService();
+      estadoPago = await paymentStatusService.calcularEstadoPagoGasto(expense, expense.profile_id);
+    }
+
+    res.json({
+      data: {
+        ...expense.toJSON(),
+        estadoPago,
+      },
+    });
   } catch (error) {
     console.error("Error al obtener gasto:", error);
     

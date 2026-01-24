@@ -25,6 +25,8 @@ export type {
   PaymentComplementCreationAttributes,
   PaymentComplementItemAttributes,
   PaymentComplementItemCreationAttributes,
+  EstadoPago,
+  EstadoPagoDetalle,
 } from './payment.types.js';
 export type {
   SATProductServiceJSON,
