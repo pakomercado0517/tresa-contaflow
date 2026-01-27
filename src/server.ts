@@ -52,7 +52,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 // Rate Limiting: Protección contra ataques de fuerza bruta
 // En desarrollo: límites más bajos para facilitar pruebas
 const apiRateLimitMax = parseInt(
-  process.env.API_RATE_LIMIT_MAX || (process.env.NODE_ENV === 'production' ? '1000' : '90'),
+  process.env.API_RATE_LIMIT_MAX || (process.env.NODE_ENV === 'production' ? '1000' : '2000'),
   10
 );
 
@@ -71,7 +71,7 @@ app.use('/api/', limiter);
 // Rate limiting más estricto para endpoints de autenticación
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // Solo 5 intentos por 15 minutos
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // 5 en producción, 100 en desarrollo para pruebas
   message: 'Demasiados intentos de autenticación, por favor intenta nuevamente más tarde.',
   skipSuccessfulRequests: true, // No contar requests exitosos
 });
