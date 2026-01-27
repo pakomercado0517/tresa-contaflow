@@ -20,6 +20,14 @@ export interface EstadoValidacionGasto {
   valido: boolean;
 }
 
+export interface EstadoValidacionComplemento {
+  rfcVerificado: boolean;
+  uuidDuplicado: boolean;
+  advertencias: string[];
+  errores: string[];
+  valido: boolean;
+}
+
 export interface ValidacionesConfig {
   validarRFCIngresos?: boolean;
   validarRFCGastos?: boolean;

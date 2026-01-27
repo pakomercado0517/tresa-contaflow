@@ -9,7 +9,7 @@ import { Profile, Invoice, Expense } from "../database/models/index.js";
 import type { UploadedFile } from "express-fileupload";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
 import type { CFDI } from "../types/cfdi.types.js";
-import { Op } from "sequelize";
+import { Op, UniqueConstraintError } from "sequelize";
 import { MetricsService } from "../services/metrics.service.js";
 
 /**
@@ -72,21 +72,37 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
     let matchingResult = null;
 
     if (cfdi.tipo === "COMPLEMENTO_PAGO") {
-      // Para complementos de pago: validar UUID duplicado y hacer matching
-      // Verificar en ambas tablas (invoices y expenses) ya que un complemento puede estar relacionado con facturas
-      const uuidDuplicado = await validationService.checkUUIDDuplicado(cfdi.uuid, profileId, "both");
-      
+      // Para complementos de pago: validar UUID duplicado y RFC según tipo de factura relacionada
+      let estadoValidacionComplemento;
+      try {
+        estadoValidacionComplemento = await validationService.validateComplementoPago(
+          cfdi,
+          profileId,
+          profile.rfc
+        );
+      } catch (error) {
+        console.error("Error al validar complemento de pago:", error);
+        estadoValidacionComplemento = {
+          rfcVerificado: false,
+          uuidDuplicado: false,
+          advertencias: [],
+          errores: [error instanceof Error ? error.message : "Error desconocido al validar complemento"],
+          valido: false,
+        };
+      }
+
+      // Convertir EstadoValidacionComplemento a formato compatible
       estadoValidacion = {
-        rfcVerificado: true, // N/A para complemento
+        rfcVerificado: estadoValidacionComplemento.rfcVerificado,
         regimenFiscalVerificado: true, // N/A para complemento
-        uuidDuplicado: uuidDuplicado,
-        advertencias: [],
-        errores: uuidDuplicado ? [`El complemento de pago con UUID ${cfdi.uuid} ya existe.`] : [],
-        valido: !uuidDuplicado,
+        uuidDuplicado: estadoValidacionComplemento.uuidDuplicado,
+        advertencias: estadoValidacionComplemento.advertencias,
+        errores: estadoValidacionComplemento.errores,
+        valido: estadoValidacionComplemento.valido,
       };
 
-      // Si no hay UUID duplicado, proceder con el matching
-      if (!uuidDuplicado) {
+      // Si no hay errores de validación, proceder con el matching
+      if (estadoValidacion.valido) {
         try {
           matchingResult = await matchingService.buscarMatchesComplemento(cfdi, profileId);
         } catch (error) {
@@ -220,21 +236,36 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
     let esGasto = false;
 
     if (cfdi.tipo === "COMPLEMENTO_PAGO") {
-      // Para complementos de pago: validar UUID duplicado y hacer matching
-      // Verificar en ambas tablas (invoices y expenses) ya que un complemento puede estar relacionado con facturas
-      const uuidDuplicado = await validationService.checkUUIDDuplicado(cfdi.uuid, profileId, "both");
-      
+      // Para complementos de pago: validar UUID duplicado y RFC según tipo de factura relacionada
+      let estadoValidacionComplemento;
+      try {
+        estadoValidacionComplemento = await validationService.validateComplementoPago(
+          cfdi,
+          profileId,
+          profile.rfc
+        );
+      } catch (error) {
+        // Si hay un error al validar, tratarlo como error de validación
+        console.error("Error al validar complemento de pago:", error);
+        res.status(500).json({
+          error: "Error al validar el complemento de pago",
+          message: error instanceof Error ? error.message : "Error desconocido al validar complemento",
+        });
+        return;
+      }
+
+      // Convertir EstadoValidacionComplemento a formato compatible
       estadoValidacion = {
-        rfcVerificado: true, // N/A para complemento
+        rfcVerificado: estadoValidacionComplemento.rfcVerificado,
         regimenFiscalVerificado: true, // N/A para complemento
-        uuidDuplicado: uuidDuplicado,
-        advertencias: [],
-        errores: uuidDuplicado ? [`El complemento de pago con UUID ${cfdi.uuid} ya existe.`] : [],
-        valido: !uuidDuplicado,
+        uuidDuplicado: estadoValidacionComplemento.uuidDuplicado,
+        advertencias: estadoValidacionComplemento.advertencias,
+        errores: estadoValidacionComplemento.errores,
+        valido: estadoValidacionComplemento.valido,
       };
 
-      // Si no hay UUID duplicado, proceder con el matching
-      if (!uuidDuplicado) {
+      // Si no hay errores de validación, proceder con el matching
+      if (estadoValidacion.valido) {
         try {
           matchingResult = await matchingService.buscarMatchesComplemento(cfdi, profileId);
         } catch (error) {
@@ -242,31 +273,55 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
           estadoValidacion.errores?.push(
             error instanceof Error ? error.message : "Error al buscar matches"
           );
+          // El matching falla no debería bloquear el guardado, solo advertir
+          estadoValidacion.advertencias?.push(
+            "No se pudo realizar el matching con las facturas relacionadas"
+          );
         }
       }
 
       // Los complementos de pago NO se guardan como facturas/gastos
       // Solo se procesan para matching
       if (!estadoValidacion.valido) {
+        // Determinar mensaje de error principal basado en los errores de validación
+        const mensajeError = estadoValidacion.errores && estadoValidacion.errores.length > 0
+          ? estadoValidacion.errores[0] // Usar el primer error como mensaje principal
+          : "El complemento de pago no es válido";
+        
         res.status(400).json({
-          error: "El complemento de pago no es válido",
+          error: mensajeError,
           validacion: estadoValidacion,
         });
         return;
       }
 
-      // Guardar complemento y aplicar pagos si las facturas ya existen
-      const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId);
+      // Guardar complemento usando findOrCreate (maneja duplicados automáticamente)
+      // Esto previene race conditions donde dos requests simultáneos pasan la validación
+      try {
+        const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId);
 
-      res.json({
-        message: "Complemento de pago procesado exitosamente",
-        data: cfdi,
-        validacion: estadoValidacion,
-        matching: matchingResult,
-        saved: true,
-        complementId: savedComplement.id,
-      });
-      return;
+        res.json({
+          message: "Complemento de pago procesado exitosamente",
+          data: cfdi,
+          validacion: estadoValidacion,
+          matching: matchingResult,
+          saved: true,
+          complementId: savedComplement.id,
+        });
+        return;
+      } catch (error) {
+        // Si aún así hay un error (muy raro con findOrCreate), manejarlo
+        console.error("Error al guardar complemento:", error);
+        if (error instanceof UniqueConstraintError) {
+          res.status(409).json({
+            error: "El complemento de pago ya existe en la base de datos",
+            message: `El UUID ${cfdi.uuid} ya fue procesado anteriormente`,
+            uuid: cfdi.uuid,
+          });
+          return;
+        }
+        throw error; // Re-lanzar para que se maneje en el catch general
+      }
     } else {
       // Para facturas normales: validaciones fiscales completas
       // Determinar si es factura (ingreso) o gasto basado en RFC
@@ -323,6 +378,8 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
 
     if (savedRecord instanceof Invoice && savedRecord.tipo === "PPD") {
       await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
+    } else if (savedRecord instanceof Expense && savedRecord.tipo === "PPD") {
+      await paymentComplementService.applyPaymentsToExpense(savedRecord, profileId);
     }
 
     // Calcular estado de pago
@@ -344,8 +401,21 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     console.error("Error al subir factura:", error);
     
+    // Manejar error de constraint único (UUID duplicado)
+    if (error instanceof UniqueConstraintError) {
+      const field = error.errors[0]?.path || "campo";
+      const value = error.errors[0]?.value || "valor";
+      res.status(409).json({ 
+        error: "El CFDI ya existe en la base de datos",
+        message: `El ${field} (${value}) ya fue procesado anteriormente`,
+        field,
+        value,
+      });
+      return;
+    }
+    
     if (error instanceof Error) {
-      // Manejar error de UUID duplicado
+      // Manejar otros errores de UUID duplicado (por si acaso)
       if (error.message.includes("duplicate key") || error.message.includes("unique constraint")) {
         res.status(409).json({ 
           error: "El CFDI ya existe en la base de datos",

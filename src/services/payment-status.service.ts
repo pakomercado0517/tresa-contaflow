@@ -14,6 +14,7 @@ export interface EstadoPagoDetalle {
   ultimoSaldoInsoluto: number | null; // Del último complemento de pago
   tieneComplementos: boolean;
   tienePagosManuales: boolean;
+  fechasComplementos?: Date[]; // Fechas de pago de los complementos (para anotaciones)
 }
 
 /**
@@ -141,6 +142,7 @@ export class PaymentStatusService {
         ultimoSaldoInsoluto: null,
         tieneComplementos: false,
         tienePagosManuales: false,
+        // No incluir fechasComplementos si no hay complementos
       };
     }
 
@@ -182,6 +184,9 @@ export class PaymentStatusService {
     const saldoPendiente = totalFactura - totalPagado;
     const porcentajePagado = totalFactura > 0 ? (totalPagado / totalFactura) * 100 : 0;
 
+    // Obtener fechas de los complementos para anotaciones
+    const fechasComplementos = complementosItems.map((item) => item.fecha_pago);
+
     return {
       estado,
       totalFactura,
@@ -192,6 +197,8 @@ export class PaymentStatusService {
       ultimoSaldoInsoluto,
       tieneComplementos,
       tienePagosManuales,
+      // Solo incluir fechasComplementos si hay complementos
+      ...(fechasComplementos.length > 0 && { fechasComplementos }),
     };
   }
 
@@ -288,6 +295,7 @@ export class PaymentStatusService {
         ultimoSaldoInsoluto: null,
         tieneComplementos: false,
         tienePagosManuales: false,
+        // No incluir fechasComplementos si no hay complementos
       };
     }
 
@@ -319,6 +327,9 @@ export class PaymentStatusService {
     const saldoPendiente = totalFactura - totalPagado;
     const porcentajePagado = totalFactura > 0 ? (totalPagado / totalFactura) * 100 : 0;
 
+    // Obtener fechas de los complementos para anotaciones
+    const fechasComplementos = complementosItems.map((item) => item.fecha_pago);
+
     return {
       estado,
       totalFactura,
@@ -329,6 +340,8 @@ export class PaymentStatusService {
       ultimoSaldoInsoluto,
       tieneComplementos,
       tienePagosManuales,
+      // Solo incluir fechasComplementos si hay complementos
+      ...(fechasComplementos.length > 0 && { fechasComplementos }),
     };
   }
 }

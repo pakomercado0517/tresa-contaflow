@@ -66,4 +66,5 @@ export interface EstadoPagoDetalle {
   ultimoSaldoInsoluto: number | null; // Del último complemento de pago
   tieneComplementos: boolean;
   tienePagosManuales: boolean;
+  fechasComplementos?: Date[]; // Fechas de pago de los complementos (para anotaciones)
 }
