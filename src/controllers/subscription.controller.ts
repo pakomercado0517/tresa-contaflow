@@ -1,4 +1,4 @@
-import { type Response } from 'express';
+import { type Response, type Request } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import type Stripe from 'stripe';
 import { getStripeService } from '../services/stripe.service.js';
@@ -409,61 +409,99 @@ export async function assignFreeSubscription(req: AuthRequest, res: Response): P
 }
 
 /**
+ * Función auxiliar para construir datos de planes
+ * Utilizada por getAvailablePlans y getPublicPlans
+ */
+function buildPlansData(isAnnual: boolean) {
+  const plans: Plan[] = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'];
+  return plans.map((plan) => {
+    const limits = PLAN_LIMITS[plan];
+    const monthlyPrice = PLAN_PRICES[plan];
+
+    // Usar precios anuales fijos cuando se solicite billing=annual
+    let price: number;
+    let originalPrice: number | null = null;
+
+    if (isAnnual && monthlyPrice > 0) {
+      // Precio anual fijo (definido en PLAN_PRICES_ANNUAL)
+      price = PLAN_PRICES_ANNUAL[plan];
+      // Mostrar precio original sin descuento (12 * mensual) para referencia en UI
+      originalPrice = monthlyPrice * 12;
+    } else {
+      price = monthlyPrice;
+    }
+
+    return {
+      id: plan,
+      name: plan,
+      price: Math.round(price * 100) / 100, // Redondear a 2 decimales
+      originalPrice: originalPrice ? Math.round(originalPrice * 100) / 100 : null,
+      billing: isAnnual ? 'annual' : 'monthly',
+      limits: {
+        profiles: limits.profiles,
+        invoicesPerMonth: limits.invoicesPerMonth,
+        expensesPerMonth: limits.expensesPerMonth,
+        exportPDF: limits.exportPDF,
+        exportExcel: limits.exportExcel,
+        reports: limits.reports,
+        support: limits.support,
+        apiAccess: limits.apiAccess,
+        // Límites del catálogo SAT
+        satBasicSearchesPerMonth: limits.satBasicSearchesPerMonth,
+        satAISearchesPerMonth: limits.satAISearchesPerMonth,
+        satMaxResults: limits.satMaxResults,
+        satHasAIExplanations: limits.satHasAIExplanations,
+        satHasHistory: limits.satHasHistory,
+        satHasFavorites: limits.satHasFavorites,
+        satHasAlerts: limits.satHasAlerts,
+        satHasLearning: limits.satHasLearning,
+        satHasAdvancedRanking: limits.satHasAdvancedRanking,
+      },
+      trialDays: PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] || null,
+    };
+  });
+}
+
+/**
+ * Endpoint público para obtener información de todos los planes
+ * NO requiere autenticación - útil para mostrar planes en página de inicio
+ */
+export async function getPublicPlans(req: Request, res: Response): Promise<void> {
+  try {
+    const billing = (req.query.billing as string) || 'monthly';
+    const isAnnual = billing === 'annual';
+
+    const plansData = buildPlansData(isAnnual);
+
+    res.json({
+      plans: plansData,
+      billing: isAnnual ? 'annual' : 'monthly',
+    });
+  } catch (error) {
+    console.error('Error al obtener planes públicos:', error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: 'Error al obtener planes',
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: 'Error desconocido al obtener planes' });
+  }
+}
+
+/**
  * Obtiene información de todos los planes disponibles
- * Útil para mostrar cards de planes en el frontend
+ * Requiere autenticación - para usuarios autenticados
  */
 export async function getAvailablePlans(req: AuthRequest, res: Response): Promise<void> {
   try {
     const billing = (req.query.billing as string) || 'monthly';
     const isAnnual = billing === 'annual';
 
-    const plans: Plan[] = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'];
-    const plansData = plans.map((plan) => {
-      const limits = PLAN_LIMITS[plan];
-      const monthlyPrice = PLAN_PRICES[plan];
-
-      // Usar precios anuales fijos cuando se solicite billing=annual
-      let price: number;
-      let originalPrice: number | null = null;
-
-      if (isAnnual && monthlyPrice > 0) {
-        // Precio anual fijo (definido en PLAN_PRICES_ANNUAL)
-        price = PLAN_PRICES_ANNUAL[plan];
-        // Mostrar precio original sin descuento (12 * mensual) para referencia en UI
-        originalPrice = monthlyPrice * 12;
-      } else {
-        price = monthlyPrice;
-      }
-
-      return {
-        id: plan,
-        name: plan,
-        price: Math.round(price * 100) / 100, // Redondear a 2 decimales
-        originalPrice: originalPrice ? Math.round(originalPrice * 100) / 100 : null,
-        billing: isAnnual ? 'annual' : 'monthly',
-        limits: {
-          profiles: limits.profiles,
-          invoicesPerMonth: limits.invoicesPerMonth,
-          expensesPerMonth: limits.expensesPerMonth,
-          exportPDF: limits.exportPDF,
-          exportExcel: limits.exportExcel,
-          reports: limits.reports,
-          support: limits.support,
-          apiAccess: limits.apiAccess,
-          // Límites del catálogo SAT
-          satBasicSearchesPerMonth: limits.satBasicSearchesPerMonth,
-          satAISearchesPerMonth: limits.satAISearchesPerMonth,
-          satMaxResults: limits.satMaxResults,
-          satHasAIExplanations: limits.satHasAIExplanations,
-          satHasHistory: limits.satHasHistory,
-          satHasFavorites: limits.satHasFavorites,
-          satHasAlerts: limits.satHasAlerts,
-          satHasLearning: limits.satHasLearning,
-          satHasAdvancedRanking: limits.satHasAdvancedRanking,
-        },
-        trialDays: PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] || null,
-      };
-    });
+    const plansData = buildPlansData(isAnnual);
 
     res.json({
       plans: plansData,

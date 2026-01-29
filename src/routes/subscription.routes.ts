@@ -6,13 +6,25 @@ import {
   createPortalSession,
   assignFreeSubscription,
   getAvailablePlans,
+  getPublicPlans,
 } from "../controllers/subscription.controller.js";
 import { authenticateToken, authenticateAdmin } from "../middlewares/auth.middleware.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 
 const router: IRouter = Router();
 
-// Todas las rutas requieren autenticación
+// ============================================
+// Rutas PÚBLICAS (sin autenticación)
+// ============================================
+
+// GET /api/subscription/public-plans - Obtener todos los planes disponibles (SIN autenticación)
+router.get("/public-plans", getPublicPlans);
+
+// ============================================
+// Rutas PROTEGIDAS (requieren autenticación)
+// ============================================
+
+// Todas las rutas siguientes requieren autenticación
 router.use(authenticateToken);
 
 // GET /api/subscription - Obtener suscripción actual
