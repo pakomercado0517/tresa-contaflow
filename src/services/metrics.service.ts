@@ -1,6 +1,6 @@
-import { Invoice, Expense, Profile, PaymentComplementItem } from "../database/models/index.js";
-import { PaymentStatusService } from "./payment-status.service.js";
-import { Op } from "sequelize";
+import { Invoice, Expense, Profile, PaymentComplementItem } from '../database/models/index.js';
+import { PaymentStatusService } from './payment-status.service.js';
+import { Op } from 'sequelize';
 
 export interface PeriodMetrics {
   totalFacturado: number;
@@ -17,6 +17,7 @@ export interface PeriodMetrics {
   facturasPPD: number;
   facturasPagadasCompletamente: number;
   facturasParcialmentePagadas: number;
+  facturasPendientesPago: number; // PPD sin ningún pago
   gastosPUE: number;
   gastosPPD: number;
   gastosPagadosCompletamente: number;
@@ -70,9 +71,9 @@ export class MetricsService {
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: profileWhereClause,
-          attributes: ["id"],
+          attributes: ['id'],
         },
       ],
     });
@@ -83,9 +84,9 @@ export class MetricsService {
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: profileWhereClause,
-          attributes: ["id"],
+          attributes: ['id'],
         },
       ],
     });
@@ -115,7 +116,7 @@ export class MetricsService {
     );
     const pagosComplementoPorGasto = await this.sumComplementosPorFactura(
       profileIds,
-      gastos.map((gasto) => gasto.uuid || "").filter((uuid) => uuid !== "")
+      gastos.map((gasto) => gasto.uuid || '').filter((uuid) => uuid !== '')
     );
     const pagosManualPorFactura = this.sumManualPagos(facturas, null).porFactura;
 
@@ -129,7 +130,13 @@ export class MetricsService {
     };
 
     // Calcular métricas
-    return await this.calculateMetricsFromData(facturas, gastos, paymentContext, profileIds, dateRange);
+    return await this.calculateMetricsFromData(
+      facturas,
+      gastos,
+      paymentContext,
+      profileIds,
+      dateRange
+    );
   }
 
   /**
@@ -145,7 +152,9 @@ export class MetricsService {
     // Inicializar contadores
     let totalFacturado = 0;
     // Solo sumar complementos de invoices en totalPagado (ingresos)
-    let totalPagado = paymentContext.totalPagadoComplementosInvoicesPeriodo + paymentContext.totalPagadoManualPeriodo;
+    let totalPagado =
+      paymentContext.totalPagadoComplementosInvoicesPeriodo +
+      paymentContext.totalPagadoManualPeriodo;
     let totalCompras = 0; // Total contable (completo)
     // Los complementos de expenses se suman en totalComprasPagadas (gastos pagados)
     let totalComprasPagadas = paymentContext.totalPagadoComplementosExpensesPeriodo;
@@ -153,6 +162,7 @@ export class MetricsService {
     let facturasPPD = 0;
     let facturasPagadasCompletamente = 0;
     let facturasParcialmentePagadas = 0;
+    let facturasPendientesPago = 0;
     let gastosPUE = 0;
     let gastosPPD = 0;
     let gastosPagadosCompletamente = 0;
@@ -163,12 +173,12 @@ export class MetricsService {
       const total = Number(factura.total);
 
       // Contar tipos
-      if (factura.tipo === "PUE") {
+      if (factura.tipo === 'PUE') {
         facturasPUE++;
         totalFacturado += total;
         totalPagado += total; // PUE está pagado completamente
         facturasPagadasCompletamente++;
-      } else if (factura.tipo === "PPD") {
+      } else if (factura.tipo === 'PPD') {
         facturasPPD++;
         totalFacturado += total;
 
@@ -182,30 +192,36 @@ export class MetricsService {
           facturasPagadasCompletamente++;
         } else if (totalPagosParciales > 0) {
           facturasParcialmentePagadas++;
+        } else {
+          // Sin pagos
+          facturasPendientesPago++;
         }
       }
     });
 
     // Procesar gastos
     const paymentStatusService = new PaymentStatusService();
-    const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : "";
-    
+    const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : '';
+
     for (const gasto of gastos) {
       const totalGasto = Number(gasto.total);
       totalCompras += totalGasto; // Suma completa (contable)
 
       // Calcular estado de pago si es gasto de XML (tiene tipo)
       if (gasto.tipo && gasto.uuid) {
-        if (gasto.tipo === "PUE") {
+        if (gasto.tipo === 'PUE') {
           gastosPUE++;
           totalComprasPagadas += totalGasto; // PUE está pagado completamente
           gastosPagadosCompletamente++;
-        } else if (gasto.tipo === "PPD") {
+        } else if (gasto.tipo === 'PPD') {
           gastosPPD++;
           // Para gastos PPD, el complemento ya fue sumado en totalPagadoComplementosExpensesPeriodo
           // Solo necesitamos verificar el estado para contar gastos pagados/parciales
-          const estadoPago = await paymentStatusService.calcularEstadoPagoGasto(gasto, gasto.profile_id);
-          
+          const estadoPago = await paymentStatusService.calcularEstadoPagoGasto(
+            gasto,
+            gasto.profile_id
+          );
+
           // El complemento ya fue sumado en totalComprasPagadas (línea 135),
           // solo verificar estado para contadores
           if (estadoPago.completamentePagado) {
@@ -252,6 +268,7 @@ export class MetricsService {
       facturasPPD,
       facturasPagadasCompletamente,
       facturasParcialmentePagadas,
+      facturasPendientesPago,
       gastosPUE,
       gastosPPD,
       gastosPagadosCompletamente,
@@ -262,13 +279,13 @@ export class MetricsService {
   /**
    * Calcula pendientes basándose en el saldo insoluto del último complemento
    * Nuevo enfoque: Los pendientes se muestran en el mes de timbrado de la PPD
-   * 
+   *
    * Lógica:
    * - Si hay complemento de pago: usar el imp_saldo_insoluto del último complemento
    *   (el saldo insoluto ya refleja el estado real después de todos los pagos)
    * - Si NO hay complemento: usar el monto total del PPD
    * - Si saldo insoluto = 0: la factura está pagada completamente y NO aparece en pendientes
-   * 
+   *
    * IMPORTANTE: Los pendientes se calculan SOLO para facturas/gastos que están en el período consultado.
    * Si un gasto está en enero pero su complemento se pagó en diciembre, en diciembre NO debe aparecer
    * como pendiente (porque el gasto no está en diciembre).
@@ -284,7 +301,7 @@ export class MetricsService {
     let gastosPendientes = 0;
 
     // Procesar facturas PPD del período
-    const facturasPPD = facturas.filter((f) => f.tipo === "PPD");
+    const facturasPPD = facturas.filter((f) => f.tipo === 'PPD');
     for (const factura of facturasPPD) {
       // Obtener el último complemento de pago para esta factura
       const ultimoComplemento = await PaymentComplementItem.findOne({
@@ -292,7 +309,10 @@ export class MetricsService {
           profile_id: factura.profile_id,
           factura_uuid: factura.uuid,
         },
-        order: [["fecha_pago", "DESC"], ["num_parcialidad", "DESC"]],
+        order: [
+          ['fecha_pago', 'DESC'],
+          ['num_parcialidad', 'DESC'],
+        ],
       });
 
       if (ultimoComplemento) {
@@ -316,7 +336,7 @@ export class MetricsService {
     // IMPORTANTE: Solo procesamos gastos que están en el período consultado
     // Si un gasto está en enero pero su complemento se pagó en diciembre,
     // en diciembre NO debe aparecer como pendiente (porque el gasto no está en diciembre)
-    const gastosPPD = gastos.filter((g) => g.tipo === "PPD" && g.uuid);
+    const gastosPPD = gastos.filter((g) => g.tipo === 'PPD' && g.uuid);
     for (const gasto of gastosPPD) {
       if (!gasto.uuid) continue;
 
@@ -326,7 +346,10 @@ export class MetricsService {
           profile_id: gasto.profile_id,
           factura_uuid: gasto.uuid,
         },
-        order: [["fecha_pago", "DESC"], ["num_parcialidad", "DESC"]],
+        order: [
+          ['fecha_pago', 'DESC'],
+          ['num_parcialidad', 'DESC'],
+        ],
       });
 
       if (ultimoComplemento) {
@@ -358,7 +381,7 @@ export class MetricsService {
 
     const profiles = await Profile.findAll({
       where: { user_id: userId },
-      attributes: ["id"],
+      attributes: ['id'],
     });
 
     return profiles.map((profile) => profile.id);
@@ -394,10 +417,11 @@ export class MetricsService {
     let total = 0;
 
     facturas.forEach((factura) => {
-      const pagos = factura.pagos.filter((pago) => (pago.origen ?? "MANUAL") === "MANUAL");
+      const pagos = factura.pagos.filter((pago) => (pago.origen ?? 'MANUAL') === 'MANUAL');
       const pagosFiltrados = dateRange
         ? pagos.filter((pago) => {
-            const fecha = typeof pago.fechaPago === "string" ? new Date(pago.fechaPago) : pago.fechaPago;
+            const fecha =
+              typeof pago.fechaPago === 'string' ? new Date(pago.fechaPago) : pago.fechaPago;
             return fecha >= dateRange.start && fecha < dateRange.end;
           })
         : pagos;
@@ -486,23 +510,25 @@ export class MetricsService {
       where: {
         uuid: { [Op.in]: facturasUUIDs },
         profile_id: { [Op.in]: profileIds },
-        tipo: "PPD",
+        tipo: 'PPD',
       },
-      attributes: ["uuid"],
+      attributes: ['uuid'],
     });
 
     const expenses = await Expense.findAll({
       where: {
         uuid: { [Op.in]: facturasUUIDs },
         profile_id: { [Op.in]: profileIds },
-        tipo: "PPD",
+        tipo: 'PPD',
       },
-      attributes: ["uuid"],
+      attributes: ['uuid'],
     });
 
     // Crear sets para búsqueda rápida
     const invoiceUUIDsSet = new Set(invoices.map((inv) => inv.uuid));
-    const expenseUUIDsSet = new Set(expenses.map((exp) => exp.uuid || "").filter((uuid) => uuid !== ""));
+    const expenseUUIDsSet = new Set(
+      expenses.map((exp) => exp.uuid || '').filter((uuid) => uuid !== '')
+    );
 
     let totalInvoices = 0;
     let totalExpenses = 0;
@@ -549,16 +575,17 @@ export class MetricsService {
     return porFactura;
   }
 
-  private async getInvoicesForManualPagos(
-    profileWhereClause: { user_id: string; id?: string }
-  ): Promise<Invoice[]> {
+  private async getInvoicesForManualPagos(profileWhereClause: {
+    user_id: string;
+    id?: string;
+  }): Promise<Invoice[]> {
     return Invoice.findAll({
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: profileWhereClause,
-          attributes: ["id"],
+          attributes: ['id'],
         },
       ],
     });
@@ -594,4 +621,3 @@ export class MetricsService {
     return this.calculatePeriodMetrics(filters);
   }
 }
-
