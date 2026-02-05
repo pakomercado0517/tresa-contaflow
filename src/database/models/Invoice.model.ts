@@ -18,6 +18,9 @@ interface InvoiceAttributes {
   total: number;
   subtotal: number;
   iva: number;
+  iva_amount: number;
+  retencion_iva_amount: number;
+  retencion_isr_amount: number;
   tipo: TipoFactura;
   rfc_emisor: string;
   nombre_emisor: string;
@@ -36,12 +39,31 @@ interface InvoiceAttributes {
 interface InvoiceCreationAttributes
   extends Omit<
       InvoiceAttributes,
-      "id" | "created_at" | "updated_at" | "regimen_fiscal_emisor" | "regimen_fiscal_receptor" | "concepto" | "pagos" | "complemento_pago" | "validacion"
+      | "id"
+      | "created_at"
+      | "updated_at"
+      | "regimen_fiscal_emisor"
+      | "regimen_fiscal_receptor"
+      | "concepto"
+      | "pagos"
+      | "complemento_pago"
+      | "validacion"
+      | "iva_amount"
+      | "retencion_iva_amount"
+      | "retencion_isr_amount"
     >,
     Partial<
       Pick<
         InvoiceAttributes,
-        "regimen_fiscal_emisor" | "regimen_fiscal_receptor" | "concepto" | "pagos" | "complemento_pago" | "validacion"
+        | "regimen_fiscal_emisor"
+        | "regimen_fiscal_receptor"
+        | "concepto"
+        | "pagos"
+        | "complemento_pago"
+        | "validacion"
+        | "iva_amount"
+        | "retencion_iva_amount"
+        | "retencion_isr_amount"
       >
     > {}
 
@@ -55,6 +77,9 @@ class Invoice extends Model<InvoiceAttributes, InvoiceCreationAttributes> implem
   declare total: number;
   declare subtotal: number;
   declare iva: number;
+  declare iva_amount: number;
+  declare retencion_iva_amount: number;
+  declare retencion_isr_amount: number;
   declare tipo: TipoFactura;
   declare rfc_emisor: string;
   declare nombre_emisor: string;
@@ -113,6 +138,21 @@ Invoice.init(
     iva: {
       type: DataTypes.DECIMAL(15, 2),
       allowNull: false,
+    },
+    iva_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    retencion_iva_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    retencion_isr_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
     },
     tipo: {
       type: DataTypes.ENUM("PUE", "PPD", "COMPLEMENTO_PAGO"),

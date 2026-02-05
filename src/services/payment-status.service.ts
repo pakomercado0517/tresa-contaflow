@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { Invoice, Expense, PaymentComplementItem } from "../database/models/index.js";
+import { Invoice, AccruedExpense, PaymentComplementItem } from "../database/models/index.js";
 import type { PagoParcial } from "../types/payment.types.js";
 
 export type EstadoPago = "PAGADO" | "PAGO_PARCIAL" | "NO_PAGADO";
@@ -69,7 +69,7 @@ export class PaymentStatusService {
    * Calcula el estado de pago de un gasto
    */
   async calcularEstadoPagoGasto(
-    gasto: Expense,
+    gasto: AccruedExpense,
     profileId: string
   ): Promise<EstadoPagoDetalle> {
     const totalGasto = Number(gasto.total);

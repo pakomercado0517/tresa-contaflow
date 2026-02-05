@@ -1,4 +1,4 @@
-import { User, Profile, Invoice, Expense, Subscription, PaymentEvent, sequelize } from "../../database/models/index";
+import { User, Profile, Invoice, AccruedExpense, Subscription, PaymentEvent, sequelize } from "../../database/models/index";
 
 /**
  * Limpia todas las tablas de la base de datos de pruebas
@@ -12,7 +12,7 @@ export async function cleanDatabase(): Promise<void> {
     // Eliminar en orden inverso de dependencias
     await PaymentEvent.destroy({ where: {}, truncate: true, cascade: true });
     await Invoice.destroy({ where: {}, truncate: true, cascade: true });
-    await Expense.destroy({ where: {}, truncate: true, cascade: true });
+    await AccruedExpense.destroy({ where: {}, truncate: true, cascade: true });
     await Subscription.destroy({ where: {}, truncate: true, cascade: true });
     await Profile.destroy({ where: {}, truncate: true, cascade: true });
     await User.destroy({ where: {}, truncate: true, cascade: true });

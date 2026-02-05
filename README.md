@@ -137,7 +137,7 @@ El proyecto usa PostgreSQL con Sequelize como ORM. Las tablas principales son:
 - `users` - Usuarios del sistema
 - `profiles` - Perfiles RFC por usuario
 - `invoices` - Facturas (ingresos)
-- `expenses` - Gastos
+- `accrued_expenses` - Gastos devengados
 - `subscriptions` - Suscripciones de usuarios
 - `payment_events` - Eventos de pago de Stripe
 

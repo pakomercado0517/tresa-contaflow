@@ -1,6 +1,6 @@
 import { type Response } from "express";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
-import { Profile, Expense } from "../database/models/index.js";
+import { Profile, AccruedExpense } from "../database/models/index.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 import { uploadInvoice } from "./invoice.controller.js";
 import { PaymentStatusService } from "../services/payment-status.service.js";
@@ -69,7 +69,7 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
     const offset = (pageNum - 1) * limitNum;
 
     // Obtener gastos con perfil
-    const { count, rows: expenses } = await Expense.findAndCountAll({
+    const { count, rows: expenses } = await AccruedExpense.findAndCountAll({
       where: whereClause,
       include: [
         {
@@ -138,7 +138,7 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
 
     // Buscar gasto con verificación de ownership
-    const expense = await Expense.findOne({
+    const expense = await AccruedExpense.findOne({
       where: { id },
       include: [
         {
@@ -226,7 +226,7 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
     const año = fechaDate.getFullYear();
 
     // Crear gasto
-    const expense = await Expense.create({
+    const expense = await AccruedExpense.create({
       profile_id: profileId,
       tipo_origen: "MANUAL",
       fecha: fechaDate,
@@ -235,6 +235,7 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
       total: Number(total),
       subtotal: Number(subtotal),
       iva: Number(iva),
+      iva_amount: Number(iva),
       concepto: concepto || null,
       categoria: categoria || null,
       uuid: null,
@@ -291,7 +292,7 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
     const { fecha, total, subtotal, iva, concepto, categoria } = req.body;
 
     // Buscar gasto y verificar ownership
-    const expense = await Expense.findOne({
+    const expense = await AccruedExpense.findOne({
       where: { id },
       include: [
         {
@@ -372,7 +373,7 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
     const { id } = req.params;
 
     // Buscar gasto y verificar ownership
-    const expense = await Expense.findOne({
+    const expense = await AccruedExpense.findOne({
       where: { id },
       include: [
         {

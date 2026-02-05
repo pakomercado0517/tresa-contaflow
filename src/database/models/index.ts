@@ -7,7 +7,9 @@ import Profile from "./Profile.model.js";
 import Subscription from "./Subscription.model.js";
 import PaymentEvent from "./PaymentEvent.model.js";
 import Invoice from "./Invoice.model.js";
-import Expense from "./Expense.model.js";
+import AccruedExpense from "./AccruedExpense.model.js";
+import Period from "./Period.model.js";
+import ManualIncome from "./ManualIncome.model.js";
 import DiscountCode from "./DiscountCode.model.js";
 import PaymentComplement from "./PaymentComplement.model.js";
 import PaymentComplementItem from "./PaymentComplementItem.model.js";
@@ -23,7 +25,9 @@ export {
   Subscription,
   PaymentEvent,
   Invoice,
-  Expense,
+  AccruedExpense,
+  Period,
+  ManualIncome,
   DiscountCode,
   PaymentComplement,
   PaymentComplementItem,
