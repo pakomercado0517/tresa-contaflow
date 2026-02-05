@@ -2,7 +2,8 @@ import request from "supertest";
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
-import { Profile, Expense } from "../database/models/index";
+import { Profile, AccruedExpense } from "../database/models/index";
+import type { AccruedExpenseAttributes } from "../database/models/AccruedExpense.model";
 
 describe("Expenses API", () => {
   let accessToken: string;
@@ -72,7 +73,7 @@ describe("Expenses API", () => {
   describe("GET /api/expenses", () => {
     beforeEach(async () => {
       // Crear algunos gastos de prueba
-      await Expense.create({
+      await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date("2024-12-01"),
@@ -85,7 +86,7 @@ describe("Expenses API", () => {
         categoria: "Servicios",
       });
 
-      await Expense.create({
+      await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date("2024-12-15"),
@@ -118,7 +119,7 @@ describe("Expenses API", () => {
 
       expectSuccess(response, 200);
       expect(response.body.data.length).toBeGreaterThan(0);
-      response.body.data.forEach((expense: Expense) => {
+      response.body.data.forEach((expense: AccruedExpenseAttributes) => {
         expect(expense.categoria).toContain("Servicios");
       });
     });
@@ -128,7 +129,7 @@ describe("Expenses API", () => {
     let expenseId: string;
 
     beforeEach(async () => {
-      const expense = await Expense.create({
+      const expense = await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date(),
@@ -158,7 +159,7 @@ describe("Expenses API", () => {
     let expenseId: string;
 
     beforeEach(async () => {
-      const expense = await Expense.create({
+      const expense = await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date(),
@@ -193,7 +194,7 @@ describe("Expenses API", () => {
     let expenseId: string;
 
     beforeEach(async () => {
-      const expense = await Expense.create({
+      const expense = await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date(),
@@ -217,7 +218,7 @@ describe("Expenses API", () => {
       expect(response.body).toHaveProperty("message");
 
       // Verificar que el gasto fue eliminado
-      const deletedExpense = await Expense.findByPk(expenseId);
+      const deletedExpense = await AccruedExpense.findByPk(expenseId);
       expect(deletedExpense).toBeNull();
     });
   });

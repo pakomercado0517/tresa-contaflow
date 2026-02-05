@@ -1,7 +1,7 @@
 import type { CFDI } from "../types/cfdi.types.js";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, EstadoValidacionComplemento, ValidacionesConfig } from "../types/validation.types.js";
 import { compareRFCs, isValidRFCFormat, normalizeRFC } from "../utils/rfc.util.js";
-import { Invoice, Expense, PaymentComplement } from "../database/models/index.js";
+import { Invoice, AccruedExpense, PaymentComplement } from "../database/models/index.js";
 import { Op } from "sequelize";
 
 /**
@@ -250,7 +250,7 @@ export class FiscalValidationService {
       },
     });
 
-    const facturasExpense = await Expense.findAll({
+    const facturasAccruedExpense = await AccruedExpense.findAll({
       where: {
         uuid: { [Op.in]: facturasUUIDs },
         profile_id: profileId,
@@ -278,14 +278,14 @@ export class FiscalValidationService {
 
     // Si hay gastos (expenses), el RFC del perfil debe coincidir con el RFC receptor del complemento
     // (quien recibe el complemento = quien recibió el gasto = el perfil)
-    if (facturasExpense.length > 0) {
+    if (facturasAccruedExpense.length > 0) {
       const rfcCoincide = compareRFCs(cfdi.rfcReceptor, profileRFC);
       if (rfcCoincide) {
         rfcValido = true;
       } else {
         erroresRFC.push(
           `El RFC del receptor del complemento (${cfdi.rfcReceptor}) no coincide con el RFC del perfil (${profileRFC}). ` +
-          `El complemento está relacionado con ${facturasExpense.length} gasto(s) donde el perfil es el receptor.`
+          `El complemento está relacionado con ${facturasAccruedExpense.length} gasto(s) donde el perfil es el receptor.`
         );
       }
     }
@@ -293,7 +293,7 @@ export class FiscalValidationService {
     // Si hay ambos tipos, ambos RFCs deben coincidir
     // Para invoices: el perfil es el emisor del complemento (cfdi.rfcEmisor)
     // Para expenses: el perfil es el receptor del complemento (cfdi.rfcReceptor)
-    if (facturasInvoice.length > 0 && facturasExpense.length > 0) {
+    if (facturasInvoice.length > 0 && facturasAccruedExpense.length > 0) {
       const rfcEmisorCoincide = compareRFCs(cfdi.rfcEmisor, profileRFC);
       const rfcReceptorCoincide = compareRFCs(cfdi.rfcReceptor, profileRFC);
       
@@ -319,7 +319,7 @@ export class FiscalValidationService {
     // para asegurar que corresponde al perfil correcto
     // Verificar que al menos uno de los RFCs del complemento coincida con el perfil
     // (puede ser emisor si es para invoices, o receptor si es para expenses)
-    if (facturasInvoice.length === 0 && facturasExpense.length === 0) {
+    if (facturasInvoice.length === 0 && facturasAccruedExpense.length === 0) {
       const rfcEmisorCoincide = compareRFCs(cfdi.rfcEmisor, profileRFC);
       const rfcReceptorCoincide = compareRFCs(cfdi.rfcReceptor, profileRFC);
       
@@ -372,7 +372,7 @@ export class FiscalValidationService {
         const existingInvoice = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
         });
-        const existingExpense = await Expense.findOne({
+        const existingAccruedExpense = await AccruedExpense.findOne({
           where: { uuid, profile_id: profileId },
         });
         // Para complementos, el constraint único es GLOBAL (solo uuid, sin profile_id)
@@ -380,7 +380,7 @@ export class FiscalValidationService {
         const existingComplement = await PaymentComplement.findOne({
           where: { uuid },
         });
-        return !!(existingInvoice || existingExpense || existingComplement);
+        return !!(existingInvoice || existingAccruedExpense || existingComplement);
       } else if (tipo === "invoice") {
         const existing = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
@@ -394,7 +394,7 @@ export class FiscalValidationService {
         });
         return !!existing;
       } else {
-        const existing = await Expense.findOne({
+        const existing = await AccruedExpense.findOne({
           where: { uuid, profile_id: profileId },
         });
         return !!existing;

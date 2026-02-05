@@ -5,7 +5,7 @@ import { FiscalValidationService } from "../services/fiscal-validation.service.j
 import { PaymentMatchingService } from "../services/payment-matching.service.js";
 import { PaymentComplementService } from "../services/payment-complement.service.js";
 import { PaymentStatusService } from "../services/payment-status.service.js";
-import { Profile, Invoice, Expense } from "../database/models/index.js";
+import { Profile, Invoice, AccruedExpense } from "../database/models/index.js";
 import type { UploadedFile } from "express-fileupload";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
 import type { CFDI } from "../types/cfdi.types.js";
@@ -378,7 +378,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
 
     if (savedRecord instanceof Invoice && savedRecord.tipo === "PPD") {
       await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
-    } else if (savedRecord instanceof Expense && savedRecord.tipo === "PPD") {
+    } else if (savedRecord instanceof AccruedExpense && savedRecord.tipo === "PPD") {
       await paymentComplementService.applyPaymentsToExpense(savedRecord, profileId);
     }
 
@@ -387,7 +387,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
     let estadoPago = null;
     if (savedRecord instanceof Invoice) {
       estadoPago = await paymentStatusService.calcularEstadoPagoFactura(savedRecord, profileId);
-    } else if (savedRecord instanceof Expense) {
+    } else if (savedRecord instanceof AccruedExpense) {
       estadoPago = await paymentStatusService.calcularEstadoPagoGasto(savedRecord, profileId);
     }
 
@@ -758,6 +758,7 @@ async function saveInvoice(
     total: cfdi.total,
     subtotal: cfdi.subtotal,
     iva: cfdi.iva,
+    iva_amount: cfdi.iva,
     tipo: cfdi.tipo,
     rfc_emisor: cfdi.rfcEmisor,
     nombre_emisor: cfdi.nombreEmisor,
@@ -781,7 +782,7 @@ async function saveExpense(
   cfdi: CFDI,
   profileId: string,
   estadoValidacion: EstadoValidacionGasto
-): Promise<Expense> {
+): Promise<AccruedExpense> {
   const expenseData = {
     profile_id: profileId,
     tipo_origen: "XML" as const,
@@ -791,6 +792,7 @@ async function saveExpense(
     total: cfdi.total,
     subtotal: cfdi.subtotal,
     iva: cfdi.iva,
+    iva_amount: cfdi.iva,
     concepto: cfdi.concepto || null,
     categoria: null, // Se puede agregar categorización automática en el futuro
     uuid: cfdi.uuid,
@@ -806,5 +808,5 @@ async function saveExpense(
     validacion: estadoValidacion,
   };
 
-  return await Expense.create(expenseData);
+  return await AccruedExpense.create(expenseData);
 }

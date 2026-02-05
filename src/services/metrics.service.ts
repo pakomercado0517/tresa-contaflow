@@ -1,4 +1,4 @@
-import { Invoice, Expense, Profile, PaymentComplementItem } from '../database/models/index.js';
+import { Invoice, AccruedExpense, Profile, PaymentComplementItem } from '../database/models/index.js';
 import { PaymentStatusService } from './payment-status.service.js';
 import { Op } from 'sequelize';
 
@@ -79,7 +79,7 @@ export class MetricsService {
     });
 
     // Obtener gastos del período
-    const gastos = await Expense.findAll({
+    const gastos = await AccruedExpense.findAll({
       where: dateFilter,
       include: [
         {
@@ -144,7 +144,7 @@ export class MetricsService {
    */
   private async calculateMetricsFromData(
     facturas: Invoice[],
-    gastos: Expense[],
+    gastos: AccruedExpense[],
     paymentContext: PaymentContext,
     profileIds: string[],
     dateRange: { start: Date; end: Date } | null
@@ -292,7 +292,7 @@ export class MetricsService {
    */
   private async calcularPendientesPorSaldoInsoluto(
     facturas: Invoice[],
-    gastos: Expense[],
+    gastos: AccruedExpense[],
     paymentContext: PaymentContext,
     profileIds: string[],
     dateRange: { start: Date; end: Date } | null
@@ -515,7 +515,7 @@ export class MetricsService {
       attributes: ['uuid'],
     });
 
-    const expenses = await Expense.findAll({
+    const expenses = await AccruedExpense.findAll({
       where: {
         uuid: { [Op.in]: facturasUUIDs },
         profile_id: { [Op.in]: profileIds },

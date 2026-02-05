@@ -1,6 +1,6 @@
 import { SubscriptionService } from "./subscription.service.js";
 import { PLAN_LIMITS, type Plan, type PlanLimits } from "../constants/plans.constants.js";
-import { Profile, Invoice, Expense } from "../database/models/index.js";
+import { Profile, Invoice, AccruedExpense } from "../database/models/index.js";
 import SatSearchLog from "../database/models/SatSearchLog.model.js";
 import { Op } from "sequelize";
 
@@ -152,7 +152,7 @@ export class PlanLimitsService {
     const currentYear = now.getFullYear();
 
     // Contar gastos del mes actual para este perfil
-    const expenseCount = await Expense.count({
+    const expenseCount = await AccruedExpense.count({
       where: {
         profile_id: profileId,
         mes: currentMonth,

@@ -247,7 +247,7 @@ SELECT
 FROM invoices
 WHERE uuid = 'DD1C79DD-1ECA-4CFC-832E-EA3407C92C28';
 
--- Verificar si el UUID existe en expenses
+-- Verificar si el UUID existe en accrued_expenses
 SELECT 
     id,
     profile_id,
@@ -255,7 +255,7 @@ SELECT
     tipo,
     fecha,
     created_at
-FROM expenses
+FROM accrued_expenses
 WHERE uuid = 'DD1C79DD-1ECA-4CFC-832E-EA3407C92C28';
 
 -- ============================================

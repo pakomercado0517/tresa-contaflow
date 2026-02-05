@@ -9,7 +9,7 @@ import type { EstadoValidacionGasto } from "../../types/validation.types.js";
 type TipoOrigen = "XML" | "MANUAL";
 type TipoGasto = "PUE" | "PPD" | "COMPLEMENTO_PAGO";
 
-interface ExpenseAttributes {
+interface AccruedExpenseAttributes {
   id: string;
   profile_id: string;
   tipo_origen: TipoOrigen;
@@ -19,6 +19,10 @@ interface ExpenseAttributes {
   total: number;
   subtotal: number;
   iva: number;
+  iva_amount: number;
+  retencion_iva_amount: number;
+  retencion_isr_amount: number;
+  is_paid: boolean;
   concepto: string | null;
   categoria: string | null;
   uuid: string | null;
@@ -36,9 +40,9 @@ interface ExpenseAttributes {
   updated_at: Date;
 }
 
-interface ExpenseCreationAttributes
+interface AccruedExpenseCreationAttributes
   extends Omit<
-      ExpenseAttributes,
+      AccruedExpenseAttributes,
       | "id"
       | "created_at"
       | "updated_at"
@@ -55,10 +59,14 @@ interface ExpenseCreationAttributes
       | "pagos"
       | "complemento_pago"
       | "validacion"
+      | "iva_amount"
+      | "retencion_iva_amount"
+      | "retencion_isr_amount"
+      | "is_paid"
     >,
     Partial<
       Pick<
-        ExpenseAttributes,
+        AccruedExpenseAttributes,
         | "uuid"
         | "tipo"
         | "rfc_emisor"
@@ -72,10 +80,17 @@ interface ExpenseCreationAttributes
         | "pagos"
         | "complemento_pago"
         | "validacion"
+        | "iva_amount"
+        | "retencion_iva_amount"
+        | "retencion_isr_amount"
+        | "is_paid"
       >
     > {}
 
-class Expense extends Model<ExpenseAttributes, ExpenseCreationAttributes> implements ExpenseAttributes {
+class AccruedExpense
+  extends Model<AccruedExpenseAttributes, AccruedExpenseCreationAttributes>
+  implements AccruedExpenseAttributes
+{
   declare id: string;
   declare profile_id: string;
   declare tipo_origen: TipoOrigen;
@@ -85,6 +100,10 @@ class Expense extends Model<ExpenseAttributes, ExpenseCreationAttributes> implem
   declare total: number;
   declare subtotal: number;
   declare iva: number;
+  declare iva_amount: number;
+  declare retencion_iva_amount: number;
+  declare retencion_isr_amount: number;
+  declare is_paid: boolean;
   declare concepto: string | null;
   declare categoria: string | null;
   declare uuid: string | null;
@@ -102,7 +121,7 @@ class Expense extends Model<ExpenseAttributes, ExpenseCreationAttributes> implem
   declare updated_at: Date;
 }
 
-Expense.init(
+AccruedExpense.init(
   {
     id: {
       type: DataTypes.UUID,
@@ -144,6 +163,26 @@ Expense.init(
     iva: {
       type: DataTypes.DECIMAL(15, 2),
       allowNull: false,
+    },
+    iva_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    retencion_iva_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    retencion_isr_amount: {
+      type: DataTypes.DECIMAL(15, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
+    is_paid: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     concepto: {
       type: DataTypes.TEXT,
@@ -213,7 +252,7 @@ Expense.init(
   },
   {
     sequelize,
-    tableName: "expenses",
+    tableName: "accrued_expenses",
     timestamps: true,
     createdAt: "created_at",
     updatedAt: "updated_at",
@@ -222,24 +261,30 @@ Expense.init(
       { fields: ["uuid"] },
       { fields: ["fecha"] },
       { fields: ["mes", "año"] },
+      { fields: ["tipo_origen"] },
+      { fields: ["is_paid"] },
     ],
   }
 );
 
 // Relaciones
-Expense.belongsTo(Profile, {
+AccruedExpense.belongsTo(Profile, {
   foreignKey: "profile_id",
   as: "profile",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-Profile.hasMany(Expense, {
+Profile.hasMany(AccruedExpense, {
   foreignKey: "profile_id",
-  as: "expenses",
+  as: "accruedExpenses",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-export default Expense;
-export type { ExpenseAttributes, ExpenseCreationAttributes, TipoOrigen, TipoGasto };
-
+export default AccruedExpense;
+export type {
+  AccruedExpenseAttributes,
+  AccruedExpenseCreationAttributes,
+  TipoOrigen,
+  TipoGasto,
+};

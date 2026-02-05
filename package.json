@@ -13,6 +13,7 @@
     "build": "tsc",
     "lint": "eslint",
     "start": "node dist/index.js",
+    "verify:code": "pnpm lint && pnpm build",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:migrate:undo:all": "sequelize-cli db:migrate:undo:all",

@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 
-import { Invoice, Expense, PaymentComplement, PaymentComplementItem } from "../database/models/index.js";
+import { Invoice, AccruedExpense, PaymentComplement, PaymentComplementItem } from "../database/models/index.js";
 
 import type { CFDI, ComplementoPagoItem, FacturaRelacionada } from "../types/cfdi.types.js";
 import type {
@@ -125,7 +125,7 @@ export class PaymentComplementService {
     await invoice.save();
   }
 
-  async applyPaymentsToExpense(expense: Expense, profileId: string): Promise<void> {
+  async applyPaymentsToExpense(expense: AccruedExpense, profileId: string): Promise<void> {
     const items = await PaymentComplementItem.findAll({
       where: {
         profile_id: profileId,
@@ -247,7 +247,7 @@ export class PaymentComplementService {
     }
 
     // Buscar gastos (expenses) PPD relacionados
-    const gastos = await Expense.findAll({
+    const gastos = await AccruedExpense.findAll({
       where: {
         profile_id: profileId,
         uuid: {
