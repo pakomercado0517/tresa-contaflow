@@ -1,8 +1,14 @@
 import { Sequelize } from "sequelize";
 import * as dotenv from "dotenv";
 
-// Cargar variables de entorno
-dotenv.config();
+// Cargar variables de entorno según el entorno
+if (process.env.NODE_ENV === "test") {
+  // En tests, cargar .env.test
+  dotenv.config({ path: ".env.test", override: true });
+} else {
+  // En desarrollo/producción, cargar .env
+  dotenv.config();
+}
 
 // En tests, permitir DATABASE_URL opcional (usar valor por defecto)
 const databaseUrl = process.env.DATABASE_URL || "postgresql://localhost:5432/test";
