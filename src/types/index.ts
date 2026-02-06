@@ -42,3 +42,16 @@ export type {
   FreezeOthersResponse,
   ProfileServiceError,
 } from './profile.types.js';
+export type {
+  BaseParserResult,
+  InvoiceData,
+  ExpenseData,
+} from './parser.types.js';
+export type {
+  PeriodInfo,
+  FlujoMetrics,
+  DevengadoMetrics,
+  ImpuestosMetrics,
+  PendientesMetrics,
+  PeriodMetricsResponse,
+} from './metrics.types.js';

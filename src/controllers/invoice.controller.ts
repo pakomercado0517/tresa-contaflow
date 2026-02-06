@@ -1,6 +1,6 @@
 import { type Response } from "express";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
-import { CFDIParserService } from "../services/cfdi-parser.service.js";
+import { parseInvoice } from "../parsers/index.js";
 import { FiscalValidationService } from "../services/fiscal-validation.service.js";
 import { PaymentMatchingService } from "../services/payment-matching.service.js";
 import { PaymentComplementService } from "../services/payment-complement.service.js";
@@ -55,12 +55,8 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    // Leer el contenido del archivo como texto
-    const xmlString = file.data.toString("utf-8");
-
-    // Parsear el XML
-    const parser = new CFDIParserService();
-    const cfdi = await parser.parseXML(xmlString);
+    const xmlBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer);
+    const cfdi = parseInvoice(xmlBuffer);
 
     // Realizar validaciones fiscales y matching
     const validationService = new FiscalValidationService();
@@ -217,12 +213,8 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Leer el contenido del archivo como texto
-    const xmlString = file.data.toString("utf-8");
-
-    // Parsear el XML
-    const parser = new CFDIParserService();
-    const cfdi = await parser.parseXML(xmlString);
+    const xmlBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer);
+    const cfdi = parseInvoice(xmlBuffer);
 
     // Realizar validaciones fiscales y matching
     const validationService = new FiscalValidationService();
