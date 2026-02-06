@@ -1,21 +1,11 @@
 import { Payroll, Profile, Period } from "../database/models/index.js";
 import { parsePayroll } from "../parsers/payroll.parser.js";
-
-const PLUGIN_NOMINA_KEY = "plugin_nomina";
-
-/**
- * Comprueba si el perfil tiene el plugin de nómina habilitado.
- * Usa validaciones_habilitadas.plugin_nomina hasta que exista el modelo de plugins (Fase 6).
- */
-export function hasPayrollPlugin(profile: Profile): boolean {
-  const v = profile.validaciones_habilitadas as Record<string, unknown> | undefined;
-  return v?.[PLUGIN_NOMINA_KEY] === true;
-}
+import { SubscriptionService } from "./subscription.service.js";
 
 /**
- * Sube un XML de nómina: valida plugin, parsea y guarda en payrolls.
+ * Sube un XML de nómina: valida plugin (vía suscripción), parsea y guarda en payrolls.
  *
- * @param profile_id - UUID del perfil (debe pertenecer al usuario y tener plugin nómina)
+ * @param profile_id - UUID del perfil (debe pertenecer al usuario y tener plugin nómina en su suscripción)
  * @param period_id - UUID del período (debe pertenecer al perfil)
  * @param xmlBuffer - Contenido del archivo XML
  * @returns Payroll creado
@@ -30,7 +20,9 @@ export async function uploadPayrollXML(
     throw new Error("Perfil no encontrado");
   }
 
-  if (!hasPayrollPlugin(profile)) {
+  const subscriptionService = new SubscriptionService();
+  const hasAccess = await subscriptionService.hasPlugin(profile_id, "payroll");
+  if (!hasAccess) {
     throw new Error("El perfil no tiene habilitado el plugin de nómina");
   }
 

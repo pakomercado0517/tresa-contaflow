@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { body, param, query } from "express-validator";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
+import { checkPlugin } from "../middlewares/check-plugin.middleware.js";
 import { validateRequest } from "../middlewares/validate.middleware.js";
 import {
   uploadPayroll,
@@ -12,6 +13,7 @@ import {
 const router: IRouter = Router();
 
 router.use(authenticateToken);
+router.use(checkPlugin("payroll"));
 
 const uploadPayrollValidation = [
   body("profile_id").isUUID().withMessage("profile_id debe ser un UUID válido"),

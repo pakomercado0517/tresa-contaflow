@@ -18,6 +18,9 @@ import {
   ManualIncome,
   AccruedExpense,
   Payroll,
+  Plugin,
+  Subscription,
+  SubscriptionPlugin,
 } from "../database/models/index";
 
 describe("E2E Endpoints", () => {
@@ -45,9 +48,32 @@ describe("E2E Endpoints", () => {
       rfc: "EPR123456ABC",
       tipo_persona: "MORAL",
       regimen_fiscal: "601",
-      validaciones_habilitadas: { plugin_nomina: true },
+      validaciones_habilitadas: {},
     });
     userAProfileId = profileA.id;
+
+    const [pluginPayroll] = await Plugin.findOrCreate({
+      where: { name: "payroll" },
+      defaults: {
+        display_name: "Procesamiento de Nómina",
+        description: null,
+        is_available: true,
+      },
+    });
+    const subA = await Subscription.create({
+      user_id: userAId,
+      plan: "BASIC",
+      plan_price: 300,
+      status: "ACTIVE",
+      current_period_start: new Date(),
+      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      cancel_at_period_end: false,
+    });
+    await SubscriptionPlugin.create({
+      subscription_id: subA.id,
+      plugin_id: pluginPayroll.id,
+      enabled: true,
+    });
 
     const periodA = await Period.create({
       profile_id: userAProfileId,
@@ -278,6 +304,38 @@ describe("E2E Endpoints", () => {
     });
   });
 
+  describe("plugin nómina: usuario con plugin puede subir, usuario sin plugin → 403", () => {
+    it("usuario sin plugin recibe 403 al intentar GET /api/payrolls", async () => {
+      const res = await request(app)
+        .get("/api/payrolls")
+        .set("Authorization", `Bearer ${userBToken}`);
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty("error", "Plugin no disponible");
+    });
+
+    it("usuario sin plugin recibe 403 al intentar POST /api/payrolls/upload", async () => {
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const xmlContent = readFileSync(join(fixturesDir, "nomina-minimal.xml"), "utf-8");
+      const res = await request(app)
+        .post("/api/payrolls/upload")
+        .set("Authorization", `Bearer ${userBToken}`)
+        .field("profile_id", userBProfileId)
+        .field("period_id", userBPeriodId)
+        .attach("xml", Buffer.from(xmlContent), "nomina.xml");
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty("error", "Plugin no disponible");
+    });
+
+    it("usuario con plugin puede listar nóminas (GET /api/payrolls)", async () => {
+      const res = await request(app)
+        .get("/api/payrolls")
+        .set("Authorization", `Bearer ${userAToken}`);
+      expectSuccess(res, 200);
+      expect(res.body).toHaveProperty("data");
+      expect(Array.isArray(res.body.data)).toBe(true);
+    });
+  });
+
   describe("upload nómina → guardar en DB", () => {
     it("al subir XML de nómina válido, se guarda en payrolls y retorna 201", async () => {
       const fixturesDir = join(__dirname, "fixtures", "nomina");
@@ -383,6 +441,63 @@ describe("E2E Endpoints", () => {
       expect(res.body.flujo.egresos_pagados).toBe(0);
       expect(res.body.devengado.ingresos_devengados).toBe(0);
       expect(res.body.devengado.egresos_devengados).toBe(0);
+    });
+  });
+
+  describe("E2E: usuario upgrade → plugin se habilita → puede usar nómina", () => {
+    it("al asignar suscripción con plugin payroll al usuario, puede subir nómina", async () => {
+      const userC = await createTestUser("userc-upgrade@example.com");
+      const tokenC = generateTestTokens(userC.id, "userc-upgrade@example.com").accessToken;
+      const profileC = await Profile.create({
+        user_id: userC.id,
+        nombre: "Perfil C Upgrade",
+        rfc: "PCU123456ABC",
+        tipo_persona: "MORAL",
+        regimen_fiscal: "601",
+        validaciones_habilitadas: {},
+      });
+      const periodC = await Period.create({
+        profile_id: profileC.id,
+        start_date: new Date("2025-01-01"),
+        end_date: new Date("2025-01-31"),
+        name: "Enero 2025",
+      });
+
+      const pluginPayroll = await Plugin.findOne({ where: { name: "payroll" } });
+      expect(pluginPayroll).not.toBeNull();
+      const subC = await Subscription.create({
+        user_id: userC.id,
+        plan: "PRO",
+        plan_price: 800,
+        status: "ACTIVE",
+        current_period_start: new Date(),
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        cancel_at_period_end: false,
+      });
+      await SubscriptionPlugin.create({
+        subscription_id: subC.id,
+        plugin_id: pluginPayroll!.id,
+        enabled: true,
+      });
+
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const xmlContent = readFileSync(
+        join(fixturesDir, "nomina-otros-pagos.xml"),
+        "utf-8"
+      );
+      const uploadRes = await request(app)
+        .post("/api/payrolls/upload")
+        .set("Authorization", `Bearer ${tokenC}`)
+        .field("profile_id", profileC.id)
+        .field("period_id", periodC.id)
+        .attach("xml", Buffer.from(xmlContent), "nomina.xml");
+
+      expectSuccess(uploadRes, 201);
+      expect(uploadRes.body).toHaveProperty("message", "Nómina registrada");
+      expect(uploadRes.body.data).toHaveProperty(
+        "uuid",
+        "c3d4e5f6-a7b8-9012-cdef-123456789012"
+      );
     });
   });
 });

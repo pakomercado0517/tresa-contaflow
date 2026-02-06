@@ -9,6 +9,7 @@ import {
   freezeOtherProfiles,
   unfreezeProfile,
 } from '../controllers/profile.controller.js';
+import { getProfilePlugins } from '../controllers/plugin.controller.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateProfileLimit } from '../middlewares/plan-limits.middleware.js';
@@ -87,6 +88,7 @@ const freezeOthersValidation = [
 
 // Rutas
 router.get('/', getProfiles);
+router.get('/:id/plugins', profileIdValidation, validateRequest, getProfilePlugins);
 router.get('/:id', profileIdValidation, validateRequest, getProfileById);
 router.post('/', createProfileValidation, validateRequest, validateProfileLimit, createProfile);
 router.put('/:id', updateProfileValidation, validateRequest, updateProfile);

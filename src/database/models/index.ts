@@ -16,6 +16,8 @@ import PaymentComplementItem from "./PaymentComplementItem.model.js";
 import SatProductService from "./SatProductService.model.js";
 import SatSearchLog from "./SatSearchLog.model.js";
 import Payroll from "./Payroll.model.js";
+import Plugin from "./Plugin.model.js";
+import SubscriptionPlugin from "./SubscriptionPlugin.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -30,6 +32,8 @@ export {
   Period,
   ManualIncome,
   Payroll,
+  Plugin,
+  SubscriptionPlugin,
   DiscountCode,
   PaymentComplement,
   PaymentComplementItem,
