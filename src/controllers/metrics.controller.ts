@@ -3,6 +3,8 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { Period, Profile } from "../database/models/index.js";
 import { MetricsService } from "../services/metrics.service.js";
 
+const metricsService = new MetricsService();
+
 /**
  * GET /api/metrics?mes=&año=&profile_id=
  * Retorna métricas por mes/año: sin profile_id = todos los perfiles agregados; con profile_id = un perfil.
@@ -43,7 +45,6 @@ export async function getMetricsByMonthYear(req: AuthRequest, res: Response): Pr
       }
     }
 
-    const metricsService = new MetricsService();
     const result = await metricsService.getMetricsForMonthYear(
       userId,
       mesNum,
@@ -95,7 +96,6 @@ export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const metricsService = new MetricsService();
     const result = await metricsService.getMetrics(period.profile_id, periodId);
 
     if (!result) {

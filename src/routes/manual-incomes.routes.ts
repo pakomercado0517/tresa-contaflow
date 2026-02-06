@@ -7,6 +7,7 @@ import {
   getManualIncomeById,
   createManualIncome,
   updateManualIncome,
+  deleteManualIncome,
 } from "../controllers/manual-incomes.controller.js";
 
 const router: IRouter = Router();
@@ -53,5 +54,6 @@ router.get("/", listManualIncomesValidation, validateRequest, getManualIncomes);
 router.get("/:id", manualIncomeIdParam, validateRequest, getManualIncomeById);
 router.post("/", createManualIncomeValidation, validateRequest, createManualIncome);
 router.put("/:id", updateManualIncomeValidation, validateRequest, updateManualIncome);
+router.delete("/:id", manualIncomeIdParam, validateRequest, deleteManualIncome);
 
 export default router;

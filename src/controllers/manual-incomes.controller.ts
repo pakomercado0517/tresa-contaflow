@@ -192,3 +192,36 @@ export async function updateManualIncome(req: AuthRequest, res: Response): Promi
     });
   }
 }
+
+/**
+ * Elimina un ingreso manual por ID.
+ */
+export async function deleteManualIncome(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    const { id } = req.params;
+
+    const income = await ManualIncome.findOne({
+      where: { id },
+      include: [{ model: Profile, as: "profile", where: { user_id: userId }, attributes: ["id"] }],
+    });
+    if (!income) {
+      res.status(404).json({ error: "Ingreso no encontrado" });
+      return;
+    }
+
+    await income.destroy();
+    res.json({ message: "Ingreso eliminado" });
+  } catch (error) {
+    console.error("Error al eliminar ingreso manual:", error);
+    res.status(500).json({
+      error: "Error al eliminar ingreso",
+      message: error instanceof Error ? error.message : "Error desconocido",
+    });
+  }
+}
