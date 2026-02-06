@@ -9,6 +9,7 @@ import {
   freezeOtherProfiles,
   unfreezeProfile,
 } from '../controllers/profile.controller.js';
+import { getProfilePlugins } from '../controllers/plugin.controller.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateProfileLimit } from '../middlewares/plan-limits.middleware.js';
@@ -35,10 +36,15 @@ const createProfileValidation = [
   body('tipo_persona')
     .isIn(['FISICA', 'MORAL'])
     .withMessage('El tipo de persona debe ser FISICA o MORAL'),
-  body('regimen_fiscal')
+  body('regimenes_fiscales')
+    .optional()
+    .isArray()
+    .withMessage('Los regímenes fiscales deben ser un arreglo'),
+  body('regimenes_fiscales.*')
     .optional()
     .isString()
-    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+    .trim()
+    .withMessage('Cada régimen fiscal debe ser una cadena (clave SAT)'),
   body('validaciones_habilitadas')
     .optional()
     .isObject()
@@ -61,10 +67,15 @@ const updateProfileValidation = [
     .optional()
     .isIn(['FISICA', 'MORAL'])
     .withMessage('El tipo de persona debe ser FISICA o MORAL'),
-  body('regimen_fiscal')
+  body('regimenes_fiscales')
+    .optional()
+    .isArray()
+    .withMessage('Los regímenes fiscales deben ser un arreglo'),
+  body('regimenes_fiscales.*')
     .optional()
     .isString()
-    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+    .trim()
+    .withMessage('Cada régimen fiscal debe ser una cadena (clave SAT)'),
   body('validaciones_habilitadas')
     .optional()
     .isObject()
@@ -87,6 +98,7 @@ const freezeOthersValidation = [
 
 // Rutas
 router.get('/', getProfiles);
+router.get('/:id/plugins', profileIdValidation, validateRequest, getProfilePlugins);
 router.get('/:id', profileIdValidation, validateRequest, getProfileById);
 router.post('/', createProfileValidation, validateRequest, validateProfileLimit, createProfile);
 router.put('/:id', updateProfileValidation, validateRequest, updateProfile);

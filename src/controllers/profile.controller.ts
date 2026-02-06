@@ -70,7 +70,7 @@ export async function getProfileById(req: AuthRequest, res: Response): Promise<v
 export async function createProfile(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.userId;
-    const { nombre, rfc, tipo_persona, regimen_fiscal, validaciones_habilitadas } = req.body;
+    const { nombre, rfc, tipo_persona, regimenes_fiscales, validaciones_habilitadas } = req.body;
 
     if (!userId) {
       res.status(401).json({ error: 'Usuario no autenticado' });
@@ -109,13 +109,20 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // Normalizar regímenes fiscales: array de strings no vacíos
+    const regimenesNormalizados = Array.isArray(regimenes_fiscales)
+      ? regimenes_fiscales
+          .filter((r: unknown) => typeof r === 'string' && String(r).trim() !== '')
+          .map((r: unknown) => String(r).trim())
+      : [];
+
     // Crear el perfil
     const profile = await Profile.create({
       user_id: userId,
       nombre,
       rfc: rfc.toUpperCase(),
       tipo_persona,
-      regimen_fiscal: regimen_fiscal || null,
+      regimenes_fiscales: regimenesNormalizados,
       validaciones_habilitadas: validaciones_habilitadas || {},
     });
 
@@ -143,7 +150,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const { nombre, rfc, tipo_persona, regimen_fiscal, validaciones_habilitadas } = req.body;
+    const { nombre, rfc, tipo_persona, regimenes_fiscales, validaciones_habilitadas } = req.body;
 
     if (!userId) {
       res.status(401).json({ error: 'Usuario no autenticado' });
@@ -172,12 +179,22 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       }
     }
 
+    // Normalizar regímenes fiscales si se envían
+    const regimenesActualizados =
+      regimenes_fiscales !== undefined
+        ? Array.isArray(regimenes_fiscales)
+          ? regimenes_fiscales
+              .filter((r: unknown) => typeof r === 'string' && String(r).trim() !== '')
+              .map((r: unknown) => String(r).trim())
+          : []
+        : profile.regimenes_fiscales;
+
     // Actualizar el perfil
     await profile.update({
       nombre: nombre || profile.nombre,
       rfc: rfc ? rfc.toUpperCase() : profile.rfc,
       tipo_persona: tipo_persona || profile.tipo_persona,
-      regimen_fiscal: regimen_fiscal !== undefined ? regimen_fiscal : profile.regimen_fiscal,
+      regimenes_fiscales: regimenesActualizados,
       validaciones_habilitadas:
         validaciones_habilitadas !== undefined
           ? validaciones_habilitadas

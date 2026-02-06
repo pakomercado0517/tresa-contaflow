@@ -1,4 +1,4 @@
-import { Subscription, User } from "../database/models/index.js";
+import { Subscription, User, Profile, Plugin, SubscriptionPlugin } from "../database/models/index.js";
 import type { Plan } from "../constants/plans.constants.js";
 import { Op } from "sequelize";
 
@@ -141,6 +141,47 @@ export class SubscriptionService {
 
       return subscription;
     }
+  }
+
+  /**
+   * Verifica si la suscripción activa del usuario tiene el plugin habilitado.
+   * @param userId ID del usuario
+   * @param pluginName Nombre del plugin (ej. 'payroll', 'credit_notes')
+   * @returns true si el usuario tiene suscripción activa con el plugin habilitado
+   */
+  async hasPluginForUser(userId: string, pluginName: string): Promise<boolean> {
+    const subscription = await this.getActiveSubscription(userId);
+    if (!subscription) {
+      return false;
+    }
+    const plugin = await Plugin.findOne({
+      where: { name: pluginName, is_available: true },
+    });
+    if (!plugin) {
+      return false;
+    }
+    const link = await SubscriptionPlugin.findOne({
+      where: {
+        subscription_id: subscription.id,
+        plugin_id: plugin.id,
+        enabled: true,
+      },
+    });
+    return link !== null;
+  }
+
+  /**
+   * Verifica si el perfil pertenece a un usuario con suscripción que tiene el plugin habilitado.
+   * @param profileId ID del perfil
+   * @param pluginName Nombre del plugin (ej. 'payroll', 'credit_notes')
+   * @returns true si el perfil existe y su usuario tiene el plugin en su suscripción activa
+   */
+  async hasPlugin(profileId: string, pluginName: string): Promise<boolean> {
+    const profile = await Profile.findByPk(profileId);
+    if (!profile) {
+      return false;
+    }
+    return this.hasPluginForUser(profile.user_id, pluginName);
   }
 }
 

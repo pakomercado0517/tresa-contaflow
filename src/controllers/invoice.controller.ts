@@ -117,7 +117,7 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
           cfdi,
           profileId,
           profile.rfc,
-          profile.regimen_fiscal,
+          profile.regimenes_fiscales,
           validacionesConfig
         );
       } else if (cfdi.rfcReceptor === profile.rfc) {
@@ -126,7 +126,7 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
           cfdi,
           profileId,
           profile.rfc,
-          profile.regimen_fiscal,
+          profile.regimenes_fiscales,
           validacionesConfig
         );
       } else {
@@ -152,7 +152,7 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
         id: profile.id,
         nombre: profile.nombre,
         rfc: profile.rfc,
-        regimen_fiscal: profile.regimen_fiscal,
+        regimenes_fiscales: profile.regimenes_fiscales,
       },
     });
   } catch (error) {
@@ -324,7 +324,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
           cfdi,
           profileId,
           profile.rfc,
-          profile.regimen_fiscal,
+          profile.regimenes_fiscales,
           validacionesConfig
         );
       } else if (cfdi.rfcReceptor === profile.rfc) {
@@ -334,7 +334,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
           cfdi,
           profileId,
           profile.rfc,
-          profile.regimen_fiscal,
+          profile.regimenes_fiscales,
           validacionesConfig
         );
       } else {

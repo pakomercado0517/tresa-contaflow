@@ -28,7 +28,7 @@ describe("MetricsService", () => {
       nombre: "Empresa Métricas",
       rfc: "MET123456ABC",
       tipo_persona: "MORAL",
-      regimen_fiscal: "601",
+      regimenes_fiscales: ["601"],
     });
     profileId = profile.id;
     const period = await Period.create({

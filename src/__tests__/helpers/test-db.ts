@@ -9,6 +9,9 @@ import {
   ManualIncome,
   PaymentComplement,
   PaymentComplementItem,
+  Payroll,
+  Plugin,
+  SubscriptionPlugin,
   DiscountCode,
   SatSearchLog,
   sequelize,
@@ -29,11 +32,14 @@ export async function cleanDatabase(): Promise<void> {
     await PaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
     await AccruedExpense.destroy({ where: {}, truncate: true, cascade: true });
     await Invoice.destroy({ where: {}, truncate: true, cascade: true });
+    await Payroll.destroy({ where: {}, truncate: true, cascade: true });
     await Period.destroy({ where: {}, truncate: true, cascade: true });
+    await SubscriptionPlugin.destroy({ where: {}, truncate: true, cascade: true });
     await PaymentEvent.destroy({ where: {}, truncate: true, cascade: true });
     await Subscription.destroy({ where: {}, truncate: true, cascade: true });
     await DiscountCode.destroy({ where: {}, truncate: true, cascade: true });
     await SatSearchLog.destroy({ where: {}, truncate: true, cascade: true });
+    await Plugin.destroy({ where: {}, truncate: true, cascade: true });
     await Profile.destroy({ where: {}, truncate: true, cascade: true });
     await User.destroy({ where: {}, truncate: true, cascade: true });
     

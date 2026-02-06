@@ -58,3 +58,4 @@ export type {
   NominaMetrics,
   PeriodMetricsResponse,
 } from './metrics.types.js';
+export type { PluginListItem, PluginsResponse } from './plugin.types.js';
