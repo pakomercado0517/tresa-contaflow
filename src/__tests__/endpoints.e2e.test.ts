@@ -47,7 +47,7 @@ describe("E2E Endpoints", () => {
       nombre: "Perfil A",
       rfc: "EPR123456ABC",
       tipo_persona: "MORAL",
-      regimen_fiscal: "601",
+      regimenes_fiscales: ["601"],
       validaciones_habilitadas: {},
     });
     userAProfileId = profileA.id;
@@ -93,7 +93,7 @@ describe("E2E Endpoints", () => {
       nombre: "Perfil B",
       rfc: "EPR789012XYZ",
       tipo_persona: "MORAL",
-      regimen_fiscal: "601",
+      regimenes_fiscales: ["601"],
     });
     userBProfileId = profileB.id;
 
@@ -453,7 +453,7 @@ describe("E2E Endpoints", () => {
         nombre: "Perfil C Upgrade",
         rfc: "PCU123456ABC",
         tipo_persona: "MORAL",
-        regimen_fiscal: "601",
+        regimenes_fiscales: ["601"],
         validaciones_habilitadas: {},
       });
       const periodC = await Period.create({

@@ -15,7 +15,7 @@ export class FiscalValidationService {
     cfdi: CFDI,
     profileId: string,
     profileRFC: string,
-    profileRegimenFiscal: string | null,
+    profileRegimenesFiscales: string[],
     validacionesHabilitadas: ValidacionesConfig
   ): Promise<EstadoValidacionCFDI> {
     const estado: EstadoValidacionCFDI = {
@@ -58,10 +58,11 @@ export class FiscalValidationService {
       } else {
         estado.rfcVerificado = true;
 
-        // Validar régimen fiscal si está habilitado
-        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenFiscal) {
-          if (cfdi.regimenFiscalEmisor !== profileRegimenFiscal) {
-            const mensaje = `El régimen fiscal de la factura (${cfdi.regimenFiscalEmisor}) no coincide con el régimen fiscal del perfil (${profileRegimenFiscal}). Esto puede afectar los cálculos fiscales.`;
+        // Validar régimen fiscal si está habilitado (el régimen de la factura debe estar en la lista del perfil)
+        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenesFiscales.length > 0) {
+          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalEmisor);
+          if (!regimenIncluido) {
+            const mensaje = `El régimen fiscal de la factura (${cfdi.regimenFiscalEmisor}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(', ')}). Esto puede afectar los cálculos fiscales.`;
             
             if (validacionesHabilitadas.bloquearSiRegimenNoCoincide) {
               estado.errores.push(mensaje);
@@ -99,7 +100,7 @@ export class FiscalValidationService {
     cfdi: CFDI,
     profileId: string,
     profileRFC: string,
-    profileRegimenFiscal: string | null,
+    profileRegimenesFiscales: string[],
     validacionesHabilitadas: ValidacionesConfig
   ): Promise<EstadoValidacionGasto> {
     const estado: EstadoValidacionGasto = {
@@ -142,10 +143,11 @@ export class FiscalValidationService {
       } else {
         estado.rfcVerificado = true;
 
-        // Validar régimen fiscal si está habilitado
-        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenFiscal) {
-          if (cfdi.regimenFiscalReceptor !== profileRegimenFiscal) {
-            const mensaje = `El régimen fiscal del gasto (${cfdi.regimenFiscalReceptor}) no coincide con el régimen fiscal del perfil (${profileRegimenFiscal}). Esto puede afectar los cálculos fiscales.`;
+        // Validar régimen fiscal si está habilitado (el régimen del gasto debe estar en la lista del perfil)
+        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenesFiscales.length > 0) {
+          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalReceptor);
+          if (!regimenIncluido) {
+            const mensaje = `El régimen fiscal del gasto (${cfdi.regimenFiscalReceptor}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(', ')}). Esto puede afectar los cálculos fiscales.`;
             
             if (validacionesHabilitadas.bloquearSiRegimenNoCoincide) {
               estado.errores.push(mensaje);

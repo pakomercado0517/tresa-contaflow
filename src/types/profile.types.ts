@@ -12,7 +12,7 @@ export interface ProfileResponse {
   nombre: string;
   rfc: string;
   tipo_persona: 'FISICA' | 'MORAL';
-  regimen_fiscal: string | null;
+  regimenes_fiscales: string[];
   validaciones_habilitadas: Record<string, unknown>;
   frozen: boolean;
   frozen_reason: FrozenReason | null;

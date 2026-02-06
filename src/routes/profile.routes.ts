@@ -36,10 +36,15 @@ const createProfileValidation = [
   body('tipo_persona')
     .isIn(['FISICA', 'MORAL'])
     .withMessage('El tipo de persona debe ser FISICA o MORAL'),
-  body('regimen_fiscal')
+  body('regimenes_fiscales')
+    .optional()
+    .isArray()
+    .withMessage('Los regímenes fiscales deben ser un arreglo'),
+  body('regimenes_fiscales.*')
     .optional()
     .isString()
-    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+    .trim()
+    .withMessage('Cada régimen fiscal debe ser una cadena (clave SAT)'),
   body('validaciones_habilitadas')
     .optional()
     .isObject()
@@ -62,10 +67,15 @@ const updateProfileValidation = [
     .optional()
     .isIn(['FISICA', 'MORAL'])
     .withMessage('El tipo de persona debe ser FISICA o MORAL'),
-  body('regimen_fiscal')
+  body('regimenes_fiscales')
+    .optional()
+    .isArray()
+    .withMessage('Los regímenes fiscales deben ser un arreglo'),
+  body('regimenes_fiscales.*')
     .optional()
     .isString()
-    .withMessage('El régimen fiscal debe ser una cadena de texto'),
+    .trim()
+    .withMessage('Cada régimen fiscal debe ser una cadena (clave SAT)'),
   body('validaciones_habilitadas')
     .optional()
     .isObject()

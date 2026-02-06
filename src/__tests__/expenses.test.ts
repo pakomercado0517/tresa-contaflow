@@ -23,7 +23,7 @@ describe("Expenses API", () => {
       nombre: "Empresa de Prueba",
       rfc: "EPR123456ABC",
       tipo_persona: "MORAL",
-      regimen_fiscal: "601",
+      regimenes_fiscales: ["601"],
     });
     profileId = profile.id;
   });

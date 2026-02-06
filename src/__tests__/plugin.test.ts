@@ -61,7 +61,7 @@ describe("Plugins - Subscription y middleware", () => {
       nombre: "Perfil Con Plugin",
       rfc: "PCP123456ABC",
       tipo_persona: "MORAL",
-      regimen_fiscal: "601",
+      regimenes_fiscales: ["601"],
       validaciones_habilitadas: {},
     });
     profileWithPluginId = profileWith.id;

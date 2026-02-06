@@ -32,7 +32,7 @@ describe("Profiles API", () => {
           nombre: "Mi Empresa S.A. de C.V.",
           rfc: "XAXX010101AA0", // RFC genérico que cumple regex (homoclave AA0)
           tipo_persona: "MORAL",
-          regimen_fiscal: "601",
+          regimenes_fiscales: ["601"],
         });
 
       expectSuccess(response, 201);
@@ -50,7 +50,7 @@ describe("Profiles API", () => {
           nombre: "Otra Empresa",
           rfc: "XAXX010101AA0", // Mismo RFC genérico del test anterior
           tipo_persona: "MORAL",
-          regimen_fiscal: "601",
+          regimenes_fiscales: ["601"],
         });
 
       expectError(response, 409); // 409 Conflict
@@ -151,7 +151,7 @@ describe("Profiles API", () => {
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
           nombre: "Perfil Actualizado",
-          regimen_fiscal: "603",
+          regimenes_fiscales: ["603"],
         });
 
       expectSuccess(response, 200);

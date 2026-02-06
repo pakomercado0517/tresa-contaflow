@@ -11,7 +11,7 @@ interface ProfileAttributes {
   nombre: string;
   rfc: string;
   tipo_persona: TipoPersona;
-  regimen_fiscal: string | null;
+  regimenes_fiscales: string[];
   validaciones_habilitadas: Record<string, unknown>;
   frozen: boolean;
   frozen_reason: FrozenReason | null;
@@ -25,13 +25,13 @@ interface ProfileCreationAttributes extends Omit<
   | 'id'
   | 'created_at'
   | 'updated_at'
-  | 'regimen_fiscal'
+  | 'regimenes_fiscales'
   | 'validaciones_habilitadas'
   | 'frozen'
   | 'frozen_reason'
   | 'frozen_at'
 > {
-  regimen_fiscal?: string | null;
+  regimenes_fiscales?: string[];
   validaciones_habilitadas?: object;
   frozen?: boolean;
   frozen_reason?: FrozenReason | null;
@@ -47,7 +47,7 @@ class Profile
   declare nombre: string;
   declare rfc: string;
   declare tipo_persona: TipoPersona;
-  declare regimen_fiscal: string | null;
+  declare regimenes_fiscales: string[];
   declare validaciones_habilitadas: Record<string, unknown>;
   declare frozen: boolean;
   declare frozen_reason: FrozenReason | null;
@@ -83,9 +83,10 @@ Profile.init(
       type: DataTypes.ENUM('FISICA', 'MORAL'),
       allowNull: false,
     },
-    regimen_fiscal: {
-      type: DataTypes.STRING,
-      allowNull: true,
+    regimenes_fiscales: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: [],
     },
     validaciones_habilitadas: {
       type: DataTypes.JSONB,
