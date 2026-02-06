@@ -1,15 +1,27 @@
-import { Invoice, AccruedExpense, Profile, PaymentComplementItem } from '../database/models/index.js';
+import {
+  Invoice,
+  AccruedExpense,
+  Profile,
+  PaymentComplementItem,
+  Period,
+  ManualIncome,
+} from '../database/models/index.js';
 import { PaymentStatusService } from './payment-status.service.js';
 import { Op } from 'sequelize';
+import type { PeriodMetricsResponse } from '../types/metrics.types.js';
 
+/**
+ * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
+ * están en base subtotal sin IVA para poder mostrar impuestos trasladados y retenidos por separado.
+ */
 export interface PeriodMetrics {
-  totalFacturado: number;
-  totalPagado: number;
-  totalCompras: number; // Total de gastos registrados (contable) - suma completa de PUE + PPD
-  totalComprasPagadas: number; // Solo lo pagado de gastos (efectivo) - PUE completo + PPD pagado
+  totalFacturado: number; // Subtotal facturas (PUE + PPD) del período
+  totalPagado: number; // Subtotal PUE + complementos/manual cobrados en el período
+  totalCompras: number; // Subtotal gastos registrados (contable) - PUE + PPD
+  totalComprasPagadas: number; // Subtotal de gastos pagados - PUE + PPD pagado
   totalPagadoMenosCompras: number; // Flujo de efectivo neto: totalPagado - totalComprasPagadas
-  pendientePagar: number;
-  gastosPendientes: number; // Gastos pendientes de pago (no puede ser negativo)
+  pendientePagar: number; // Subtotal pendiente de cobro (facturas PPD)
+  gastosPendientes: number; // Subtotal gastos pendientes de pago
   pagosAnticipadosGastos: number; // Complementos pagados sin gastos correspondientes en el período
   totalFacturas: number;
   totalGastos: number;
@@ -168,27 +180,27 @@ export class MetricsService {
     let gastosPagadosCompletamente = 0;
     let gastosParcialmentePagados = 0;
 
-    // Procesar facturas
+    // Procesar facturas (todo en subtotal sin IVA; impuestos se muestran aparte)
     facturas.forEach((factura) => {
-      const total = Number(factura.total);
+      const subtotal = Number(factura.subtotal ?? factura.total);
 
       // Contar tipos
       if (factura.tipo === 'PUE') {
         facturasPUE++;
-        totalFacturado += total;
-        totalPagado += total; // PUE está pagado completamente
+        totalFacturado += subtotal;
+        totalPagado += subtotal; // PUE está pagado completamente
         facturasPagadasCompletamente++;
       } else if (factura.tipo === 'PPD') {
         facturasPPD++;
-        totalFacturado += total;
+        totalFacturado += subtotal;
 
         // Calcular pagos parciales
         const totalPagosParciales =
           (paymentContext.pagosComplementoPorFactura[factura.uuid] || 0) +
           (paymentContext.pagosManualPorFactura[factura.uuid] || 0);
 
-        // Determinar si está completamente pagada o parcialmente
-        if (totalPagosParciales >= total) {
+        // Determinar si está completamente pagada o parcialmente (comparar contra subtotal)
+        if (totalPagosParciales >= subtotal) {
           facturasPagadasCompletamente++;
         } else if (totalPagosParciales > 0) {
           facturasParcialmentePagadas++;
@@ -204,14 +216,14 @@ export class MetricsService {
     const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : '';
 
     for (const gasto of gastos) {
-      const totalGasto = Number(gasto.total);
-      totalCompras += totalGasto; // Suma completa (contable)
+      const subtotalGasto = Number(gasto.subtotal ?? gasto.total);
+      totalCompras += subtotalGasto; // Suma completa (contable) en subtotal sin IVA
 
       // Calcular estado de pago si es gasto de XML (tiene tipo)
       if (gasto.tipo && gasto.uuid) {
         if (gasto.tipo === 'PUE') {
           gastosPUE++;
-          totalComprasPagadas += totalGasto; // PUE está pagado completamente
+          totalComprasPagadas += subtotalGasto; // PUE está pagado completamente
           gastosPagadosCompletamente++;
         } else if (gasto.tipo === 'PPD') {
           gastosPPD++;
@@ -232,7 +244,7 @@ export class MetricsService {
         }
       } else {
         // Gastos manuales (sin tipo) se consideran pagados completamente
-        totalComprasPagadas += totalGasto;
+        totalComprasPagadas += subtotalGasto;
         gastosPagadosCompletamente++;
       }
     }
@@ -324,12 +336,12 @@ export class MetricsService {
           pendientePagar += saldoInsoluto;
         }
       } else {
-        // Si no hay complementos, restar pagos manuales y complementos ya aplicados
-        const totalFactura = Number(factura.total);
+        // Si no hay complementos, restar pagos manuales y complementos ya aplicados (base subtotal)
+        const subtotalFactura = Number(factura.subtotal ?? factura.total);
         const totalPagosParciales =
           (paymentContext.pagosComplementoPorFactura[factura.uuid] || 0) +
           (paymentContext.pagosManualPorFactura[factura.uuid] || 0);
-        const saldoPendiente = totalFactura - totalPagosParciales;
+        const saldoPendiente = subtotalFactura - totalPagosParciales;
         if (saldoPendiente > 0.01) {
           pendientePagar += saldoPendiente;
         }
@@ -364,10 +376,10 @@ export class MetricsService {
           gastosPendientes += saldoInsoluto;
         }
       } else {
-        // Si no hay complementos, usar el monto total del PPD
-        const totalGasto = Number(gasto.total);
-        if (totalGasto > 0.01) {
-          gastosPendientes += totalGasto;
+        // Si no hay complementos, usar el subtotal del PPD
+        const subtotalGasto = Number(gasto.subtotal ?? gasto.total);
+        if (subtotalGasto > 0.01) {
+          gastosPendientes += subtotalGasto;
         }
       }
     }
@@ -411,6 +423,69 @@ export class MetricsService {
       start: new Date(año, mes - 1, 1, 0, 0, 0),
       end: new Date(año, mes, 1, 0, 0, 0),
     };
+  }
+
+  /**
+   * Obtiene el rango de fechas de un período por ID (para uso con period_id).
+   */
+  private async getDateRangeFromPeriod(
+    profileId: string,
+    periodId: string
+  ): Promise<{ start: Date; end: Date } | null> {
+    const period = await Period.findOne({
+      where: { id: periodId, profile_id: profileId },
+      attributes: ['start_date', 'end_date'],
+    });
+    if (!period) {
+      return null;
+    }
+    const start = new Date(period.start_date);
+    const end = new Date(period.end_date);
+    end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+
+  /**
+   * Complementos de pago por factura (solo facturas PPD) con fecha_pago en el período.
+   */
+  private async getComplementosPorFacturaEnPeriodo(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<Record<string, number>> {
+    const items = await PaymentComplementItem.findAll({
+      where: {
+        profile_id: profileId,
+        fecha_pago: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+    });
+    if (items.length === 0) return {};
+    const uuids = [...new Set(items.map((i) => i.factura_uuid))];
+    const invoicesPPD = await Invoice.findAll({
+      where: { profile_id: profileId, uuid: { [Op.in]: uuids }, tipo: 'PPD' },
+      attributes: ['uuid'],
+    });
+    const setPPD = new Set(invoicesPPD.map((i) => i.uuid));
+    const porFactura: Record<string, number> = {};
+    items.forEach((item) => {
+      if (setPPD.has(item.factura_uuid)) {
+        porFactura[item.factura_uuid] = (porFactura[item.factura_uuid] || 0) + Number(item.imp_pagado || 0);
+      }
+    });
+    return porFactura;
+  }
+
+  /**
+   * Pagos manuales por factura con fecha de pago en el período.
+   */
+  private async getManualPagosPorFacturaEnPeriodo(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<Record<string, number>> {
+    const facturas = await Invoice.findAll({
+      where: { profile_id: profileId },
+      attributes: ['uuid', 'pagos'],
+    });
+    return this.sumManualPagos(facturas, dateRange).porFactura;
   }
 
   private sumManualPagos(
@@ -623,5 +698,475 @@ export class MetricsService {
    */
   async getGeneralMetrics(filters: { profileId?: string; userId: string }): Promise<PeriodMetrics> {
     return this.calculatePeriodMetrics(filters);
+  }
+
+  /**
+   * Métricas consolidadas del período para el endpoint: flujo, devengado, impuestos y pendientes.
+   * Retorna null si el período no existe o no pertenece al perfil.
+   */
+  async getMetrics(profileId: string, periodId: string): Promise<PeriodMetricsResponse | null> {
+    const period = await Period.findOne({
+      where: { id: periodId, profile_id: profileId },
+      attributes: ['id', 'start_date', 'end_date'],
+    });
+    if (!period) return null;
+
+    const [
+      ingresosCobrados,
+      egresosPagados,
+      ingresosDevengados,
+      egresosDevengados,
+      ivaTrasladado,
+      ivaAcreditable,
+      retenciones,
+      porCobrar,
+      porPagar,
+    ] = await Promise.all([
+      this.calculateIngresosCobrados(profileId, periodId),
+      this.calculateEgresosPagados(profileId, periodId),
+      this.calculateIngresosDevengados(profileId, periodId),
+      this.calculateEgresosDevengados(profileId, periodId),
+      this.calculateIVATrasladado(profileId, periodId),
+      this.calculateIVAAcreditable(profileId, periodId),
+      this.calculateRetenciones(profileId, periodId),
+      this.calculatePPDPorCobrar(profileId, periodId),
+      this.calculatePPDPorPagar(profileId, periodId),
+    ]);
+
+    const flujoNeto = ingresosCobrados - egresosPagados;
+    const resultadoDevengado = ingresosDevengados - egresosDevengados;
+
+    const response: PeriodMetricsResponse = {
+      period: {
+        id: period.id,
+        start: period.start_date,
+        end: period.end_date,
+      },
+      flujo: {
+        ingresos_cobrados: ingresosCobrados,
+        egresos_pagados: egresosPagados,
+        flujo_neto: flujoNeto,
+      },
+      devengado: {
+        ingresos_devengados: ingresosDevengados,
+        egresos_devengados: egresosDevengados,
+        resultado_devengado: resultadoDevengado,
+      },
+      impuestos: {
+        iva_trasladado: { cobrado: ivaTrasladado.cobrado, devengado: ivaTrasladado.devengado },
+        iva_acreditable: { pagado: ivaAcreditable.pagado, devengado: ivaAcreditable.devengado },
+        retenciones_iva: {
+          cobrado: retenciones.iva_cobrado,
+          devengado: retenciones.iva_devengado,
+        },
+        retenciones_isr: {
+          cobrado: retenciones.isr_cobrado,
+          devengado: retenciones.isr_devengado,
+        },
+      },
+      pendientes: {
+        por_cobrar: porCobrar,
+        por_pagar: porPagar,
+      },
+    };
+
+    return response;
+  }
+
+  /**
+   * Ingresos cobrados (flujo de efectivo - ingresos): subtotal de facturas PUE del período
+   * + montos cobrados por complementos de pago de facturas PPD (por fecha_pago en el período).
+   * Todo en subtotal sin IVA; para complementos se usa imp_pagado (monto cobrado).
+   */
+  async calculateIngresosCobrados(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const invoicesPUE = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: 'PUE',
+        fecha: {
+          [Op.gte]: dateRange.start,
+          [Op.lt]: dateRange.end,
+        },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumPUE = invoicesPUE.reduce((acc, inv) => acc + Number(inv.subtotal || 0), 0);
+
+    const complementosPPD = await PaymentComplementItem.findAll({
+      where: {
+        profile_id: profileId,
+        fecha_pago: {
+          [Op.gte]: dateRange.start,
+          [Op.lt]: dateRange.end,
+        },
+      },
+    });
+    const invoiceUUIDs = [...new Set(complementosPPD.map((c) => c.factura_uuid))];
+    const invoicesPPD = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        uuid: { [Op.in]: invoiceUUIDs },
+        tipo: 'PPD',
+      },
+      attributes: ['uuid'],
+    });
+    const uuidPPDSet = new Set(invoicesPPD.map((i) => i.uuid));
+    const sumComplementos = complementosPPD
+      .filter((c) => uuidPPDSet.has(c.factura_uuid))
+      .reduce((acc, c) => acc + Number(c.imp_pagado || 0), 0);
+
+    return Math.round((sumPUE + sumComplementos) * 100) / 100;
+  }
+
+  /**
+   * Egresos pagados (flujo de efectivo - egresos): suma de subtotal de accrued_expenses
+   * del período con is_paid = true.
+   */
+  async calculateEgresosPagados(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        is_paid: true,
+        fecha: {
+          [Op.gte]: dateRange.start,
+          [Op.lt]: dateRange.end,
+        },
+      },
+      attributes: ['subtotal'],
+    });
+    const sum = expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
+    return Math.round(sum * 100) / 100;
+  }
+
+  /**
+   * Ingresos devengados: subtotal de facturas del período + subtotal de manual_incomes del período.
+   */
+  async calculateIngresosDevengados(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const invoices = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: { [Op.in]: ['PUE', 'PPD'] },
+        fecha: {
+          [Op.gte]: dateRange.start,
+          [Op.lt]: dateRange.end,
+        },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumInvoices = invoices.reduce((acc, inv) => acc + Number(inv.subtotal || 0), 0);
+
+    const manualIncomes = await ManualIncome.findAll({
+      where: {
+        profile_id: profileId,
+        period_id: periodId,
+      },
+      attributes: ['subtotal'],
+    });
+    const sumManual = manualIncomes.reduce((acc, m) => acc + Number(m.subtotal || 0), 0);
+
+    return Math.round((sumInvoices + sumManual) * 100) / 100;
+  }
+
+  /**
+   * Egresos devengados: suma de subtotal de todos los accrued_expenses del período.
+   */
+  async calculateEgresosDevengados(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        fecha: {
+          [Op.gte]: dateRange.start,
+          [Op.lt]: dateRange.end,
+        },
+      },
+      attributes: ['subtotal'],
+    });
+    const sum = expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
+    return Math.round(sum * 100) / 100;
+  }
+
+  /**
+   * Flujo de efectivo neto (cobrado - pagado): ingresos cobrados menos egresos pagados.
+   */
+  async calculateFlujoCobradoPagado(profileId: string, periodId: string): Promise<number> {
+    const [ingresos, egresos] = await Promise.all([
+      this.calculateIngresosCobrados(profileId, periodId),
+      this.calculateEgresosPagados(profileId, periodId),
+    ]);
+    return Math.round((ingresos - egresos) * 100) / 100;
+  }
+
+  /**
+   * IVA trasladado (ingresos): cobrado = IVA de facturas PUE del período + IVA prorrateado
+   * de facturas PPD por lo cobrado en el período (complementos + manual). Devengado = IVA de
+   * todas las facturas del período + IVA de manual_incomes del período.
+   */
+  async calculateIVATrasladado(
+    profileId: string,
+    periodId: string
+  ): Promise<{ cobrado: number; devengado: number }> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return { cobrado: 0, devengado: 0 };
+    }
+
+    const [invoicesPUE, invoicesPPD, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
+      await Promise.all([
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PUE',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['iva_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PPD',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['uuid', 'iva_amount', 'total'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: { [Op.in]: ['PUE', 'PPD'] },
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['iva_amount'],
+        }),
+        ManualIncome.findAll({
+          where: { profile_id: profileId, period_id: periodId },
+          attributes: ['iva_amount'],
+        }),
+        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+      ]);
+
+    let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
+    for (const inv of invoicesPPD) {
+      const total = Number(inv.total || 0);
+      if (total <= 0) continue;
+      const pagadoEnPeriodo =
+        (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      cobrado += Number(inv.iva_amount ?? 0) * ratio;
+    }
+
+    const devengado =
+      allInvoices.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0) +
+      manualIncomes.reduce((acc, m) => acc + Number(m.iva_amount ?? 0), 0);
+
+    return {
+      cobrado: Math.round(cobrado * 100) / 100,
+      devengado: Math.round(devengado * 100) / 100,
+    };
+  }
+
+  /**
+   * IVA acreditable (gastos): pagado = IVA de expenses con is_paid = true en el período.
+   * Devengado = IVA de todos los expenses del período.
+   */
+  async calculateIVAAcreditable(
+    profileId: string,
+    periodId: string
+  ): Promise<{ pagado: number; devengado: number }> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return { pagado: 0, devengado: 0 };
+    }
+
+    const [expensesPagados, expensesTodos] = await Promise.all([
+      AccruedExpense.findAll({
+        where: {
+          profile_id: profileId,
+          is_paid: true,
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['iva_amount'],
+      }),
+      AccruedExpense.findAll({
+        where: {
+          profile_id: profileId,
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['iva_amount'],
+      }),
+    ]);
+
+    const pagado = expensesPagados.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
+    const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
+
+    return {
+      pagado: Math.round(pagado * 100) / 100,
+      devengado: Math.round(devengado * 100) / 100,
+    };
+  }
+
+  /**
+   * Retenciones (IVA e ISR): cobrado = retenciones de facturas PUE + prorrateado por lo cobrado
+   * en PPD. Devengado = retenciones de todas las facturas. manual_incomes no tiene retenciones en el modelo.
+   */
+  async calculateRetenciones(
+    profileId: string,
+    periodId: string
+  ): Promise<{
+    iva_cobrado: number;
+    iva_devengado: number;
+    isr_cobrado: number;
+    isr_devengado: number;
+  }> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return { iva_cobrado: 0, iva_devengado: 0, isr_cobrado: 0, isr_devengado: 0 };
+    }
+
+    const [invoicesPUE, invoicesPPD, allInvoices, complementosPorFactura, manualPorFactura] =
+      await Promise.all([
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PUE',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PPD',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['uuid', 'total', 'retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: { [Op.in]: ['PUE', 'PPD'] },
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+      ]);
+
+    let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
+    let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
+    for (const inv of invoicesPPD) {
+      const total = Number(inv.total || 0);
+      if (total <= 0) continue;
+      const pagadoEnPeriodo =
+        (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
+      isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
+    }
+
+    const iva_devengado = allInvoices.reduce(
+      (acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0),
+      0
+    );
+    const isr_devengado = allInvoices.reduce(
+      (acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0),
+      0
+    );
+
+    return {
+      iva_cobrado: Math.round(iva_cobrado * 100) / 100,
+      iva_devengado: Math.round(iva_devengado * 100) / 100,
+      isr_cobrado: Math.round(isr_cobrado * 100) / 100,
+      isr_devengado: Math.round(isr_devengado * 100) / 100,
+    };
+  }
+
+  /**
+   * PPD por cobrar: facturas PPD del período que no tienen complemento completo (saldo pendiente).
+   * Suma la parte pendiente en base (subtotal + iva_amount) prorrateada por lo que falta por cobrar.
+   */
+  async calculatePPDPorCobrar(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const invoicesPPD = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: 'PPD',
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['uuid', 'subtotal', 'iva_amount', 'total'],
+    });
+    if (invoicesPPD.length === 0) return 0;
+
+    const uuids = invoicesPPD.map((inv) => inv.uuid);
+    const [complementosPorFactura, manualPorFactura] = await Promise.all([
+      this.sumComplementosPorFactura([profileId], uuids),
+      (async () => {
+        const facturas = await Invoice.findAll({
+          where: { profile_id: profileId },
+          attributes: ['uuid', 'pagos'],
+        });
+        return this.sumManualPagos(facturas, null).porFactura;
+      })(),
+    ]);
+
+    let total = 0;
+    for (const inv of invoicesPPD) {
+      const totalFactura = Number(inv.total || 0);
+      if (totalFactura <= 0) continue;
+      const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      if (cobrado >= totalFactura) continue;
+      const subtotalIva = Number(inv.subtotal ?? 0) + Number(inv.iva_amount ?? 0);
+      const pendiente = subtotalIva * (1 - cobrado / totalFactura);
+      total += pendiente;
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  /**
+   * PPD por pagar: gastos del período con is_paid = false. Suma (subtotal + iva_amount).
+   */
+  async calculatePPDPorPagar(profileId: string, periodId: string): Promise<number> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return 0;
+    }
+
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        is_paid: false,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal', 'iva_amount'],
+    });
+    const sum = expenses.reduce(
+      (acc, e) => acc + Number(e.subtotal ?? 0) + Number(e.iva_amount ?? 0),
+      0
+    );
+    return Math.round(sum * 100) / 100;
   }
 }
