@@ -446,6 +446,15 @@ export class MetricsService {
   }
 
   /**
+   * Rango de fechas para un mes/año (primer día del mes inclusive, primer día del siguiente exclusive).
+   */
+  private static getDateRangeFromMonthYear(mes: number, año: number): { start: Date; end: Date } {
+    const start = new Date(año, mes - 1, 1, 0, 0, 0);
+    const end = new Date(año, mes, 1, 0, 0, 0);
+    return { start, end };
+  }
+
+  /**
    * Complementos de pago por factura (solo facturas PPD) con fecha_pago en el período.
    */
   private async getComplementosPorFacturaEnPeriodo(
@@ -771,6 +780,445 @@ export class MetricsService {
     };
 
     return response;
+  }
+
+  /**
+   * Métricas por rango de fechas (sin period_id). Para manual_incomes filtra por fecha en el rango.
+   * Útil para mes/año cuando no hay período o se agregan varios perfiles.
+   */
+  async getMetricsByDateRange(
+    profileId: string,
+    start: Date,
+    end: Date
+  ): Promise<PeriodMetricsResponse> {
+    const dateRange = { start, end };
+    const [
+      ingresosCobrados,
+      egresosPagados,
+      ingresosDevengados,
+      egresosDevengados,
+      ivaTrasladado,
+      ivaAcreditable,
+      retenciones,
+      porCobrar,
+      porPagar,
+    ] = await Promise.all([
+      this.calculateIngresosCobradosForRange(profileId, dateRange),
+      this.calculateEgresosPagadosForRange(profileId, dateRange),
+      this.calculateIngresosDevengadosForRange(profileId, dateRange),
+      this.calculateEgresosDevengadosForRange(profileId, dateRange),
+      this.calculateIVATrasladadoForRange(profileId, dateRange),
+      this.calculateIVAAcreditableForRange(profileId, dateRange),
+      this.calculateRetencionesForRange(profileId, dateRange),
+      this.calculatePPDPorCobrarForRange(profileId, dateRange),
+      this.calculatePPDPorPagarForRange(profileId, dateRange),
+    ]);
+
+    const flujoNeto = ingresosCobrados - egresosPagados;
+    const resultadoDevengado = ingresosDevengados - egresosDevengados;
+
+    return {
+      period: { id: '', start, end },
+      flujo: {
+        ingresos_cobrados: ingresosCobrados,
+        egresos_pagados: egresosPagados,
+        flujo_neto: flujoNeto,
+      },
+      devengado: {
+        ingresos_devengados: ingresosDevengados,
+        egresos_devengados: egresosDevengados,
+        resultado_devengado: resultadoDevengado,
+      },
+      impuestos: {
+        iva_trasladado: { cobrado: ivaTrasladado.cobrado, devengado: ivaTrasladado.devengado },
+        iva_acreditable: { pagado: ivaAcreditable.pagado, devengado: ivaAcreditable.devengado },
+        retenciones_iva: {
+          cobrado: retenciones.iva_cobrado,
+          devengado: retenciones.iva_devengado,
+        },
+        retenciones_isr: {
+          cobrado: retenciones.isr_cobrado,
+          devengado: retenciones.isr_devengado,
+        },
+      },
+      pendientes: { por_cobrar: porCobrar, por_pagar: porPagar },
+    };
+  }
+
+  /**
+   * Métricas para mes/año: un perfil (profile_id) o todos (profileIds). Una sola petición.
+   */
+  async getMetricsForMonthYear(
+    userId: string,
+    mes: number,
+    año: number,
+    profileId?: string
+  ): Promise<PeriodMetricsResponse | null> {
+    const profileIds = profileId
+      ? [profileId]
+      : (await Profile.findAll({ where: { user_id: userId }, attributes: ['id'] })).map(
+          (p) => p.id
+        );
+    if (profileIds.length === 0) return null;
+
+    const { start, end } = MetricsService.getDateRangeFromMonthYear(mes, año);
+
+    const results = await Promise.all(
+      profileIds.map((pid) => this.getMetricsByDateRange(pid, start, end))
+    );
+
+    if (results.length === 1) {
+      const single = results[0];
+      if (!single) return null;
+      return {
+        period: { id: single.period.id, start, end },
+        flujo: single.flujo,
+        devengado: single.devengado,
+        impuestos: single.impuestos,
+        pendientes: single.pendientes,
+      };
+    }
+
+    const aggregated: PeriodMetricsResponse = {
+      period: { id: 'aggregated', start, end },
+      flujo: {
+        ingresos_cobrados: 0,
+        egresos_pagados: 0,
+        flujo_neto: 0,
+      },
+      devengado: {
+        ingresos_devengados: 0,
+        egresos_devengados: 0,
+        resultado_devengado: 0,
+      },
+      impuestos: {
+        iva_trasladado: { cobrado: 0, devengado: 0 },
+        iva_acreditable: { pagado: 0, devengado: 0 },
+        retenciones_iva: { cobrado: 0, devengado: 0 },
+        retenciones_isr: { cobrado: 0, devengado: 0 },
+      },
+      pendientes: { por_cobrar: 0, por_pagar: 0 },
+    };
+
+    for (const r of results) {
+      aggregated.flujo.ingresos_cobrados += r.flujo.ingresos_cobrados;
+      aggregated.flujo.egresos_pagados += r.flujo.egresos_pagados;
+      aggregated.flujo.flujo_neto += r.flujo.flujo_neto;
+      aggregated.devengado.ingresos_devengados += r.devengado.ingresos_devengados;
+      aggregated.devengado.egresos_devengados += r.devengado.egresos_devengados;
+      aggregated.devengado.resultado_devengado += r.devengado.resultado_devengado;
+      aggregated.impuestos.iva_trasladado.cobrado += r.impuestos.iva_trasladado.cobrado;
+      aggregated.impuestos.iva_trasladado.devengado += r.impuestos.iva_trasladado.devengado;
+      aggregated.impuestos.iva_acreditable.pagado += r.impuestos.iva_acreditable.pagado;
+      aggregated.impuestos.iva_acreditable.devengado += r.impuestos.iva_acreditable.devengado;
+      aggregated.impuestos.retenciones_iva.cobrado += r.impuestos.retenciones_iva.cobrado;
+      aggregated.impuestos.retenciones_iva.devengado += r.impuestos.retenciones_iva.devengado;
+      aggregated.impuestos.retenciones_isr.cobrado += r.impuestos.retenciones_isr.cobrado;
+      aggregated.impuestos.retenciones_isr.devengado += r.impuestos.retenciones_isr.devengado;
+      aggregated.pendientes.por_cobrar += r.pendientes.por_cobrar;
+      aggregated.pendientes.por_pagar += r.pendientes.por_pagar;
+    }
+
+    aggregated.flujo.flujo_neto = Math.round(aggregated.flujo.flujo_neto * 100) / 100;
+    aggregated.devengado.resultado_devengado =
+      Math.round(aggregated.devengado.resultado_devengado * 100) / 100;
+
+    return aggregated;
+  }
+
+  private async calculateIngresosCobradosForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const invoicesPUE = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: 'PUE',
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumPUE = invoicesPUE.reduce((acc, inv) => acc + Number(inv.subtotal || 0), 0);
+    const complementosPPD = await PaymentComplementItem.findAll({
+      where: {
+        profile_id: profileId,
+        fecha_pago: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+    });
+    const invoiceUUIDs = [...new Set(complementosPPD.map((c) => c.factura_uuid))];
+    const invoicesPPD = invoiceUUIDs.length
+      ? await Invoice.findAll({
+          where: { profile_id: profileId, uuid: { [Op.in]: invoiceUUIDs }, tipo: 'PPD' },
+          attributes: ['uuid'],
+        })
+      : [];
+    const uuidPPDSet = new Set(invoicesPPD.map((i) => i.uuid));
+    const sumComplementos = complementosPPD
+      .filter((c) => uuidPPDSet.has(c.factura_uuid))
+      .reduce((acc, c) => acc + Number(c.imp_pagado || 0), 0);
+    return Math.round((sumPUE + sumComplementos) * 100) / 100;
+  }
+
+  private async calculateEgresosPagadosForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        is_paid: true,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    return Math.round(expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0) * 100) / 100;
+  }
+
+  private async calculateIngresosDevengadosForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const invoices = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: { [Op.in]: ['PUE', 'PPD'] },
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    const manualIncomes = await ManualIncome.findAll({
+      where: {
+        profile_id: profileId,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumI = invoices.reduce((acc, inv) => acc + Number(inv.subtotal || 0), 0);
+    const sumM = manualIncomes.reduce((acc, m) => acc + Number(m.subtotal || 0), 0);
+    return Math.round((sumI + sumM) * 100) / 100;
+  }
+
+  private async calculateEgresosDevengadosForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    return Math.round(expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0) * 100) / 100;
+  }
+
+  private async calculateIVATrasladadoForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<{ cobrado: number; devengado: number }> {
+    const [invoicesPUE, invoicesPPD, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
+      await Promise.all([
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PUE',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['iva_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PPD',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['uuid', 'iva_amount', 'total'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: { [Op.in]: ['PUE', 'PPD'] },
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['iva_amount'],
+        }),
+        ManualIncome.findAll({
+          where: {
+            profile_id: profileId,
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['iva_amount'],
+        }),
+        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+      ]);
+
+    let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
+    for (const inv of invoicesPPD) {
+      const total = Number(inv.total || 0);
+      if (total <= 0) continue;
+      const pagadoEnPeriodo =
+        (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      cobrado += Number(inv.iva_amount ?? 0) * ratio;
+    }
+    const devengado =
+      allInvoices.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0) +
+      manualIncomes.reduce((acc, m) => acc + Number(m.iva_amount ?? 0), 0);
+    return {
+      cobrado: Math.round(cobrado * 100) / 100,
+      devengado: Math.round(devengado * 100) / 100,
+    };
+  }
+
+  private async calculateIVAAcreditableForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<{ pagado: number; devengado: number }> {
+    const [expensesPagados, expensesTodos] = await Promise.all([
+      AccruedExpense.findAll({
+        where: {
+          profile_id: profileId,
+          is_paid: true,
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['iva_amount'],
+      }),
+      AccruedExpense.findAll({
+        where: {
+          profile_id: profileId,
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['iva_amount'],
+      }),
+    ]);
+    const pagado = expensesPagados.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
+    const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
+    return {
+      pagado: Math.round(pagado * 100) / 100,
+      devengado: Math.round(devengado * 100) / 100,
+    };
+  }
+
+  private async calculateRetencionesForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<{
+    iva_cobrado: number;
+    iva_devengado: number;
+    isr_cobrado: number;
+    isr_devengado: number;
+  }> {
+    const [invoicesPUE, invoicesPPD, allInvoices, complementosPorFactura, manualPorFactura] =
+      await Promise.all([
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PUE',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: 'PPD',
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['uuid', 'total', 'retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            tipo: { [Op.in]: ['PUE', 'PPD'] },
+            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+          },
+          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+        }),
+        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+      ]);
+
+    let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
+    let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
+    for (const inv of invoicesPPD) {
+      const total = Number(inv.total || 0);
+      if (total <= 0) continue;
+      const pagadoEnPeriodo =
+        (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
+      isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
+    }
+    const iva_devengado = allInvoices.reduce(
+      (acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0),
+      0
+    );
+    const isr_devengado = allInvoices.reduce(
+      (acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0),
+      0
+    );
+    return {
+      iva_cobrado: Math.round(iva_cobrado * 100) / 100,
+      iva_devengado: Math.round(iva_devengado * 100) / 100,
+      isr_cobrado: Math.round(isr_cobrado * 100) / 100,
+      isr_devengado: Math.round(isr_devengado * 100) / 100,
+    };
+  }
+
+  private async calculatePPDPorCobrarForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const invoicesPPD = await Invoice.findAll({
+      where: {
+        profile_id: profileId,
+        tipo: 'PPD',
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['uuid', 'subtotal', 'iva_amount', 'total'],
+    });
+    if (invoicesPPD.length === 0) return 0;
+    const uuids = invoicesPPD.map((inv) => inv.uuid);
+    const [complementosPorFactura, manualPorFactura] = await Promise.all([
+      this.sumComplementosPorFactura([profileId], uuids),
+      (async () => {
+        const facturas = await Invoice.findAll({
+          where: { profile_id: profileId },
+          attributes: ['uuid', 'pagos'],
+        });
+        return this.sumManualPagos(facturas, null).porFactura;
+      })(),
+    ]);
+    let total = 0;
+    for (const inv of invoicesPPD) {
+      const totalFactura = Number(inv.total || 0);
+      if (totalFactura <= 0) continue;
+      const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      if (cobrado >= totalFactura) continue;
+      const subtotalIva = Number(inv.subtotal ?? 0) + Number(inv.iva_amount ?? 0);
+      total += subtotalIva * (1 - cobrado / totalFactura);
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  private async calculatePPDPorPagarForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<number> {
+    const expenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        is_paid: false,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal', 'iva_amount'],
+    });
+    const sum = expenses.reduce(
+      (acc, e) => acc + Number(e.subtotal ?? 0) + Number(e.iva_amount ?? 0),
+      0
+    );
+    return Math.round(sum * 100) / 100;
   }
 
   /**
