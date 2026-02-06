@@ -868,7 +868,15 @@ export class MetricsService {
     );
 
     if (results.length === 1) {
-      return { ...results[0], period: { id: '', start, end } };
+      const single = results[0];
+      if (!single) return null;
+      return {
+        period: { id: single.period.id, start, end },
+        flujo: single.flujo,
+        devengado: single.devengado,
+        impuestos: single.impuestos,
+        pendientes: single.pendientes,
+      };
     }
 
     const aggregated: PeriodMetricsResponse = {
