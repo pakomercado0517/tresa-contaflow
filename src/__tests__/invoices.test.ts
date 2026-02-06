@@ -96,7 +96,7 @@ describe("Invoices API", () => {
         nombre_emisor: "Empresa de Prueba",
         rfc_receptor: "CLI123456XYZ",
         nombre_receptor: "Cliente",
-        pagos: [{ monto: 1000.0, fechaPago: new Date(), formaPago: "03" }],
+        pagos: [{ monto: 1000.0, fechaPago: new Date("2024-12-15"), formaPago: "03" }],
         validacion: {},
       });
 
@@ -149,6 +149,7 @@ describe("Invoices API", () => {
         complemento_data: { pagos: [] },
       });
 
+      // Complemento refleja: saldo_ant 1000 (ya pagados 1000 vía invoice.pagos), pago 500, insoluto 500
       await PaymentComplementItem.create({
         complement_id: complemento.id,
         profile_id: profileId,
@@ -157,15 +158,15 @@ describe("Invoices API", () => {
         forma_pago: "03",
         moneda_pago: "MXN",
         tipo_cambio_pago: 1,
-        monto_pago: 1000,
+        monto_pago: 500,
         num_operacion: null,
         moneda_dr: "MXN",
         tipo_cambio_dr: 1,
         metodo_pago_dr: "PPD",
         num_parcialidad: 1,
-        imp_saldo_ant: 2000,
+        imp_saldo_ant: 1000,
         imp_pagado: 500,
-        imp_saldo_insoluto: 1500,
+        imp_saldo_insoluto: 500,
       });
 
       const response = await request(app)

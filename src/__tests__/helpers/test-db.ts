@@ -1,4 +1,18 @@
-import { User, Profile, Invoice, AccruedExpense, Subscription, PaymentEvent, sequelize } from "../../database/models/index";
+import {
+  User,
+  Profile,
+  Invoice,
+  AccruedExpense,
+  Subscription,
+  PaymentEvent,
+  Period,
+  ManualIncome,
+  PaymentComplement,
+  PaymentComplementItem,
+  DiscountCode,
+  SatSearchLog,
+  sequelize,
+} from "../../database/models/index";
 
 /**
  * Limpia todas las tablas de la base de datos de pruebas
@@ -9,11 +23,17 @@ export async function cleanDatabase(): Promise<void> {
     // Desactivar foreign keys temporalmente para poder eliminar en cualquier orden
     await sequelize.query("SET session_replication_role = 'replica';");
     
-    // Eliminar en orden inverso de dependencias
-    await PaymentEvent.destroy({ where: {}, truncate: true, cascade: true });
-    await Invoice.destroy({ where: {}, truncate: true, cascade: true });
+    // Eliminar en orden inverso de dependencias (hijos primero, padres al final)
+    await ManualIncome.destroy({ where: {}, truncate: true, cascade: true });
+    await PaymentComplementItem.destroy({ where: {}, truncate: true, cascade: true });
+    await PaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
     await AccruedExpense.destroy({ where: {}, truncate: true, cascade: true });
+    await Invoice.destroy({ where: {}, truncate: true, cascade: true });
+    await Period.destroy({ where: {}, truncate: true, cascade: true });
+    await PaymentEvent.destroy({ where: {}, truncate: true, cascade: true });
     await Subscription.destroy({ where: {}, truncate: true, cascade: true });
+    await DiscountCode.destroy({ where: {}, truncate: true, cascade: true });
+    await SatSearchLog.destroy({ where: {}, truncate: true, cascade: true });
     await Profile.destroy({ where: {}, truncate: true, cascade: true });
     await User.destroy({ where: {}, truncate: true, cascade: true });
     

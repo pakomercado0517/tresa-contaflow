@@ -107,7 +107,12 @@ export class CFDIParserService {
     const fecha = this.parseFecha(comprobante["@_Fecha"]);
     const total = parseFloat(comprobante["@_Total"] || "0");
     const subtotal = parseFloat(comprobante["@_SubTotal"] || "0");
-    const iva = total - subtotal;
+
+    const impuestos = this.extractImpuestos(
+      comprobante as Record<string, unknown>
+    );
+    const iva =
+      impuestos.ivaAmount > 0 ? impuestos.ivaAmount : total - subtotal;
 
     // Extraer Emisor
     const emisor = comprobante["cfdi:Emisor"] || comprobante["Emisor"];
@@ -138,6 +143,9 @@ export class CFDIParserService {
       total,
       subtotal,
       iva,
+      iva_amount: impuestos.ivaAmount,
+      retencion_iva_amount: impuestos.retencionIva,
+      retencion_isr_amount: impuestos.retencionIsr,
       rfcEmisor,
       nombreEmisor,
       regimenFiscalEmisor,
@@ -164,7 +172,12 @@ export class CFDIParserService {
     const fecha = this.parseFecha(comprobante["@_Fecha"]);
     const total = parseFloat(comprobante["@_Total"] || "0");
     const subtotal = parseFloat(comprobante["@_SubTotal"] || "0");
-    const iva = total - subtotal;
+
+    const impuestos = this.extractImpuestos(
+      comprobante as Record<string, unknown>
+    );
+    const iva =
+      impuestos.ivaAmount > 0 ? impuestos.ivaAmount : total - subtotal;
 
     // Extraer Emisor
     const emisor = comprobante["cfdi:Emisor"] || comprobante["Emisor"];
@@ -195,6 +208,9 @@ export class CFDIParserService {
       total,
       subtotal,
       iva,
+      iva_amount: impuestos.ivaAmount,
+      retencion_iva_amount: impuestos.retencionIva,
+      retencion_isr_amount: impuestos.retencionIsr,
       rfcEmisor,
       nombreEmisor,
       regimenFiscalEmisor,
@@ -238,6 +254,58 @@ export class CFDIParserService {
     }
 
     throw new Error("No se pudo extraer el UUID del timbre fiscal");
+  }
+
+  /**
+   * Extrae impuestos del Comprobante (IVA trasladado, retenciones IVA/ISR)
+   * Códigos SAT: 001=ISR, 002=IVA
+   */
+  private extractImpuestos(comprobante: Record<string, unknown>): {
+    ivaAmount: number;
+    retencionIva: number;
+    retencionIsr: number;
+  } {
+    const impuestos =
+      comprobante["cfdi:Impuestos"] ?? comprobante["Impuestos"];
+    if (!impuestos || typeof impuestos !== "object") {
+      return { ivaAmount: 0, retencionIva: 0, retencionIsr: 0 };
+    }
+
+    const impuestosObj = impuestos as Record<string, unknown>;
+    const ivaAmount = this.getNumberAttr(
+      impuestosObj,
+      "@_TotalImpuestosTrasladados",
+      0
+    );
+
+    const retenciones =
+      impuestosObj["cfdi:Retenciones"] ?? impuestosObj["Retenciones"];
+    let retencionIva = 0;
+    let retencionIsr = 0;
+
+    if (retenciones) {
+      const retencionNode =
+        (retenciones as Record<string, unknown>)["cfdi:Retencion"] ??
+        (retenciones as Record<string, unknown>)["Retencion"];
+      const retencionArray = Array.isArray(retencionNode)
+        ? retencionNode
+        : retencionNode
+          ? [retencionNode]
+          : [];
+
+      for (const retencionItem of retencionArray) {
+        const retencion = retencionItem as Record<string, unknown>;
+        const impuesto = String(this.getStringAttr(retencion, "@_Impuesto"));
+        const importe = this.getNumberAttr(retencion, "@_Importe", 0);
+        if (impuesto === "001") {
+          retencionIsr += importe;
+        } else if (impuesto === "002") {
+          retencionIva += importe;
+        }
+      }
+    }
+
+    return { ivaAmount, retencionIva, retencionIsr };
   }
 
   /**

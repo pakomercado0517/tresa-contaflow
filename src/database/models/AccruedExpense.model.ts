@@ -23,6 +23,7 @@ interface AccruedExpenseAttributes {
   retencion_iva_amount: number;
   retencion_isr_amount: number;
   is_paid: boolean;
+  payment_date: Date | null;
   concepto: string | null;
   categoria: string | null;
   uuid: string | null;
@@ -63,6 +64,7 @@ interface AccruedExpenseCreationAttributes
       | "retencion_iva_amount"
       | "retencion_isr_amount"
       | "is_paid"
+      | "payment_date"
     >,
     Partial<
       Pick<
@@ -84,6 +86,7 @@ interface AccruedExpenseCreationAttributes
         | "retencion_iva_amount"
         | "retencion_isr_amount"
         | "is_paid"
+        | "payment_date"
       >
     > {}
 
@@ -104,6 +107,7 @@ class AccruedExpense
   declare retencion_iva_amount: number;
   declare retencion_isr_amount: number;
   declare is_paid: boolean;
+  declare payment_date: Date | null;
   declare concepto: string | null;
   declare categoria: string | null;
   declare uuid: string | null;
@@ -183,6 +187,10 @@ AccruedExpense.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    payment_date: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     concepto: {
       type: DataTypes.TEXT,

@@ -758,7 +758,9 @@ async function saveInvoice(
     total: cfdi.total,
     subtotal: cfdi.subtotal,
     iva: cfdi.iva,
-    iva_amount: cfdi.iva,
+    iva_amount: cfdi.iva_amount ?? cfdi.iva,
+    retencion_iva_amount: cfdi.retencion_iva_amount ?? 0,
+    retencion_isr_amount: cfdi.retencion_isr_amount ?? 0,
     tipo: cfdi.tipo,
     rfc_emisor: cfdi.rfcEmisor,
     nombre_emisor: cfdi.nombreEmisor,
@@ -783,6 +785,8 @@ async function saveExpense(
   profileId: string,
   estadoValidacion: EstadoValidacionGasto
 ): Promise<AccruedExpense> {
+  const isPUE = cfdi.tipo === "PUE";
+
   const expenseData = {
     profile_id: profileId,
     tipo_origen: "XML" as const,
@@ -792,7 +796,11 @@ async function saveExpense(
     total: cfdi.total,
     subtotal: cfdi.subtotal,
     iva: cfdi.iva,
-    iva_amount: cfdi.iva,
+    iva_amount: cfdi.iva_amount ?? cfdi.iva,
+    retencion_iva_amount: cfdi.retencion_iva_amount ?? 0,
+    retencion_isr_amount: cfdi.retencion_isr_amount ?? 0,
+    is_paid: isPUE,
+    payment_date: isPUE ? cfdi.fecha : null,
     concepto: cfdi.concepto || null,
     categoria: null, // Se puede agregar categorización automática en el futuro
     uuid: cfdi.uuid,

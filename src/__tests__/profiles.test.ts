@@ -2,7 +2,7 @@ import request from "supertest";
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
-import { Profile } from "../database/models/index";
+import { Profile, Subscription } from "../database/models/index";
 
 describe("Profiles API", () => {
   let accessToken: string;
@@ -12,6 +12,8 @@ describe("Profiles API", () => {
     await cleanDatabase();
     const user = await createTestUser("profiles@example.com");
     userId = user.id;
+    // Plan BASIC para poder crear varios perfiles (duplicate RFC test necesita 2 intentos)
+    await Subscription.create({ user_id: userId, plan: "BASIC" });
     const tokens = generateTestTokens(userId, "profiles@example.com");
     accessToken = tokens.accessToken;
   });
@@ -28,7 +30,7 @@ describe("Profiles API", () => {
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
           nombre: "Mi Empresa S.A. de C.V.",
-          rfc: "XAXX010101000", // RFC genérico válido
+          rfc: "XAXX010101AA0", // RFC genérico que cumple regex (homoclave AA0)
           tipo_persona: "MORAL",
           regimen_fiscal: "601",
         });
@@ -36,7 +38,7 @@ describe("Profiles API", () => {
       expectSuccess(response, 201);
       expect(response.body).toHaveProperty("data");
       expect(response.body.data).toHaveProperty("id");
-      expect(response.body.data).toHaveProperty("rfc", "XAXX010101000");
+      expect(response.body.data).toHaveProperty("rfc", "XAXX010101AA0");
       expect(response.body.data).toHaveProperty("nombre", "Mi Empresa S.A. de C.V.");
     });
 
@@ -46,7 +48,7 @@ describe("Profiles API", () => {
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
           nombre: "Otra Empresa",
-          rfc: "XAXX010101000", // Mismo RFC genérico del test anterior
+          rfc: "XAXX010101AA0", // Mismo RFC genérico del test anterior
           tipo_persona: "MORAL",
           regimen_fiscal: "601",
         });

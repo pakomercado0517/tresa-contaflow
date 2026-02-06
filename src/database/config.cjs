@@ -1,4 +1,9 @@
-require("dotenv").config();
+// Cargar variables de entorno según el entorno
+if (process.env.NODE_ENV === "test") {
+  require("dotenv").config({ path: ".env.test", override: true });
+} else {
+  require("dotenv").config();
+}
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL no está definida en las variables de entorno");

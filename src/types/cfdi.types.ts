@@ -10,7 +10,10 @@ export interface CFDI {
   tipo: TipoCFDI;
   total: number; // Total con IVA
   subtotal: number; // Subtotal sin IVA
-  iva: number; // IVA calculado
+  iva: number; // IVA calculado (fallback: total - subtotal cuando no hay Impuestos)
+  iva_amount?: number; // TotalImpuestosTrasladados (IVA trasladado)
+  retencion_iva_amount?: number; // Suma Retenciones donde Impuesto=002
+  retencion_isr_amount?: number; // Suma Retenciones donde Impuesto=001
   rfcEmisor: string; // RFC del emisor
   nombreEmisor: string; // Nombre/razón social emisor
   regimenFiscalEmisor: string; // Régimen fiscal del emisor (clave SAT)

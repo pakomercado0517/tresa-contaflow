@@ -324,10 +324,14 @@ export class MetricsService {
           pendientePagar += saldoInsoluto;
         }
       } else {
-        // Si no hay complementos, usar el monto total del PPD
+        // Si no hay complementos, restar pagos manuales y complementos ya aplicados
         const totalFactura = Number(factura.total);
-        if (totalFactura > 0.01) {
-          pendientePagar += totalFactura;
+        const totalPagosParciales =
+          (paymentContext.pagosComplementoPorFactura[factura.uuid] || 0) +
+          (paymentContext.pagosManualPorFactura[factura.uuid] || 0);
+        const saldoPendiente = totalFactura - totalPagosParciales;
+        if (saldoPendiente > 0.01) {
+          pendientePagar += saldoPendiente;
         }
       }
     }
