@@ -14,6 +14,7 @@ import subscriptionRoutes from './routes/subscription.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import discountRoutes from './routes/discount.routes.js';
 import satRoutes from './routes/sat.routes.js';
+import manualIncomesRoutes from './routes/manual-incomes.routes.js';
 import { logger } from './utils/logger.util.js';
 
 dotenv.config();
@@ -121,6 +122,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/discounts', discountRoutes);
 app.use('/api/sat', satRoutes);
+app.use('/api/manual-incomes', manualIncomesRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Middleware de manejo de errores centralizado (debe ir al final, después de todas las rutas)
