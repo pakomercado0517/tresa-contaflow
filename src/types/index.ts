@@ -46,6 +46,8 @@ export type {
   BaseParserResult,
   InvoiceData,
   ExpenseData,
+  PayrollData,
+  PayrollReceptorData,
 } from './parser.types.js';
 export type {
   PeriodInfo,
@@ -53,5 +55,6 @@ export type {
   DevengadoMetrics,
   ImpuestosMetrics,
   PendientesMetrics,
+  NominaMetrics,
   PeriodMetricsResponse,
 } from './metrics.types.js';

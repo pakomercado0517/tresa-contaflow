@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
+  Version="4.0" Serie="N" Folio="1002" Fecha="2025-01-31T12:00:00" SubTotal="12500.00" Moneda="MXN" Total="12500.00"
+  TipoDeComprobante="N" LugarExpedicion="06100" Exportacion="01" MetodoPago="NA">
+  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contaflow SA de CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="MARA850512MDF" Nombre="Maria Ramirez Lopez" RegimenFiscalReceptor="605" UsoCFDI="CN01" DomicilioFiscalReceptor="03100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="E48" Descripcion="Pago de nómina mensual" ValorUnitario="12500.00" Importe="12500.00" ObjetoImp="01"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <nomina12:Nomina Version="1.2" TipoNomina="O" FechaPago="2025-01-31" FechaInicialPago="2025-01-01" FechaFinalPago="2025-01-31" NumDiasPagados="31.000" TotalPercepciones="15000.00" TotalDeducciones="2500.00" TotalOtrosPagos="0.00">
+      <nomina12:Receptor Curp="MARA850512MDFLRN02" NumSeguridadSocial="98765432109" FechaInicioRelLaboral="2019-06-15" TipoContrato="01" TipoRegimen="02" NumEmpleado="EMP002" Departamento="Ventas" Puesto="Ejecutiva comercial" PeriodicidadPago="05" ClaveEntFed="DIF"/>
+      <nomina12:Percepciones TotalSueldos="14000.00" TotalGravado="13500.00" TotalExento="1500.00">
+        <nomina12:Percepcion TipoPercepcion="001" Clave="SUELDO" Concepto="Sueldo mensual" ImporteGravado="12000.00" ImporteExento="0.00"/>
+        <nomina12:Percepcion TipoPercepcion="029" Clave="VALES" Concepto="Vales de despensa" ImporteGravado="0.00" ImporteExento="1500.00"/>
+        <nomina12:Percepcion TipoPercepcion="002" Clave="AGUINALDO" Concepto="Aguinaldo proporcional" ImporteGravado="1500.00" ImporteExento="0.00"/>
+      </nomina12:Percepciones>
+      <nomina12:Deducciones TotalOtrasDeducciones="1200.00" TotalImpuestosRetenidos="1300.00">
+        <nomina12:Deduccion TipoDeduccion="001" Clave="IMSS" Concepto="Seguridad social" Importe="1200.00"/>
+        <nomina12:Deduccion TipoDeduccion="002" Clave="ISR" Concepto="ISR" Importe="1300.00"/>
+      </nomina12:Deducciones>
+    </nomina12:Nomina>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="b2c3d4e5-f6a7-8901-bcde-f12345678901" FechaTimbrado="2025-01-31T12:05:00" RfcProvCertif="TME120315AB1" SelloCFD="SELLO_TEST" NoCertificadoSAT="00001000000123456789" SelloSAT="SELLOSAT_TEST"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

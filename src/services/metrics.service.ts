@@ -5,10 +5,11 @@ import {
   PaymentComplementItem,
   Period,
   ManualIncome,
+  Payroll,
 } from '../database/models/index.js';
 import { PaymentStatusService } from './payment-status.service.js';
 import { Op } from 'sequelize';
-import type { PeriodMetricsResponse } from '../types/metrics.types.js';
+import type { PeriodMetricsResponse, NominaMetrics } from '../types/metrics.types.js';
 
 /**
  * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
@@ -446,6 +447,64 @@ export class MetricsService {
   }
 
   /**
+   * Suma neto_pagado de payrolls del período (profile_id + period_id).
+   */
+  async calculateNominaPagada(profileId: string, periodId: string): Promise<number> {
+    const payrolls = await Payroll.findAll({
+      where: { profile_id: profileId, period_id: periodId },
+      attributes: ['neto_pagado'],
+    });
+    const sum = payrolls.reduce((acc, p) => acc + Number(p.neto_pagado ?? 0), 0);
+    return Math.round(sum * 100) / 100;
+  }
+
+  /**
+   * Métricas de nómina del período: total_pagada, percepciones, deducciones, cantidad_empleados (distinct employee_rfc).
+   */
+  private async getNominaMetrics(profileId: string, periodId: string): Promise<NominaMetrics> {
+    const payrolls = await Payroll.findAll({
+      where: { profile_id: profileId, period_id: periodId },
+      attributes: ['neto_pagado', 'percepciones_total', 'deducciones_total', 'employee_rfc'],
+    });
+    const total_pagada = payrolls.reduce((acc, p) => acc + Number(p.neto_pagado ?? 0), 0);
+    const percepciones = payrolls.reduce((acc, p) => acc + Number(p.percepciones_total ?? 0), 0);
+    const deducciones = payrolls.reduce((acc, p) => acc + Number(p.deducciones_total ?? 0), 0);
+    const employeeRfcs = new Set(payrolls.map((p) => p.employee_rfc).filter(Boolean));
+    return {
+      total_pagada: Math.round(total_pagada * 100) / 100,
+      percepciones: Math.round(percepciones * 100) / 100,
+      deducciones: Math.round(deducciones * 100) / 100,
+      cantidad_empleados: employeeRfcs.size,
+    };
+  }
+
+  /**
+   * Métricas de nómina por rango de fechas (fecha_pago dentro del rango).
+   */
+  private async getNominaMetricsForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date }
+  ): Promise<NominaMetrics> {
+    const payrolls = await Payroll.findAll({
+      where: {
+        profile_id: profileId,
+        fecha_pago: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['neto_pagado', 'percepciones_total', 'deducciones_total', 'employee_rfc'],
+    });
+    const total_pagada = payrolls.reduce((acc, p) => acc + Number(p.neto_pagado ?? 0), 0);
+    const percepciones = payrolls.reduce((acc, p) => acc + Number(p.percepciones_total ?? 0), 0);
+    const deducciones = payrolls.reduce((acc, p) => acc + Number(p.deducciones_total ?? 0), 0);
+    const employeeRfcs = new Set(payrolls.map((p) => p.employee_rfc).filter(Boolean));
+    return {
+      total_pagada: Math.round(total_pagada * 100) / 100,
+      percepciones: Math.round(percepciones * 100) / 100,
+      deducciones: Math.round(deducciones * 100) / 100,
+      cantidad_empleados: employeeRfcs.size,
+    };
+  }
+
+  /**
    * Rango de fechas para un mes/año (primer día del mes inclusive, primer día del siguiente exclusive).
    */
   private static getDateRangeFromMonthYear(mes: number, año: number): { start: Date; end: Date } {
@@ -730,6 +789,7 @@ export class MetricsService {
       retenciones,
       porCobrar,
       porPagar,
+      nomina,
     ] = await Promise.all([
       this.calculateIngresosCobrados(profileId, periodId),
       this.calculateEgresosPagados(profileId, periodId),
@@ -740,6 +800,7 @@ export class MetricsService {
       this.calculateRetenciones(profileId, periodId),
       this.calculatePPDPorCobrar(profileId, periodId),
       this.calculatePPDPorPagar(profileId, periodId),
+      this.getNominaMetrics(profileId, periodId),
     ]);
 
     const flujoNeto = ingresosCobrados - egresosPagados;
@@ -777,6 +838,7 @@ export class MetricsService {
         por_cobrar: porCobrar,
         por_pagar: porPagar,
       },
+      nomina,
     };
 
     return response;
@@ -802,6 +864,7 @@ export class MetricsService {
       retenciones,
       porCobrar,
       porPagar,
+      nomina,
     ] = await Promise.all([
       this.calculateIngresosCobradosForRange(profileId, dateRange),
       this.calculateEgresosPagadosForRange(profileId, dateRange),
@@ -812,6 +875,7 @@ export class MetricsService {
       this.calculateRetencionesForRange(profileId, dateRange),
       this.calculatePPDPorCobrarForRange(profileId, dateRange),
       this.calculatePPDPorPagarForRange(profileId, dateRange),
+      this.getNominaMetricsForRange(profileId, dateRange),
     ]);
 
     const flujoNeto = ingresosCobrados - egresosPagados;
@@ -842,6 +906,7 @@ export class MetricsService {
         },
       },
       pendientes: { por_cobrar: porCobrar, por_pagar: porPagar },
+      nomina,
     };
   }
 
@@ -876,6 +941,7 @@ export class MetricsService {
         devengado: single.devengado,
         impuestos: single.impuestos,
         pendientes: single.pendientes,
+        nomina: single.nomina,
       };
     }
 
@@ -898,6 +964,12 @@ export class MetricsService {
         retenciones_isr: { cobrado: 0, devengado: 0 },
       },
       pendientes: { por_cobrar: 0, por_pagar: 0 },
+      nomina: {
+        total_pagada: 0,
+        percepciones: 0,
+        deducciones: 0,
+        cantidad_empleados: 0,
+      },
     };
 
     for (const r of results) {
@@ -917,11 +989,18 @@ export class MetricsService {
       aggregated.impuestos.retenciones_isr.devengado += r.impuestos.retenciones_isr.devengado;
       aggregated.pendientes.por_cobrar += r.pendientes.por_cobrar;
       aggregated.pendientes.por_pagar += r.pendientes.por_pagar;
+      aggregated.nomina.total_pagada += r.nomina.total_pagada;
+      aggregated.nomina.percepciones += r.nomina.percepciones;
+      aggregated.nomina.deducciones += r.nomina.deducciones;
+      aggregated.nomina.cantidad_empleados += r.nomina.cantidad_empleados;
     }
 
     aggregated.flujo.flujo_neto = Math.round(aggregated.flujo.flujo_neto * 100) / 100;
     aggregated.devengado.resultado_devengado =
       Math.round(aggregated.devengado.resultado_devengado * 100) / 100;
+    aggregated.nomina.total_pagada = Math.round(aggregated.nomina.total_pagada * 100) / 100;
+    aggregated.nomina.percepciones = Math.round(aggregated.nomina.percepciones * 100) / 100;
+    aggregated.nomina.deducciones = Math.round(aggregated.nomina.deducciones * 100) / 100;
 
     return aggregated;
   }

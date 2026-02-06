@@ -29,3 +29,5 @@ export type { Document, ParsedXMLDocument } from "./base.parser.js";
 export { parseInvoice } from "./invoice.parser.js";
 
 export { parseExpense } from "./expense.parser.js";
+
+export { parsePayroll } from "./payroll.parser.js";

@@ -1,5 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { parseInvoice, parseExpense, parseXML, validateCFDI, extractSubtotal, extractIVA, extractRetenciones } from "../parsers/index.js";
+import {
+  parseInvoice,
+  parseExpense,
+  parsePayroll,
+  parseXML,
+  validateCFDI,
+  extractSubtotal,
+  extractIVA,
+  extractRetenciones,
+} from "../parsers/index.js";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 const MINIMAL_CFDI_PUE = `<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Serie="A" Folio="123" Fecha="2024-01-15T12:00:00" SubTotal="1000.00" Moneda="MXN" Total="1160.00" TipoDeComprobante="I" MetodoPago="PUE" LugarExpedicion="06100">
@@ -103,6 +114,51 @@ describe("Parsers", () => {
       expect(result.payment_date).toBeNull();
       expect(result.tipo_origen).toBe("XML");
       expect(result.uuid).toBe("11111111-2222-3333-4444-555555555555");
+    });
+  });
+
+  describe("parsePayroll", () => {
+    it("debe parsear XML de nómina y retornar PayrollData", () => {
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const xml = readFileSync(join(fixturesDir, "nomina-minimal.xml"), "utf-8");
+      const result = parsePayroll(Buffer.from(xml, "utf-8"));
+
+      expect(result.uuid).toBe("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      expect(result.percepciones_total).toBe(10000);
+      expect(result.deducciones_total).toBe(1500);
+      expect(result.otros_pagos_total).toBe(0);
+      expect(result.neto_pagado).toBe(8500);
+      expect(result.fecha_pago).toBeInstanceOf(Date);
+      expect(result.fecha_pago.getUTCFullYear()).toBe(2025);
+      expect(result.fecha_pago.getUTCMonth()).toBe(0);
+      expect(result.fecha_pago.getUTCDate()).toBe(15);
+      expect(result.receptor.nombre).toBe("Hector Gonzalez Garcia");
+      expect(result.receptor.rfc).toBe("HEGG800101ABC");
+      expect(result.receptor.curp).toBe("HEGG800101HDFRRC01");
+      expect(result.receptor.nss).toBe("12345678901");
+    });
+
+    it("debe calcular neto como percepciones - deducciones + otros_pagos", () => {
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const xml = readFileSync(join(fixturesDir, "nomina-otros-pagos.xml"), "utf-8");
+      const result = parsePayroll(Buffer.from(xml, "utf-8"));
+
+      expect(result.percepciones_total).toBe(9000);
+      expect(result.deducciones_total).toBe(800);
+      expect(result.otros_pagos_total).toBe(1000);
+      expect(result.neto_pagado).toBe(9200);
+    });
+
+    it("debe lanzar error si el XML no tiene complemento de nómina", () => {
+      expect(() => parsePayroll(Buffer.from(MINIMAL_CFDI_PUE, "utf-8"))).toThrow(
+        "XML sin complemento de nómina"
+      );
+    });
+
+    it("debe lanzar error si el XML no contiene Comprobante", () => {
+      expect(() => parsePayroll(Buffer.from("<root><other/></root>", "utf-8"))).toThrow(
+        "Comprobante CFDI válido"
+      );
     });
   });
 });

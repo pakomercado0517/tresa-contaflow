@@ -9,6 +9,7 @@ import {
   ManualIncome,
   PaymentComplement,
   PaymentComplementItem,
+  Payroll,
 } from "../database/models/index";
 import { MetricsService } from "../services/metrics.service";
 
@@ -46,6 +47,7 @@ describe("MetricsService", () => {
   });
 
   async function cleanMetricsData(): Promise<void> {
+    await Payroll.destroy({ where: { profile_id: profileId } });
     await ManualIncome.destroy({ where: { profile_id: profileId } });
     await PaymentComplementItem.destroy({ where: { profile_id: profileId } });
     await PaymentComplement.destroy({ where: { profile_id: profileId } });
@@ -525,6 +527,10 @@ describe("MetricsService", () => {
       expect(result!.impuestos).toHaveProperty("retenciones_isr");
       expect(result!.pendientes).toHaveProperty("por_cobrar");
       expect(result!.pendientes).toHaveProperty("por_pagar");
+      expect(result!.nomina).toHaveProperty("total_pagada");
+      expect(result!.nomina).toHaveProperty("percepciones");
+      expect(result!.nomina).toHaveProperty("deducciones");
+      expect(result!.nomina).toHaveProperty("cantidad_empleados");
       expect(result!.flujo.ingresos_cobrados).toBe(1000);
       expect(result!.flujo.egresos_pagados).toBe(100);
       expect(result!.flujo.flujo_neto).toBe(900);
@@ -537,6 +543,50 @@ describe("MetricsService", () => {
       const fakePeriodId = "00000000-0000-0000-0000-000000000000";
       const result = await metricsService.getMetrics(profileId, fakePeriodId);
       expect(result).toBeNull();
+    });
+  });
+
+  describe("métricas incluyen nómina pagada", () => {
+    beforeEach(cleanMetricsData);
+
+    it("getMetrics incluye nomina con total_pagada, percepciones, deducciones y cantidad_empleados", async () => {
+      await Payroll.create({
+        profile_id: profileId,
+        period_id: periodId,
+        uuid: `NOM-${Date.now()}-1`,
+        employee_rfc: "EMP001",
+        fecha_pago: new Date("2024-12-10"),
+        percepciones_total: 10000,
+        deducciones_total: 1500,
+        neto_pagado: 8500,
+      });
+      await Payroll.create({
+        profile_id: profileId,
+        period_id: periodId,
+        uuid: `NOM-${Date.now()}-2`,
+        employee_rfc: "EMP002",
+        fecha_pago: new Date("2024-12-15"),
+        percepciones_total: 12000,
+        deducciones_total: 2000,
+        neto_pagado: 10000,
+      });
+      await Payroll.create({
+        profile_id: profileId,
+        period_id: periodId,
+        uuid: `NOM-${Date.now()}-3`,
+        employee_rfc: "EMP001",
+        fecha_pago: new Date("2024-12-20"),
+        percepciones_total: 8000,
+        deducciones_total: 1000,
+        neto_pagado: 7000,
+      });
+
+      const result = await metricsService.getMetrics(profileId, periodId);
+      expect(result).not.toBeNull();
+      expect(result!.nomina.total_pagada).toBe(25500);
+      expect(result!.nomina.percepciones).toBe(30000);
+      expect(result!.nomina.deducciones).toBe(4500);
+      expect(result!.nomina.cantidad_empleados).toBe(2);
     });
   });
 });

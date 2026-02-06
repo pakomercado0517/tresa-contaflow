@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
+  Version="4.0" Serie="N" Folio="1001" Fecha="2025-01-15T12:00:00" SubTotal="8500.00" Moneda="MXN" Total="8500.00"
+  TipoDeComprobante="N" LugarExpedicion="06100" Exportacion="01" MetodoPago="NA">
+  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contaflow SA de CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="HEGG800101ABC" Nombre="Hector Gonzalez Garcia" RegimenFiscalReceptor="605" UsoCFDI="CN01" DomicilioFiscalReceptor="06100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="E48" Descripcion="Pago de nómina" ValorUnitario="8500.00" Importe="8500.00" ObjetoImp="01"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <nomina12:Nomina Version="1.2" TipoNomina="O" FechaPago="2025-01-15" FechaInicialPago="2025-01-01" FechaFinalPago="2025-01-15" NumDiasPagados="15.000" TotalPercepciones="10000.00" TotalDeducciones="1500.00" TotalOtrosPagos="0.00">
+      <nomina12:Receptor Curp="HEGG800101HDFRRC01" NumSeguridadSocial="12345678901" FechaInicioRelLaboral="2020-03-01" TipoContrato="01" TipoRegimen="02" NumEmpleado="EMP001" PeriodicidadPago="04" ClaveEntFed="DIF"/>
+      <nomina12:Percepciones TotalGravado="9500.00" TotalExento="500.00">
+        <nomina12:Percepcion TipoPercepcion="001" Clave="SUELDO" Concepto="Sueldo quincenal" ImporteGravado="9500.00" ImporteExento="500.00"/>
+      </nomina12:Percepciones>
+      <nomina12:Deducciones TotalOtrasDeducciones="800.00" TotalImpuestosRetenidos="700.00">
+        <nomina12:Deduccion TipoDeduccion="001" Clave="IMSS" Concepto="Cuota obrero patronal IMSS" Importe="800.00"/>
+        <nomina12:Deduccion TipoDeduccion="002" Clave="ISR" Concepto="ISR retenido" Importe="700.00"/>
+      </nomina12:Deducciones>
+    </nomina12:Nomina>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="a1b2c3d4-e5f6-7890-abcd-ef1234567890" FechaTimbrado="2025-01-15T12:05:00" RfcProvCertif="TME120315AB1" SelloCFD="SELLO_TEST" NoCertificadoSAT="00001000000123456789" SelloSAT="SELLOSAT_TEST"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

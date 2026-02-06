@@ -33,10 +33,18 @@ export interface PendientesMetrics {
   por_pagar: number;
 }
 
+export interface NominaMetrics {
+  total_pagada: number;
+  percepciones: number;
+  deducciones: number;
+  cantidad_empleados: number;
+}
+
 export interface PeriodMetricsResponse {
   period: PeriodInfo;
   flujo: FlujoMetrics;
   devengado: DevengadoMetrics;
   impuestos: ImpuestosMetrics;
   pendientes: PendientesMetrics;
+  nomina: NominaMetrics;
 }

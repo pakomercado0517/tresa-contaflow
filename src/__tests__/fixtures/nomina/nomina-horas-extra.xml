@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
+  Version="4.0" Serie="N" Folio="1004" Fecha="2025-01-15T12:00:00" SubTotal="10200.00" Moneda="MXN" Total="10200.00"
+  TipoDeComprobante="N" LugarExpedicion="06100" Exportacion="01" MetodoPago="NA">
+  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contaflow SA de CV" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="GARC750615XYZ" Nombre="Garcia Ruiz Carlos" RegimenFiscalReceptor="605" UsoCFDI="CN01" DomicilioFiscalReceptor="44100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="E48" Descripcion="Pago de nómina con horas extra" ValorUnitario="10200.00" Importe="10200.00" ObjetoImp="01"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <nomina12:Nomina Version="1.2" TipoNomina="O" FechaPago="2025-01-15" FechaInicialPago="2025-01-01" FechaFinalPago="2025-01-15" NumDiasPagados="15.000" TotalPercepciones="12000.00" TotalDeducciones="1800.00" TotalOtrosPagos="0.00">
+      <nomina12:Receptor Curp="GARC750615HJCRRL04" NumSeguridadSocial="55443322110" FechaInicioRelLaboral="2018-01-10" TipoContrato="01" TipoRegimen="02" NumEmpleado="EMP004" Puesto="Operador" PeriodicidadPago="04" ClaveEntFed="JAL"/>
+      <nomina12:Percepciones TotalGravado="11500.00" TotalExento="500.00">
+        <nomina12:Percepcion TipoPercepcion="001" Clave="SUELDO" Concepto="Sueldo quincenal" ImporteGravado="9500.00" ImporteExento="500.00"/>
+        <nomina12:Percepcion TipoPercepcion="019" Clave="HE" Concepto="Horas extra" ImporteGravado="2000.00" ImporteExento="0.00">
+          <nomina12:HorasExtra Dias="2" TipoHoras="01" HorasExtra="8" ImportePagado="2000.00"/>
+        </nomina12:Percepcion>
+      </nomina12:Percepciones>
+      <nomina12:Deducciones TotalOtrasDeducciones="1000.00" TotalImpuestosRetenidos="800.00">
+        <nomina12:Deduccion TipoDeduccion="001" Clave="IMSS" Concepto="Seguridad social" Importe="1000.00"/>
+        <nomina12:Deduccion TipoDeduccion="002" Clave="ISR" Concepto="ISR" Importe="800.00"/>
+      </nomina12:Deducciones>
+    </nomina12:Nomina>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="d4e5f6a7-b8c9-0123-def0-234567890123" FechaTimbrado="2025-01-15T12:05:00" RfcProvCertif="TME120315AB1" SelloCFD="SELLO_TEST" NoCertificadoSAT="00001000000123456789" SelloSAT="SELLOSAT_TEST"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>

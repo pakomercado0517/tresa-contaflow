@@ -15,6 +15,7 @@ import PaymentComplement from "./PaymentComplement.model.js";
 import PaymentComplementItem from "./PaymentComplementItem.model.js";
 import SatProductService from "./SatProductService.model.js";
 import SatSearchLog from "./SatSearchLog.model.js";
+import Payroll from "./Payroll.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -28,6 +29,7 @@ export {
   AccruedExpense,
   Period,
   ManualIncome,
+  Payroll,
   DiscountCode,
   PaymentComplement,
   PaymentComplementItem,

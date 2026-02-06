@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Comprobante xmlns="http://www.sat.gob.mx/cfd/3" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
+  version="3.3" serie="N" folio="501" fecha="2024-06-15T12:00:00" subTotal="7800.00" moneda="MXN" total="7800.00"
+  tipoDeComprobante="N" lugarExpedicion="06100" formaPago="99" metodoDePago="PUE">
+  <Emisor rfc="TME120315AB1" nombre="Tresa Contaflow SA de CV" regimenFiscal="601"/>
+  <Receptor rfc="PERE880303MDF" nombre="Perez Hernandez Ana" usoCFDI="P01" regimenFiscal="605"/>
+  <Conceptos>
+    <Concepto claveProdServ="84111506" cantidad="1" claveUnidad="E48" descripcion="Pago de nómina" valorUnitario="7800.00" importe="7800.00"/>
+  </Conceptos>
+  <Complemento>
+    <nomina12:Nomina Version="1.2" TipoNomina="O" FechaPago="2024-06-15" FechaInicialPago="2024-06-01" FechaFinalPago="2024-06-15" NumDiasPagados="15.000" TotalPercepciones="9200.00" TotalDeducciones="1400.00" TotalOtrosPagos="0.00">
+      <nomina12:Receptor Curp="PERE880303MDFPRN05" NumSeguridadSocial="99887766554" FechaInicioRelLaboral="2021-02-01" TipoContrato="01" TipoRegimen="02" NumEmpleado="EMP005" PeriodicidadPago="04" ClaveEntFed="DIF"/>
+      <nomina12:Percepciones TotalGravado="8800.00" TotalExento="400.00">
+        <nomina12:Percepcion TipoPercepcion="001" Clave="SUELDO" Concepto="Sueldo quincenal" ImporteGravado="8800.00" ImporteExento="400.00"/>
+      </nomina12:Percepciones>
+      <nomina12:Deducciones TotalOtrasDeducciones="700.00" TotalImpuestosRetenidos="700.00">
+        <nomina12:Deduccion TipoDeduccion="001" Clave="IMSS" Concepto="Cuota IMSS" Importe="700.00"/>
+        <nomina12:Deduccion TipoDeduccion="002" Clave="ISR" Concepto="ISR" Importe="700.00"/>
+      </nomina12:Deducciones>
+    </nomina12:Nomina>
+    <tfd:TimbreFiscalDigital Version="1.1" UUID="e5f6a7b8-c9d0-1234-ef01-345678901234" FechaTimbrado="2024-06-15T12:05:00" RfcProvCertif="TME120315AB1" SelloCFD="SELLO_TEST" NoCertificadoSAT="00001000000123456789" SelloSAT="SELLOSAT_TEST"/>
+  </Complemento>
+</Comprobante>
