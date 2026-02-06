@@ -128,15 +128,15 @@ describe("Invoices API", () => {
 
       expectSuccess(response, 200);
       const { metrics } = response.body;
-      
-      // Total facturado = 1000 (PUE) + 2000 (PPD) = 3000
-      expect(metrics.totalFacturado).toBe(3000);
-      
-      // Total pagado = 1000 (PUE completo) + 1000 (PPD parcial) = 2000
-      expect(metrics.totalPagado).toBe(2000);
-      
-      // Pendiente = 3000 - 2000 = 1000
-      expect(metrics.pendientePagar).toBe(1000);
+
+      // Las métricas usan subtotal (sin IVA): PUE 862.07 + PPD 1724.14 = 2586.21
+      expect(metrics.totalFacturado).toBeCloseTo(2586.21, 2);
+
+      // Total pagado: PUE (862.07) + pagos manuales del período (1000 de la PPD)
+      expect(metrics.totalPagado).toBeCloseTo(1862.07, 2);
+
+      // Pendiente: PPD con 1000 pagado (manual) = subtotal 1724.14 - 1000 = 724.14
+      expect(metrics.pendientePagar).toBeCloseTo(724.14, 2);
     });
 
     it("debe incluir pagos de complementos por fecha de pago", async () => {
@@ -149,7 +149,7 @@ describe("Invoices API", () => {
         complemento_data: { pagos: [] },
       });
 
-      // Complemento refleja: saldo_ant 1000 (ya pagados 1000 vía invoice.pagos), pago 500, insoluto 500
+      // Complemento con fecha_pago en diciembre: imp_pagado 500, saldo insoluto 500 (en subtotal)
       await PaymentComplementItem.create({
         complement_id: complemento.id,
         profile_id: profileId,
@@ -176,8 +176,10 @@ describe("Invoices API", () => {
       expectSuccess(response, 200);
       const { metrics } = response.body;
 
-      expect(metrics.totalPagado).toBe(2500);
-      expect(metrics.pendientePagar).toBe(500);
+      // totalPagado = PUE (862.07) + manual del PPD (1000) + complemento en período (500) = 2362.07
+      expect(metrics.totalPagado).toBeCloseTo(2362.07, 2);
+      // pendientePagar = saldo insoluto del último complemento = 500
+      expect(metrics.pendientePagar).toBeCloseTo(500, 2);
     });
   });
 

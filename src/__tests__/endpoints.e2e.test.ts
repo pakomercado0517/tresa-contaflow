@@ -1,8 +1,10 @@
 /**
- * Tests E2E de endpoints: manual_incomes, accrued_expenses, métricas, ownership.
+ * Tests E2E de endpoints: manual_incomes, accrued_expenses, payrolls, métricas, ownership.
  */
 import { describe, it, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
+import { readFileSync } from "fs";
+import { join } from "path";
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import {
@@ -15,6 +17,7 @@ import {
   Period,
   ManualIncome,
   AccruedExpense,
+  Payroll,
 } from "../database/models/index";
 
 describe("E2E Endpoints", () => {
@@ -42,6 +45,7 @@ describe("E2E Endpoints", () => {
       rfc: "EPR123456ABC",
       tipo_persona: "MORAL",
       regimen_fiscal: "601",
+      validaciones_habilitadas: { plugin_nomina: true },
     });
     userAProfileId = profileA.id;
 
@@ -271,6 +275,78 @@ describe("E2E Endpoints", () => {
 
       expect(updateAsB.status).toBe(404);
       expect(updateAsB.body).toHaveProperty("error");
+    });
+  });
+
+  describe("upload nómina → guardar en DB", () => {
+    it("al subir XML de nómina válido, se guarda en payrolls y retorna 201", async () => {
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const xmlContent = readFileSync(join(fixturesDir, "nomina-minimal.xml"), "utf-8");
+
+      const uploadRes = await request(app)
+        .post("/api/payrolls/upload")
+        .set("Authorization", `Bearer ${userAToken}`)
+        .field("profile_id", userAProfileId)
+        .field("period_id", userAPeriodId)
+        .attach("xml", Buffer.from(xmlContent), "nomina.xml");
+
+      expectSuccess(uploadRes, 201);
+      expect(uploadRes.body).toHaveProperty("message", "Nómina registrada");
+      expect(uploadRes.body.data).toHaveProperty("id");
+      expect(uploadRes.body.data).toHaveProperty("uuid", "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      expect(uploadRes.body.data).toHaveProperty("employee_rfc", "HEGG800101ABC");
+      expect(Number(uploadRes.body.data.neto_pagado)).toBe(8500);
+      expect(uploadRes.body.data.profile_id).toBe(userAProfileId);
+      expect(uploadRes.body.data.period_id).toBe(userAPeriodId);
+
+      const inDb = await Payroll.findOne({
+        where: { uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", profile_id: userAProfileId },
+      });
+      expect(inDb).not.toBeNull();
+      expect(inDb!.employee_rfc).toBe("HEGG800101ABC");
+      expect(Number(inDb!.neto_pagado)).toBe(8500);
+    });
+  });
+
+  describe("cargar 3 nóminas → métricas correctas", () => {
+    beforeEach(async () => {
+      await Payroll.destroy({ where: { profile_id: userAProfileId } });
+    });
+
+    it("al subir 3 nóminas, las métricas incluyen total_pagada, percepciones, deducciones y cantidad_empleados correctos", async () => {
+      const fixturesDir = join(__dirname, "fixtures", "nomina");
+      const fixtures = [
+        "nomina-minimal.xml",
+        "nomina-percepciones-deducciones.xml",
+        "nomina-horas-extra.xml",
+      ];
+
+      for (const filename of fixtures) {
+        const xmlContent = readFileSync(join(fixturesDir, filename), "utf-8");
+        const uploadRes = await request(app)
+          .post("/api/payrolls/upload")
+          .set("Authorization", `Bearer ${userAToken}`)
+          .field("profile_id", userAProfileId)
+          .field("period_id", userAPeriodId)
+          .attach("xml", Buffer.from(xmlContent), filename);
+        expectSuccess(uploadRes, 201);
+      }
+
+      const metricsRes = await request(app)
+        .get(`/api/metrics/${userAPeriodId}`)
+        .set("Authorization", `Bearer ${userAToken}`);
+      expectSuccess(metricsRes, 200);
+
+      expect(metricsRes.body).toHaveProperty("nomina");
+      expect(metricsRes.body.nomina).toHaveProperty("total_pagada");
+      expect(metricsRes.body.nomina).toHaveProperty("percepciones");
+      expect(metricsRes.body.nomina).toHaveProperty("deducciones");
+      expect(metricsRes.body.nomina).toHaveProperty("cantidad_empleados");
+
+      expect(Number(metricsRes.body.nomina.total_pagada)).toBe(31200);
+      expect(Number(metricsRes.body.nomina.percepciones)).toBe(37000);
+      expect(Number(metricsRes.body.nomina.deducciones)).toBe(5800);
+      expect(metricsRes.body.nomina.cantidad_empleados).toBe(3);
     });
   });
 
