@@ -956,7 +956,21 @@ export class MetricsService {
     const sumComplementos = complementosPPD
       .filter((c) => uuidPPDSet.has(c.factura_uuid))
       .reduce((acc, c) => acc + Number(c.imp_pagado || 0), 0);
-    return Math.round((sumPUE + sumComplementos) * 100) / 100;
+
+    const manualIncomesPaid = await ManualIncome.findAll({
+      where: {
+        profile_id: profileId,
+        is_paid: true,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumManualPaid = manualIncomesPaid.reduce(
+      (acc, m) => acc + Number(m.subtotal || 0),
+      0
+    );
+
+    return Math.round((sumPUE + sumComplementos + sumManualPaid) * 100) / 100;
   }
 
   private async calculateEgresosPagadosForRange(
@@ -1223,7 +1237,8 @@ export class MetricsService {
 
   /**
    * Ingresos cobrados (flujo de efectivo - ingresos): subtotal de facturas PUE del período
-   * + montos cobrados por complementos de pago de facturas PPD (por fecha_pago en el período).
+   * + montos cobrados por complementos de pago de facturas PPD (por fecha_pago en el período)
+   * + subtotal de manual_incomes del período con is_paid = true.
    * Todo en subtotal sin IVA; para complementos se usa imp_pagado (monto cobrado).
    */
   async calculateIngresosCobrados(profileId: string, periodId: string): Promise<number> {
@@ -1268,7 +1283,20 @@ export class MetricsService {
       .filter((c) => uuidPPDSet.has(c.factura_uuid))
       .reduce((acc, c) => acc + Number(c.imp_pagado || 0), 0);
 
-    return Math.round((sumPUE + sumComplementos) * 100) / 100;
+    const manualIncomesPaid = await ManualIncome.findAll({
+      where: {
+        profile_id: profileId,
+        period_id: periodId,
+        is_paid: true,
+      },
+      attributes: ['subtotal'],
+    });
+    const sumManualPaid = manualIncomesPaid.reduce(
+      (acc, m) => acc + Number(m.subtotal || 0),
+      0
+    );
+
+    return Math.round((sumPUE + sumComplementos + sumManualPaid) * 100) / 100;
   }
 
   /**
