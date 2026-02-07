@@ -514,6 +514,39 @@ export class MetricsService {
   }
 
   /**
+   * Busca o crea un período para el perfil que cubra el mes/año indicado.
+   * Retorna el Period para que el frontend tenga period_id y pueda habilitar "Agregar ingreso manual".
+   */
+  async findOrCreatePeriodForMonth(
+    profileId: string,
+    mes: number,
+    año: number
+  ): Promise<Period> {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const lastDay = new Date(año, mes, 0).getDate();
+    const startDate = `${año}-${pad(mes)}-01`;
+    const endDate = `${año}-${pad(mes)}-${pad(lastDay)}`;
+
+    let period = await Period.findOne({
+      where: {
+        profile_id: profileId,
+        start_date: startDate,
+        end_date: endDate,
+      },
+    });
+
+    if (!period) {
+      period = await Period.create({
+        profile_id: profileId,
+        start_date: startDate,
+        end_date: endDate,
+      });
+    }
+
+    return period;
+  }
+
+  /**
    * Complementos de pago por factura (solo facturas PPD) con fecha_pago en el período.
    */
   private async getComplementosPorFacturaEnPeriodo(
@@ -935,8 +968,10 @@ export class MetricsService {
     if (results.length === 1) {
       const single = results[0];
       if (!single) return null;
+      // Obtener period_id real para habilitar "Agregar ingreso manual" en el frontend
+      const period = await this.findOrCreatePeriodForMonth(profileIds[0]!, mes, año);
       return {
-        period: { id: single.period.id, start, end },
+        period: { id: period.id, start, end },
         flujo: single.flujo,
         devengado: single.devengado,
         impuestos: single.impuestos,

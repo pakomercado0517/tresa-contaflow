@@ -4,6 +4,7 @@ import { Profile, AccruedExpense } from "../database/models/index.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 import { uploadInvoice } from "./invoice.controller.js";
 import { PaymentStatusService } from "../services/payment-status.service.js";
+import { MetricsService } from "../services/metrics.service.js";
 import { Op } from "sequelize";
 
 /**
@@ -405,6 +406,97 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
     }
 
     res.status(500).json({ error: "Error desconocido al eliminar gasto" });
+  }
+}
+
+/**
+ * Obtiene métricas del dashboard de gastos
+ * Soporta filtros: profileId, mes, año
+ * Incluye period_id cuando hay perfil + mes + año para habilitar "Agregar ingreso manual" / acciones de período en el frontend
+ */
+export async function getMetrics(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    const { profileId, mes, año } = req.query;
+
+    const filters: {
+      profileId?: string;
+      mes?: number;
+      año?: number;
+      userId: string;
+    } = {
+      userId,
+    };
+
+    if (profileId && typeof profileId === "string") {
+      filters.profileId = profileId;
+    }
+
+    if (mes && typeof mes === "string") {
+      const mesNum = parseInt(mes, 10);
+      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
+        filters.mes = mesNum;
+      } else {
+        res.status(400).json({
+          error: "Parámetro inválido",
+          message: "El mes debe ser un número entre 1 y 12",
+        });
+        return;
+      }
+    }
+
+    if (año && typeof año === "string") {
+      const añoNum = parseInt(año, 10);
+      if (!isNaN(añoNum) && añoNum > 2000 && añoNum < 2100) {
+        filters.año = añoNum;
+      } else {
+        res.status(400).json({
+          error: "Parámetro inválido",
+          message: "El año debe ser un número válido",
+        });
+        return;
+      }
+    }
+
+    const metricsService = new MetricsService();
+    const metrics = await metricsService.calculatePeriodMetrics(filters);
+
+    let periodId: string | null = null;
+    if (filters.profileId && filters.mes && filters.año) {
+      const period = await metricsService.findOrCreatePeriodForMonth(
+        filters.profileId,
+        filters.mes,
+        filters.año
+      );
+      periodId = period.id;
+    }
+
+    res.json({
+      filters: {
+        profileId: filters.profileId || null,
+        mes: filters.mes || null,
+        año: filters.año || null,
+      },
+      period_id: periodId,
+      metrics,
+    });
+  } catch (error) {
+    console.error("Error al obtener métricas de gastos:", error);
+
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: "Error al obtener métricas de gastos",
+        message: error.message,
+      });
+      return;
+    }
+
+    res.status(500).json({ error: "Error desconocido al obtener métricas de gastos" });
   }
 }
 
