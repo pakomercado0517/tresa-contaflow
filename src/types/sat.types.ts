@@ -54,3 +54,19 @@ export interface SATProductServiceSearchResponse {
   limit: number;
   offset: number;
 }
+
+/**
+ * Catálogo SAT c_RegimenFiscal - Regímenes fiscales para perfiles (personas físicas/morales)
+ */
+export interface SatRegimenFiscalAttributes {
+  clave: string;
+  descripcion: string;
+  aplica_persona_fisica: boolean;
+  aplica_persona_moral: boolean;
+  vigente: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface SatRegimenFiscalCreationAttributes
+  extends Omit<SatRegimenFiscalAttributes, 'created_at' | 'updated_at'> {}

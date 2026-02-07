@@ -58,22 +58,25 @@ export class FiscalValidationService {
       } else {
         estado.rfcVerificado = true;
 
-        // Validar régimen fiscal si está habilitado (el régimen de la factura debe estar en la lista del perfil)
-        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenesFiscales.length > 0) {
-          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalEmisor);
-          if (!regimenIncluido) {
-            const mensaje = `El régimen fiscal de la factura (${cfdi.regimenFiscalEmisor}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(', ')}). Esto puede afectar los cálculos fiscales.`;
-            
-            if (validacionesHabilitadas.bloquearSiRegimenNoCoincide) {
-              estado.errores.push(mensaje);
-              estado.valido = false;
-              return estado;
-            } else {
-              estado.advertencias.push(mensaje);
-            }
-          } else {
-            estado.regimenFiscalVerificado = true;
+        // Si la validación de régimen está habilitada, el perfil debe tener al menos un régimen configurado
+        if (validacionesHabilitadas.validarRegimenFiscal !== false) {
+          if (profileRegimenesFiscales.length === 0) {
+            estado.errores.push(
+              "El perfil no tiene regímenes fiscales configurados. Configure al menos un régimen fiscal en el perfil para poder subir facturas de ingreso."
+            );
+            estado.valido = false;
+            return estado;
           }
+
+          // El régimen de la factura debe estar en la lista del perfil. Se bloquea si no coincide.
+          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalEmisor ?? "");
+          if (!regimenIncluido) {
+            const mensaje = `El régimen fiscal de la factura (${cfdi.regimenFiscalEmisor ?? "no especificado"}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(", ")}). Configure el perfil con los regímenes correctos o agregue este régimen para poder subir la factura.`;
+            estado.errores.push(mensaje);
+            estado.valido = false;
+            return estado;
+          }
+          estado.regimenFiscalVerificado = true;
         }
       }
     }
@@ -143,22 +146,25 @@ export class FiscalValidationService {
       } else {
         estado.rfcVerificado = true;
 
-        // Validar régimen fiscal si está habilitado (el régimen del gasto debe estar en la lista del perfil)
-        if (validacionesHabilitadas.validarRegimenFiscal !== false && profileRegimenesFiscales.length > 0) {
-          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalReceptor);
-          if (!regimenIncluido) {
-            const mensaje = `El régimen fiscal del gasto (${cfdi.regimenFiscalReceptor}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(', ')}). Esto puede afectar los cálculos fiscales.`;
-            
-            if (validacionesHabilitadas.bloquearSiRegimenNoCoincide) {
-              estado.errores.push(mensaje);
-              estado.valido = false;
-              return estado;
-            } else {
-              estado.advertencias.push(mensaje);
-            }
-          } else {
-            estado.regimenFiscalVerificado = true;
+        // Si la validación de régimen está habilitada, el perfil debe tener al menos un régimen configurado
+        if (validacionesHabilitadas.validarRegimenFiscal !== false) {
+          if (profileRegimenesFiscales.length === 0) {
+            estado.errores.push(
+              "El perfil no tiene regímenes fiscales configurados. Configure al menos un régimen fiscal en el perfil para poder subir gastos."
+            );
+            estado.valido = false;
+            return estado;
           }
+
+          // El régimen del gasto debe estar en la lista del perfil. Se bloquea si no coincide.
+          const regimenIncluido = profileRegimenesFiscales.includes(cfdi.regimenFiscalReceptor ?? "");
+          if (!regimenIncluido) {
+            const mensaje = `El régimen fiscal del gasto (${cfdi.regimenFiscalReceptor ?? "no especificado"}) no está entre los regímenes del perfil (${profileRegimenesFiscales.join(", ")}). Configure el perfil con los regímenes correctos o agregue este régimen para poder subir el gasto.`;
+            estado.errores.push(mensaje);
+            estado.valido = false;
+            return estado;
+          }
+          estado.regimenFiscalVerificado = true;
         }
       }
     }

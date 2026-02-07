@@ -34,6 +34,8 @@ export type {
   SATProductServiceCreationAttributes,
   SATProductServiceSearchParams,
   SATProductServiceSearchResponse,
+  SatRegimenFiscalAttributes,
+  SatRegimenFiscalCreationAttributes,
 } from './sat.types.js';
 export type {
   FrozenReason,

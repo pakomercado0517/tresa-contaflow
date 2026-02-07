@@ -111,10 +111,12 @@ export function extractRetenciones(xml: Document): { iva: number; isr: number } 
   let isr = 0;
   for (const retencionItem of retencionArray) {
     const retencion = retencionItem as Record<string, unknown>;
-    const impuesto = String(getStringAttr(retencion, "@_Impuesto"));
+    // parseAttributeValue:true convierte "001" en número 1 y "002" en número 2
+    const impuestoRaw = retencion["@_Impuesto"];
+    const impuesto = typeof impuestoRaw === "string" ? impuestoRaw : String(impuestoRaw ?? "");
     const importe = getNumberAttr(retencion, "@_Importe", 0);
-    if (impuesto === "001") isr += importe;
-    else if (impuesto === "002") iva += importe;
+    if (impuesto === "001" || impuesto === "1") isr += importe;
+    else if (impuesto === "002" || impuesto === "2") iva += importe;
   }
   return { iva, isr };
 }
@@ -500,11 +502,13 @@ export class BaseCFDIParser {
 
       for (const retencionItem of retencionArray) {
         const retencion = retencionItem as Record<string, unknown>;
-        const impuesto = String(this.getStringAttr(retencion, "@_Impuesto"));
+        // parseAttributeValue:true convierte "001" en número 1 y "002" en número 2
+        const impuestoRaw = retencion["@_Impuesto"];
+        const impuesto = typeof impuestoRaw === "string" ? impuestoRaw : String(impuestoRaw ?? "");
         const importe = this.getNumberAttr(retencion, "@_Importe", 0);
-        if (impuesto === "001") {
+        if (impuesto === "001" || impuesto === "1") {
           retencionIsr += importe;
-        } else if (impuesto === "002") {
+        } else if (impuesto === "002" || impuesto === "2") {
           retencionIva += importe;
         }
       }
