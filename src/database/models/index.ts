@@ -14,6 +14,7 @@ import DiscountCode from "./DiscountCode.model.js";
 import PaymentComplement from "./PaymentComplement.model.js";
 import PaymentComplementItem from "./PaymentComplementItem.model.js";
 import SatProductService from "./SatProductService.model.js";
+import SatRegimenFiscal from "./SatRegimenFiscal.model.js";
 import SatSearchLog from "./SatSearchLog.model.js";
 import Payroll from "./Payroll.model.js";
 import Plugin from "./Plugin.model.js";
@@ -38,6 +39,7 @@ export {
   PaymentComplement,
   PaymentComplementItem,
   SatProductService,
+  SatRegimenFiscal,
   SatSearchLog,
 };
 export type { Sequelize };

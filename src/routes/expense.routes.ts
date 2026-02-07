@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { getExpenses, getExpenseById, createExpense, updateExpense, deleteExpense, uploadExpense } from "../controllers/expense.controller.js";
+import { getExpenses, getExpenseById, createExpense, updateExpense, deleteExpense, uploadExpense, getMetrics } from "../controllers/expense.controller.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 
@@ -25,6 +25,7 @@ const xmlUploadLimiter = rateLimit({
 });
 
 // CRUD de gastos
+router.get("/metrics", getMetrics);
 router.get("/", getExpenses);
 router.post("/", validateExpenseLimit, createExpense);
 router.post("/upload", xmlUploadLimiter, validateExpenseLimit, uploadExpense);

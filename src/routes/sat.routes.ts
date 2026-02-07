@@ -5,6 +5,7 @@ import {
   searchBySimilarity,
   getSuggestions,
   getCatalogStats,
+  getRegimenesFiscales,
 } from "../controllers/sat.controller.js";
 import { authenticateToken } from "../middlewares/auth.middleware.js";
 import { validateSATSearchLimit } from "../middlewares/plan-limits.middleware.js";
@@ -25,6 +26,9 @@ router.get("/suggestions", getSuggestions);
 
 // Estadísticas del catálogo
 router.get("/stats", getCatalogStats);
+
+// Catálogo de regímenes fiscales (para perfiles). Opcional: ?tipo_persona=FISICA|MORAL
+router.get("/regimenes-fiscales", getRegimenesFiscales);
 
 // Obtener producto por ID (búsqueda directa, no cuenta como IA)
 router.get("/:id", getSATProductById);

@@ -661,12 +661,24 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
     const metricsService = new MetricsService();
     const metrics = await metricsService.calculatePeriodMetrics(filters);
 
+    // Obtener period_id cuando hay perfil + mes + año para habilitar "Agregar ingreso manual" en el frontend
+    let periodId: string | null = null;
+    if (filters.profileId && filters.mes && filters.año) {
+      const period = await metricsService.findOrCreatePeriodForMonth(
+        filters.profileId,
+        filters.mes,
+        filters.año
+      );
+      periodId = period.id;
+    }
+
     res.json({
       filters: {
         profileId: filters.profileId || null,
         mes: filters.mes || null,
         año: filters.año || null,
       },
+      period_id: periodId,
       metrics,
     });
   } catch (error) {

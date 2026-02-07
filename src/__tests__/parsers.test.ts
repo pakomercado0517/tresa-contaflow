@@ -77,6 +77,15 @@ describe("Parsers", () => {
       const ret = extractRetenciones(doc);
       expect(ret).toEqual({ iva: 0, isr: 0 });
     });
+
+    it("debe extraer retenciones ISR e IVA de factura real", () => {
+      const fixturesDir = join(__dirname, "fixtures", "cfdi");
+      const xml = readFileSync(join(fixturesDir, "factura-con-retenciones.xml"), "utf-8");
+      const ret = extractRetenciones(parseXML(Buffer.from(xml, "utf-8")));
+      // ISR: 2645.88, IVA: 2822.25
+      expect(ret.isr).toBeCloseTo(2645.88, 2);
+      expect(ret.iva).toBeCloseTo(2822.25, 2);
+    });
   });
 
   describe("parseInvoice", () => {

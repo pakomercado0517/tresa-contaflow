@@ -3,6 +3,7 @@ import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { SATCatalogService } from "../services/sat-catalog.service.js";
 import { PlanLimitsService } from "../services/plan-limits.service.js";
 import SatSearchLog from "../database/models/SatSearchLog.model.js";
+import SatRegimenFiscal from "../database/models/SatRegimenFiscal.model.js";
 import type { SATProductServiceSearchParams } from "../types/sat.types.js";
 
 const satCatalogService = new SATCatalogService();
@@ -394,6 +395,50 @@ export async function getCatalogStats(req: AuthRequest, res: Response): Promise<
 
     res.status(500).json({
       error: "Error desconocido al obtener estadísticas",
+    });
+  }
+}
+
+/**
+ * Lista el catálogo de regímenes fiscales del SAT para perfiles.
+ * GET /api/sat/regimenes-fiscales?tipo_persona=MORAL
+ * Opcional: tipo_persona=FISICA|MORAL filtra por aplicabilidad.
+ */
+export async function getRegimenesFiscales(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: "Usuario no autenticado" });
+      return;
+    }
+
+    const tipoPersona = req.query.tipo_persona as string | undefined;
+
+    const where: Record<string, unknown> = { vigente: true };
+    if (tipoPersona === "FISICA") {
+      where.aplica_persona_fisica = true;
+    } else if (tipoPersona === "MORAL") {
+      where.aplica_persona_moral = true;
+    }
+
+    const regimenes = await SatRegimenFiscal.findAll({
+      where,
+      order: [["clave", "ASC"]],
+      attributes: ["clave", "descripcion", "aplica_persona_fisica", "aplica_persona_moral"],
+    });
+
+    res.json({
+      data: regimenes.map((r) => ({
+        clave: r.clave,
+        descripcion: r.descripcion,
+        aplica_persona_fisica: r.aplica_persona_fisica,
+        aplica_persona_moral: r.aplica_persona_moral,
+      })),
+    });
+  } catch (error) {
+    console.error("Error al listar regímenes fiscales:", error);
+    res.status(500).json({
+      error: "Error al obtener regímenes fiscales",
+      message: error instanceof Error ? error.message : "Error desconocido",
     });
   }
 }
