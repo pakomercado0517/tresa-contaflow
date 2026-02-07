@@ -524,8 +524,8 @@ export class MetricsService {
   ): Promise<Period> {
     const pad = (n: number) => String(n).padStart(2, '0');
     const lastDay = new Date(año, mes, 0).getDate();
-    const startDate = `${año}-${pad(mes)}-01`;
-    const endDate = `${año}-${pad(mes)}-${pad(lastDay)}`;
+    const startDate = new Date(año, mes - 1, 1, 0, 0, 0);
+    const endDate = new Date(año, mes - 1, lastDay, 23, 59, 59);
 
     let period = await Period.findOne({
       where: {
