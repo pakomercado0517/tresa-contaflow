@@ -880,13 +880,16 @@ export class MetricsService {
   /**
    * Métricas por rango de fechas (sin period_id). Para manual_incomes filtra por fecha en el rango.
    * Útil para mes/año cuando no hay período o se agregan varios perfiles.
+   * regimenFiscal: si se indica, filtra facturas por regimen_fiscal_emisor y gastos por regimen_fiscal_receptor.
    */
   async getMetricsByDateRange(
     profileId: string,
     start: Date,
-    end: Date
+    end: Date,
+    regimenFiscal?: string
   ): Promise<PeriodMetricsResponse> {
     const dateRange = { start, end };
+    const regimenFilter = regimenFiscal ?? undefined;
     const [
       ingresosCobrados,
       egresosPagados,
@@ -899,15 +902,15 @@ export class MetricsService {
       porPagar,
       nomina,
     ] = await Promise.all([
-      this.calculateIngresosCobradosForRange(profileId, dateRange),
-      this.calculateEgresosPagadosForRange(profileId, dateRange),
-      this.calculateIngresosDevengadosForRange(profileId, dateRange),
-      this.calculateEgresosDevengadosForRange(profileId, dateRange),
-      this.calculateIVATrasladadoForRange(profileId, dateRange),
-      this.calculateIVAAcreditableForRange(profileId, dateRange),
-      this.calculateRetencionesForRange(profileId, dateRange),
-      this.calculatePPDPorCobrarForRange(profileId, dateRange),
-      this.calculatePPDPorPagarForRange(profileId, dateRange),
+      this.calculateIngresosCobradosForRange(profileId, dateRange, regimenFilter),
+      this.calculateEgresosPagadosForRange(profileId, dateRange, regimenFilter),
+      this.calculateIngresosDevengadosForRange(profileId, dateRange, regimenFilter),
+      this.calculateEgresosDevengadosForRange(profileId, dateRange, regimenFilter),
+      this.calculateIVATrasladadoForRange(profileId, dateRange, regimenFilter),
+      this.calculateIVAAcreditableForRange(profileId, dateRange, regimenFilter),
+      this.calculateRetencionesForRange(profileId, dateRange, regimenFilter),
+      this.calculatePPDPorCobrarForRange(profileId, dateRange, regimenFilter),
+      this.calculatePPDPorPagarForRange(profileId, dateRange, regimenFilter),
       this.getNominaMetricsForRange(profileId, dateRange),
     ]);
 
@@ -945,24 +948,36 @@ export class MetricsService {
 
   /**
    * Métricas para mes/año: un perfil (profile_id) o todos (profileIds). Una sola petición.
+   * regimenFiscal: si se indica, filtra por regimen_fiscal_emisor (facturas) y regimen_fiscal_receptor (gastos).
+   * Sin profile_id y con regimenFiscal: solo incluye perfiles cuyo regimenes_fiscales contiene la clave.
    */
   async getMetricsForMonthYear(
     userId: string,
     mes: number,
     año: number,
-    profileId?: string
+    profileId?: string,
+    regimenFiscal?: string
   ): Promise<PeriodMetricsResponse | null> {
-    const profileIds = profileId
-      ? [profileId]
-      : (await Profile.findAll({ where: { user_id: userId }, attributes: ['id'] })).map(
-          (p) => p.id
-        );
+    let profileIds: string[];
+    if (profileId) {
+      profileIds = [profileId];
+    } else {
+      const profiles = await Profile.findAll({
+        where: { user_id: userId },
+        attributes: ['id', 'regimenes_fiscales'],
+      });
+      profileIds = regimenFiscal
+        ? profiles
+            .filter((p) => (p.regimenes_fiscales ?? []).includes(regimenFiscal))
+            .map((p) => p.id)
+        : profiles.map((p) => p.id);
+    }
     if (profileIds.length === 0) return null;
 
     const { start, end } = MetricsService.getDateRangeFromMonthYear(mes, año);
 
     const results = await Promise.all(
-      profileIds.map((pid) => this.getMetricsByDateRange(pid, start, end))
+      profileIds.map((pid) => this.getMetricsByDateRange(pid, start, end, regimenFiscal))
     );
 
     if (results.length === 1) {
@@ -1042,14 +1057,18 @@ export class MetricsService {
 
   private async calculateIngresosCobradosForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const invoiceWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo: 'PUE',
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) invoiceWhere.regimen_fiscal_emisor = regimenFiscal;
+
     const invoicesPUE = await Invoice.findAll({
-      where: {
-        profile_id: profileId,
-        tipo: 'PUE',
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: invoiceWhere,
       attributes: ['subtotal'],
     });
     const sumPUE = invoicesPUE.reduce((acc, inv) => acc + Number(inv.subtotal || 0), 0);
@@ -1060,9 +1079,15 @@ export class MetricsService {
       },
     });
     const invoiceUUIDs = [...new Set(complementosPPD.map((c) => c.factura_uuid))];
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      uuid: { [Op.in]: invoiceUUIDs },
+      tipo: 'PPD',
+    };
+    if (regimenFiscal) ppdWhere.regimen_fiscal_emisor = regimenFiscal;
     const invoicesPPD = invoiceUUIDs.length
       ? await Invoice.findAll({
-          where: { profile_id: profileId, uuid: { [Op.in]: invoiceUUIDs }, tipo: 'PPD' },
+          where: ppdWhere,
           attributes: ['uuid'],
         })
       : [];
@@ -1089,14 +1114,18 @@ export class MetricsService {
 
   private async calculateEgresosPagadosForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const expenseWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      is_paid: true,
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) expenseWhere.regimen_fiscal_receptor = regimenFiscal;
+
     const expenses = await AccruedExpense.findAll({
-      where: {
-        profile_id: profileId,
-        is_paid: true,
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: expenseWhere,
       attributes: ['subtotal'],
     });
     return Math.round(expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0) * 100) / 100;
@@ -1104,14 +1133,18 @@ export class MetricsService {
 
   private async calculateIngresosDevengadosForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const invoiceWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo: { [Op.in]: ['PUE', 'PPD'] },
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) invoiceWhere.regimen_fiscal_emisor = regimenFiscal;
+
     const invoices = await Invoice.findAll({
-      where: {
-        profile_id: profileId,
-        tipo: { [Op.in]: ['PUE', 'PPD'] },
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: invoiceWhere,
       attributes: ['subtotal'],
     });
     const manualIncomes = await ManualIncome.findAll({
@@ -1128,13 +1161,17 @@ export class MetricsService {
 
   private async calculateEgresosDevengadosForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const expenseWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) expenseWhere.regimen_fiscal_receptor = regimenFiscal;
+
     const expenses = await AccruedExpense.findAll({
-      where: {
-        profile_id: profileId,
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: expenseWhere,
       attributes: ['subtotal'],
     });
     return Math.round(expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0) * 100) / 100;
@@ -1142,32 +1179,31 @@ export class MetricsService {
 
   private async calculateIVATrasladadoForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<{ cobrado: number; devengado: number }> {
+    const baseInvoiceWhere = (tipo: string | string[]) => {
+      const w: Record<string, unknown> = {
+        profile_id: profileId,
+        tipo: typeof tipo === 'string' ? tipo : { [Op.in]: tipo },
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      };
+      if (regimenFiscal) w.regimen_fiscal_emisor = regimenFiscal;
+      return w;
+    };
+
     const [invoicesPUE, invoicesPPD, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PUE',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere('PUE'),
           attributes: ['iva_amount'],
         }),
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PPD',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere('PPD'),
           attributes: ['uuid', 'iva_amount', 'total'],
         }),
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: { [Op.in]: ['PUE', 'PPD'] },
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere(['PUE', 'PPD']),
           attributes: ['iva_amount'],
         }),
         ManualIncome.findAll({
@@ -1201,22 +1237,26 @@ export class MetricsService {
 
   private async calculateIVAAcreditableForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<{ pagado: number; devengado: number }> {
+    const baseExpenseWhere = (isPaid?: boolean) => {
+      const w: Record<string, unknown> = {
+        profile_id: profileId,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      };
+      if (isPaid !== undefined) w.is_paid = isPaid;
+      if (regimenFiscal) w.regimen_fiscal_receptor = regimenFiscal;
+      return w;
+    };
+
     const [expensesPagados, expensesTodos] = await Promise.all([
       AccruedExpense.findAll({
-        where: {
-          profile_id: profileId,
-          is_paid: true,
-          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-        },
+        where: baseExpenseWhere(true),
         attributes: ['iva_amount'],
       }),
       AccruedExpense.findAll({
-        where: {
-          profile_id: profileId,
-          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-        },
+        where: baseExpenseWhere(),
         attributes: ['iva_amount'],
       }),
     ]);
@@ -1230,37 +1270,36 @@ export class MetricsService {
 
   private async calculateRetencionesForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<{
     iva_cobrado: number;
     iva_devengado: number;
     isr_cobrado: number;
     isr_devengado: number;
   }> {
+    const baseInvoiceWhere = (tipo: string | string[]) => {
+      const w: Record<string, unknown> = {
+        profile_id: profileId,
+        tipo: typeof tipo === 'string' ? tipo : { [Op.in]: tipo },
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      };
+      if (regimenFiscal) w.regimen_fiscal_emisor = regimenFiscal;
+      return w;
+    };
+
     const [invoicesPUE, invoicesPPD, allInvoices, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PUE',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere('PUE'),
           attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
         }),
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PPD',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere('PPD'),
           attributes: ['uuid', 'total', 'retencion_iva_amount', 'retencion_isr_amount'],
         }),
         Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: { [Op.in]: ['PUE', 'PPD'] },
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
+          where: baseInvoiceWhere(['PUE', 'PPD']),
           attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
         }),
         this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
@@ -1296,14 +1335,18 @@ export class MetricsService {
 
   private async calculatePPDPorCobrarForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo: 'PPD',
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) ppdWhere.regimen_fiscal_emisor = regimenFiscal;
+
     const invoicesPPD = await Invoice.findAll({
-      where: {
-        profile_id: profileId,
-        tipo: 'PPD',
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: ppdWhere,
       attributes: ['uuid', 'subtotal', 'iva_amount', 'total'],
     });
     if (invoicesPPD.length === 0) return 0;
@@ -1332,14 +1375,18 @@ export class MetricsService {
 
   private async calculatePPDPorPagarForRange(
     profileId: string,
-    dateRange: { start: Date; end: Date }
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
   ): Promise<number> {
+    const expenseWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      is_paid: false,
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) expenseWhere.regimen_fiscal_receptor = regimenFiscal;
+
     const expenses = await AccruedExpense.findAll({
-      where: {
-        profile_id: profileId,
-        is_paid: false,
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
+      where: expenseWhere,
       attributes: ['subtotal', 'iva_amount'],
     });
     const sum = expenses.reduce(

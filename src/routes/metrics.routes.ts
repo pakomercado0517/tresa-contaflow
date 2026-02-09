@@ -23,6 +23,11 @@ const monthYearValidation = [
     .isInt({ min: 2000, max: 2100 })
     .withMessage("año debe ser un año válido"),
   query("profile_id").optional().isUUID().withMessage("profile_id debe ser un UUID válido"),
+  query("regimen_fiscal")
+    .optional()
+    .isString()
+    .matches(/^\d{3}$/)
+    .withMessage("regimen_fiscal debe ser una clave SAT de 3 dígitos (ej: 601, 606, 626)"),
 ];
 
 const periodIdParam = [

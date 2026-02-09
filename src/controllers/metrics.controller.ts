@@ -21,6 +21,7 @@ export async function getMetricsByMonthYear(req: AuthRequest, res: Response): Pr
     const mes = req.query.mes;
     const año = req.query.año;
     const profileId = req.query.profile_id as string | undefined;
+    const regimenFiscal = req.query.regimen_fiscal as string | undefined;
 
     const mesNum = typeof mes === "string" ? parseInt(mes, 10) : undefined;
     const añoNum = typeof año === "string" ? parseInt(año, 10) : undefined;
@@ -37,11 +38,21 @@ export async function getMetricsByMonthYear(req: AuthRequest, res: Response): Pr
     if (profileId != null && typeof profileId === "string") {
       const profile = await Profile.findOne({
         where: { id: profileId, user_id: userId },
-        attributes: ["id"],
+        attributes: ["id", "regimenes_fiscales"],
       });
       if (!profile) {
         res.status(404).json({ error: "Perfil no encontrado o no pertenece al usuario" });
         return;
+      }
+      if (regimenFiscal && typeof regimenFiscal === "string") {
+        const regimenes = profile.regimenes_fiscales ?? [];
+        if (!regimenes.includes(regimenFiscal)) {
+          res.status(400).json({
+            error: "El perfil no tiene el régimen fiscal indicado",
+            message: `El perfil no incluye el régimen ${regimenFiscal}. Régimenes del perfil: ${regimenes.join(", ") || "ninguno"}`,
+          });
+          return;
+        }
       }
     }
 
@@ -49,7 +60,8 @@ export async function getMetricsByMonthYear(req: AuthRequest, res: Response): Pr
       userId,
       mesNum,
       añoNum,
-      profileId ?? undefined
+      profileId ?? undefined,
+      regimenFiscal ?? undefined
     );
 
     if (!result) {
