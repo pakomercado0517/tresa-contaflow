@@ -356,6 +356,95 @@ function ensureObject(value: unknown, contexto: string): Record<string, unknown>
   return value as Record<string, unknown>;
 }
 
+function extractBaseDRFromDoctoRelacionado(docto: Record<string, unknown>): number | null {
+  const impuestosDrNode = docto["pago20:ImpuestosDR"] ?? docto["pago10:ImpuestosDR"];
+  if (!impuestosDrNode || typeof impuestosDrNode !== "object") {
+    return null;
+  }
+
+  const impuestosDr = impuestosDrNode as Record<string, unknown>;
+  const trasladosDrNode = impuestosDr["pago20:TrasladosDR"] ?? impuestosDr["pago10:TrasladosDR"];
+  if (!trasladosDrNode || typeof trasladosDrNode !== "object") {
+    return null;
+  }
+
+  const trasladosDr = trasladosDrNode as Record<string, unknown>;
+  const trasladoDrNode = trasladosDr["pago20:TrasladoDR"] ?? trasladosDr["pago10:TrasladoDR"];
+  const trasladoDrArray = Array.isArray(trasladoDrNode)
+    ? trasladoDrNode
+    : trasladoDrNode
+      ? [trasladoDrNode]
+      : [];
+
+  if (trasladoDrArray.length === 0) {
+    return null;
+  }
+
+  const baseDr = trasladoDrArray.reduce((acc, traslado) => {
+    if (!traslado || typeof traslado !== "object") {
+      return acc;
+    }
+    return acc + getNumberAttr(traslado as Record<string, unknown>, "@_BaseDR", 0);
+  }, 0);
+
+  return baseDr > 0 ? baseDr : null;
+}
+
+function extractBasePFromPago(pago: Record<string, unknown>): number | null {
+  const impuestosPNode = pago["pago20:ImpuestosP"] ?? pago["pago10:ImpuestosP"];
+  if (!impuestosPNode || typeof impuestosPNode !== "object") {
+    return null;
+  }
+
+  const impuestosP = impuestosPNode as Record<string, unknown>;
+  const trasladosPNode = impuestosP["pago20:TrasladosP"] ?? impuestosP["pago10:TrasladosP"];
+  if (!trasladosPNode || typeof trasladosPNode !== "object") {
+    return null;
+  }
+
+  const trasladosP = trasladosPNode as Record<string, unknown>;
+  const trasladoPNode = trasladosP["pago20:TrasladoP"] ?? trasladosP["pago10:TrasladoP"];
+  const trasladoPArray = Array.isArray(trasladoPNode)
+    ? trasladoPNode
+    : trasladoPNode
+      ? [trasladoPNode]
+      : [];
+
+  if (trasladoPArray.length === 0) {
+    return null;
+  }
+
+  const baseP = trasladoPArray.reduce((acc, traslado) => {
+    if (!traslado || typeof traslado !== "object") {
+      return acc;
+    }
+    return acc + getNumberAttr(traslado as Record<string, unknown>, "@_BaseP", 0);
+  }, 0);
+
+  return baseP > 0 ? baseP : null;
+}
+
+function resolveImpPagadoSubtotal(
+  pago: Record<string, unknown>,
+  docto: Record<string, unknown>,
+  doctosCount: number
+): number {
+  const baseDr = extractBaseDRFromDoctoRelacionado(docto);
+  if (baseDr !== null) {
+    return baseDr;
+  }
+
+  // BaseP está a nivel Pago; solo es confiable como fallback cuando hay un único documento relacionado.
+  if (doctosCount === 1) {
+    const baseP = extractBasePFromPago(pago);
+    if (baseP !== null) {
+      return baseP;
+    }
+  }
+
+  return getNumberAttr(docto, "@_ImpPagado", 0);
+}
+
 /**
  * Extrae datos del complemento de pago (solo para tipo COMPLEMENTO_PAGO)
  */
@@ -389,6 +478,7 @@ export function extractComplementoPago(xml: Document): ComplementoPago {
       const doctosArray = Array.isArray(doctosRelacionados) ? doctosRelacionados : [doctosRelacionados];
       for (const doctoNode of doctosArray) {
         const docto = ensureObject(doctoNode, "DoctoRelacionado");
+        const impPagadoSubtotal = resolveImpPagadoSubtotal(pago, docto, doctosArray.length);
         facturasRelacionadas.push({
           uuid: getStringAttr(docto, "@_IdDocumento") || getStringAttr(docto, "@_UUID"),
           monedaDR: getStringAttr(docto, "@_MonedaDR"),
@@ -396,7 +486,7 @@ export function extractComplementoPago(xml: Document): ComplementoPago {
           metodoPagoDR: getStringAttr(docto, "@_MetodoDePagoDR"),
           numParcialidad: getIntAttr(docto, "@_NumParcialidad", 1),
           impSaldoAnt: getNumberAttr(docto, "@_ImpSaldoAnt", 0),
-          impPagado: getNumberAttr(docto, "@_ImpPagado", 0),
+          impPagado: impPagadoSubtotal,
           impSaldoInsoluto: getNumberAttr(docto, "@_ImpSaldoInsoluto", 0),
         });
       }
@@ -672,6 +762,7 @@ export class BaseCFDIParser {
 
         for (const doctoNode of doctosArray) {
           const docto = this.ensureObject(doctoNode, "DoctoRelacionado");
+          const impPagadoSubtotal = resolveImpPagadoSubtotal(pago, docto, doctosArray.length);
           facturasRelacionadas.push({
             uuid: this.getStringAttr(docto, "@_IdDocumento") || this.getStringAttr(docto, "@_UUID"),
             monedaDR: this.getStringAttr(docto, "@_MonedaDR"),
@@ -679,7 +770,7 @@ export class BaseCFDIParser {
             metodoPagoDR: this.getStringAttr(docto, "@_MetodoDePagoDR"),
             numParcialidad: this.getIntAttr(docto, "@_NumParcialidad", 1),
             impSaldoAnt: this.getNumberAttr(docto, "@_ImpSaldoAnt", 0),
-            impPagado: this.getNumberAttr(docto, "@_ImpPagado", 0),
+            impPagado: impPagadoSubtotal,
             impSaldoInsoluto: this.getNumberAttr(docto, "@_ImpSaldoInsoluto", 0),
           });
         }

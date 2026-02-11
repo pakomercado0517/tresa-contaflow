@@ -153,7 +153,7 @@ export class PaymentStatusService {
 
     // Calcular total pagado por complementos
     const totalPagadoComplementos = complementosItems.reduce(
-      (sum, item) => sum + Number(item.imp_pagado || 0),
+      (sum, item) => sum + Number(item.monto_pago || 0),
       0
     );
 
@@ -304,7 +304,7 @@ export class PaymentStatusService {
       .reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
 
     const totalPagadoComplementos = complementosItems.reduce(
-      (sum, item) => sum + Number(item.imp_pagado || 0),
+      (sum, item) => sum + Number(item.monto_pago || 0),
       0
     );
 
