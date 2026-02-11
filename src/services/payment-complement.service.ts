@@ -189,7 +189,7 @@ export class PaymentComplementService {
       fechaPago: item.fecha_pago,
       formaPago: item.forma_pago,
       monedaPago: item.moneda_pago,
-      monto: Number(item.imp_pagado),
+      monto: Number(item.monto_pago),
       numOperacion: item.num_operacion ?? undefined,
       numParcialidad: item.num_parcialidad,
       complementoUUID: item.complement_id,

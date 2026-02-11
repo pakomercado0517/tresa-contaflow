@@ -221,7 +221,7 @@ export class PaymentMatchingService {
       },
     });
 
-    return items.reduce((sum, item) => sum + Number(item.imp_pagado || 0), 0);
+    return items.reduce((sum, item) => sum + Number(item.monto_pago || 0), 0);
   }
 }
 

@@ -1400,7 +1400,7 @@ export class MetricsService {
    * Ingresos cobrados (flujo de efectivo - ingresos): subtotal de facturas PUE del período
    * + montos cobrados por complementos de pago de facturas PPD (por fecha_pago en el período)
    * + subtotal de manual_incomes del período con is_paid = true.
-   * Todo en subtotal sin IVA; para complementos se usa imp_pagado (monto cobrado).
+   * Todo en subtotal sin IVA; para complementos se usa imp_pagado (base gravable, p.ej. BaseDR).
    */
   async calculateIngresosCobrados(profileId: string, periodId: string): Promise<number> {
     const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);

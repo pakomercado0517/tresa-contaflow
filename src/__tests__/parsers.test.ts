@@ -8,6 +8,7 @@ import {
   extractSubtotal,
   extractIVA,
   extractRetenciones,
+  extractComplementoPago,
 } from "../parsers/index.js";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -33,6 +34,51 @@ const MINIMAL_CFDI_PPD = `<?xml version="1.0" encoding="UTF-8"?>
   </cfdi:Conceptos>
   <cfdi:Complemento>
     <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="11111111-2222-3333-4444-555555555555" FechaTimbrado="2024-01-20T10:05:00" RfcProvCertif="AAA010101AAA" SelloCFD="xxx" NoCertificadoSAT="12345678" SelloSAT="yyy"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+
+const COMPLEMENTO_PAGO_CON_BASEDR = `<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" TipoDeComprobante="P" SubTotal="0" Total="0" Moneda="XXX" Fecha="2025-12-30T17:02:11">
+  <cfdi:Emisor Rfc="AAA010101AAA" Nombre="Emisor SA" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="BBB020202BBB" Nombre="Receptor SA" RegimenFiscalReceptor="601" UsoCFDI="CP01" DomicilioFiscalReceptor="06100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ObjetoImp="01" ValorUnitario="0" Importe="0"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Pago FechaPago="2025-12-30T17:00:45" FormaDePagoP="03" MonedaP="MXN" TipoCambioP="1" Monto="420000.01">
+        <pago20:DoctoRelacionado IdDocumento="436FFCB4-5C45-44B1-B35D-6025F1BEF01A" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="420000.01" ImpPagado="420000.01" ImpSaldoInsoluto="0.00" ObjetoImpDR="02">
+          <pago20:ImpuestosDR>
+            <pago20:TrasladosDR>
+              <pago20:TrasladoDR BaseDR="362068.974138" ImpuestoDR="002" TipoFactorDR="Tasa" TasaOCuotaDR="0.160000" ImporteDR="57931.035862"/>
+            </pago20:TrasladosDR>
+          </pago20:ImpuestosDR>
+        </pago20:DoctoRelacionado>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="176775A9-BD1E-43C0-B3DA-487631FB9DF5" FechaTimbrado="2025-12-30T17:02:12" RfcProvCertif="AAA010101AAA" SelloCFD="xxx" NoCertificadoSAT="12345678" SelloSAT="yyy"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+
+const COMPLEMENTO_PAGO_CON_BASEP = `<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" TipoDeComprobante="P" SubTotal="0" Total="0" Moneda="XXX" Fecha="2025-12-30T17:02:11">
+  <cfdi:Emisor Rfc="AAA010101AAA" Nombre="Emisor SA" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="BBB020202BBB" Nombre="Receptor SA" RegimenFiscalReceptor="601" UsoCFDI="CP01" DomicilioFiscalReceptor="06100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ObjetoImp="01" ValorUnitario="0" Importe="0"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Pago FechaPago="2025-12-30T17:00:45" FormaDePagoP="03" MonedaP="MXN" TipoCambioP="1" Monto="580.00">
+        <pago20:DoctoRelacionado IdDocumento="11111111-2222-3333-4444-555555555555" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="580.00" ImpPagado="580.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02"/>
+        <pago20:ImpuestosP>
+          <pago20:TrasladosP>
+            <pago20:TrasladoP BaseP="500.00" ImpuestoP="002" TipoFactorP="Tasa" TasaOCuotaP="0.160000" ImporteP="80.00"/>
+          </pago20:TrasladosP>
+        </pago20:ImpuestosP>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="276775A9-BD1E-43C0-B3DA-487631FB9DF5" FechaTimbrado="2025-12-30T17:02:12" RfcProvCertif="AAA010101AAA" SelloCFD="xxx" NoCertificadoSAT="12345678" SelloSAT="yyy"/>
   </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
@@ -85,6 +131,24 @@ describe("Parsers", () => {
       // ISR: 2645.88, IVA: 2822.25
       expect(ret.isr).toBeCloseTo(2645.88, 2);
       expect(ret.iva).toBeCloseTo(2822.25, 2);
+    });
+  });
+
+  describe("extractComplementoPago", () => {
+    it("usa BaseDR como subtotal de impPagado cuando existe", () => {
+      const doc = parseXML(Buffer.from(COMPLEMENTO_PAGO_CON_BASEDR, "utf-8"));
+      const complemento = extractComplementoPago(doc);
+      const facturaRelacionada = complemento.pagos[0]?.facturasRelacionadas[0];
+      expect(facturaRelacionada).toBeDefined();
+      expect(facturaRelacionada?.impPagado).toBeCloseTo(362068.974138, 6);
+    });
+
+    it("usa BaseP como fallback cuando no existe BaseDR y hay un solo DoctoRelacionado", () => {
+      const doc = parseXML(Buffer.from(COMPLEMENTO_PAGO_CON_BASEP, "utf-8"));
+      const complemento = extractComplementoPago(doc);
+      const facturaRelacionada = complemento.pagos[0]?.facturasRelacionadas[0];
+      expect(facturaRelacionada).toBeDefined();
+      expect(facturaRelacionada?.impPagado).toBe(500);
     });
   });
 
