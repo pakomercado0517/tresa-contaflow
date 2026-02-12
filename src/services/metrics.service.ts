@@ -2,6 +2,7 @@ import {
   Invoice,
   AccruedExpense,
   Profile,
+  PaymentComplement,
   PaymentComplementItem,
   Period,
   ManualIncome,
@@ -40,6 +41,8 @@ export interface PeriodMetrics {
 interface PaymentContext {
   totalPagadoComplementosInvoicesPeriodo: number;
   totalPagadoComplementosExpensesPeriodo: number;
+  totalPagadoComplementosInvoicesSinConciliarPeriodo: number;
+  totalPagadoComplementosExpensesSinConciliarPeriodo: number;
   totalPagadoManualPeriodo: number;
   pagosComplementoPorFactura: Record<string, number>;
   pagosComplementoPorGasto: Record<string, number>;
@@ -110,7 +113,12 @@ export class MetricsService {
     // Separar complementos de invoices y expenses
     // Para Opción B: contar complementos por fecha_pago, no por fecha de factura
     // Esto permite que un complemento de diciembre aparezca en diciembre aunque la factura sea de enero
-    const { totalInvoices, totalExpenses } = await this.sumComplementosPeriodoSeparado(
+    const {
+      totalInvoices,
+      totalExpenses,
+      totalInvoicesSinConciliar,
+      totalExpensesSinConciliar,
+    } = await this.sumComplementosPeriodoSeparado(
       profileIds,
       dateRange
     );
@@ -136,6 +144,8 @@ export class MetricsService {
     const paymentContext: PaymentContext = {
       totalPagadoComplementosInvoicesPeriodo: totalInvoices,
       totalPagadoComplementosExpensesPeriodo: totalExpenses,
+      totalPagadoComplementosInvoicesSinConciliarPeriodo: totalInvoicesSinConciliar,
+      totalPagadoComplementosExpensesSinConciliarPeriodo: totalExpensesSinConciliar,
       totalPagadoManualPeriodo: manualPagosPeriodo.total,
       pagosComplementoPorFactura,
       pagosComplementoPorGasto,
@@ -167,10 +177,13 @@ export class MetricsService {
     // Solo sumar complementos de invoices en totalPagado (ingresos)
     let totalPagado =
       paymentContext.totalPagadoComplementosInvoicesPeriodo +
+      paymentContext.totalPagadoComplementosInvoicesSinConciliarPeriodo +
       paymentContext.totalPagadoManualPeriodo;
     let totalCompras = 0; // Total contable (completo)
     // Los complementos de expenses se suman en totalComprasPagadas (gastos pagados)
-    let totalComprasPagadas = paymentContext.totalPagadoComplementosExpensesPeriodo;
+    let totalComprasPagadas =
+      paymentContext.totalPagadoComplementosExpensesPeriodo +
+      paymentContext.totalPagadoComplementosExpensesSinConciliarPeriodo;
     let facturasPUE = 0;
     let facturasPPD = 0;
     let facturasPagadasCompletamente = 0;
@@ -653,9 +666,19 @@ export class MetricsService {
   private async sumComplementosPeriodoSeparado(
     profileIds: string[],
     dateRange: { start: Date; end: Date } | null
-  ): Promise<{ totalInvoices: number; totalExpenses: number }> {
+  ): Promise<{
+    totalInvoices: number;
+    totalExpenses: number;
+    totalInvoicesSinConciliar: number;
+    totalExpensesSinConciliar: number;
+  }> {
     if (profileIds.length === 0) {
-      return { totalInvoices: 0, totalExpenses: 0 };
+      return {
+        totalInvoices: 0,
+        totalExpenses: 0,
+        totalInvoicesSinConciliar: 0,
+        totalExpensesSinConciliar: 0,
+      };
     }
 
     const whereClause: {
@@ -676,10 +699,23 @@ export class MetricsService {
 
     const allPagos = await PaymentComplementItem.findAll({
       where: whereClause,
+      include: [
+        {
+          model: PaymentComplement,
+          as: 'complement',
+          attributes: ['rfc_emisor', 'rfc_receptor'],
+          required: false,
+        },
+      ],
     });
 
     if (allPagos.length === 0) {
-      return { totalInvoices: 0, totalExpenses: 0 };
+      return {
+        totalInvoices: 0,
+        totalExpenses: 0,
+        totalInvoicesSinConciliar: 0,
+        totalExpensesSinConciliar: 0,
+      };
     }
 
     // Obtener todos los UUIDs únicos de facturas relacionadas
@@ -709,9 +745,20 @@ export class MetricsService {
     const expenseUUIDsSet = new Set(
       expenses.map((exp) => exp.uuid || '').filter((uuid) => uuid !== '')
     );
+    const profiles = await Profile.findAll({
+      where: {
+        id: { [Op.in]: profileIds },
+      },
+      attributes: ['id', 'rfc'],
+    });
+    const profileRFCById = new Map<string, string>(
+      profiles.map((profile) => [profile.id, profile.rfc])
+    );
 
     let totalInvoices = 0;
     let totalExpenses = 0;
+    let totalInvoicesSinConciliar = 0;
+    let totalExpensesSinConciliar = 0;
 
     for (const item of allPagos) {
       const monto = Number(item.imp_pagado || 0);
@@ -719,12 +766,50 @@ export class MetricsService {
         totalInvoices += monto;
       } else if (expenseUUIDsSet.has(item.factura_uuid)) {
         totalExpenses += monto;
+      } else {
+        const classification = this.classifyUnmatchedComplementItem(item, profileRFCById);
+        if (classification === 'INVOICE') {
+          totalInvoicesSinConciliar += monto;
+        } else if (classification === 'EXPENSE') {
+          totalExpensesSinConciliar += monto;
+        }
       }
-      // Si el UUID no está en ninguno de los dos sets, no lo contamos
-      // (puede ser una factura eliminada o de otro perfil)
     }
 
-    return { totalInvoices, totalExpenses };
+    return {
+      totalInvoices,
+      totalExpenses,
+      totalInvoicesSinConciliar,
+      totalExpensesSinConciliar,
+    };
+  }
+
+  private classifyUnmatchedComplementItem(
+    item: PaymentComplementItem,
+    profileRFCById: Map<string, string>
+  ): 'INVOICE' | 'EXPENSE' | null {
+    const typedItem = item as PaymentComplementItem & { complement?: PaymentComplement };
+    const complemento = typedItem.complement;
+    if (!complemento) {
+      return null;
+    }
+
+    const profileRFC = profileRFCById.get(item.profile_id);
+    if (!profileRFC) {
+      return null;
+    }
+
+    if (this.areRFCsEqual(complemento.rfc_receptor, profileRFC)) {
+      return 'EXPENSE';
+    }
+    if (this.areRFCsEqual(complemento.rfc_emisor, profileRFC)) {
+      return 'INVOICE';
+    }
+    return null;
+  }
+
+  private areRFCsEqual(leftRFC: string, rightRFC: string): boolean {
+    return leftRFC.trim().toUpperCase() === rightRFC.trim().toUpperCase();
   }
 
   private async sumComplementosPorFactura(
@@ -815,6 +900,7 @@ export class MetricsService {
     const [
       ingresosCobrados,
       egresosPagados,
+      complementosSinConciliar,
       ingresosDevengados,
       egresosDevengados,
       ivaTrasladado,
@@ -826,6 +912,7 @@ export class MetricsService {
     ] = await Promise.all([
       this.calculateIngresosCobrados(profileId, periodId),
       this.calculateEgresosPagados(profileId, periodId),
+      this.getUnmatchedComplementTotalsForPeriod(profileId, periodId),
       this.calculateIngresosDevengados(profileId, periodId),
       this.calculateEgresosDevengados(profileId, periodId),
       this.calculateIVATrasladado(profileId, periodId),
@@ -849,6 +936,8 @@ export class MetricsService {
         ingresos_cobrados: ingresosCobrados,
         egresos_pagados: egresosPagados,
         flujo_neto: flujoNeto,
+        ingresos_cobrados_sin_conciliar: complementosSinConciliar.ingresos,
+        egresos_pagados_sin_conciliar: complementosSinConciliar.egresos,
       },
       devengado: {
         ingresos_devengados: ingresosDevengados,
@@ -893,6 +982,7 @@ export class MetricsService {
     const [
       ingresosCobrados,
       egresosPagados,
+      complementosSinConciliar,
       ingresosDevengados,
       egresosDevengados,
       ivaTrasladado,
@@ -904,6 +994,7 @@ export class MetricsService {
     ] = await Promise.all([
       this.calculateIngresosCobradosForRange(profileId, dateRange, regimenFilter),
       this.calculateEgresosPagadosForRange(profileId, dateRange, regimenFilter),
+      this.getUnmatchedComplementTotalsForRange(profileId, dateRange, regimenFilter),
       this.calculateIngresosDevengadosForRange(profileId, dateRange, regimenFilter),
       this.calculateEgresosDevengadosForRange(profileId, dateRange, regimenFilter),
       this.calculateIVATrasladadoForRange(profileId, dateRange, regimenFilter),
@@ -923,6 +1014,8 @@ export class MetricsService {
         ingresos_cobrados: ingresosCobrados,
         egresos_pagados: egresosPagados,
         flujo_neto: flujoNeto,
+        ingresos_cobrados_sin_conciliar: complementosSinConciliar.ingresos,
+        egresos_pagados_sin_conciliar: complementosSinConciliar.egresos,
       },
       devengado: {
         ingresos_devengados: ingresosDevengados,
@@ -1001,6 +1094,8 @@ export class MetricsService {
         ingresos_cobrados: 0,
         egresos_pagados: 0,
         flujo_neto: 0,
+        ingresos_cobrados_sin_conciliar: 0,
+        egresos_pagados_sin_conciliar: 0,
       },
       devengado: {
         ingresos_devengados: 0,
@@ -1026,6 +1121,8 @@ export class MetricsService {
       aggregated.flujo.ingresos_cobrados += r.flujo.ingresos_cobrados;
       aggregated.flujo.egresos_pagados += r.flujo.egresos_pagados;
       aggregated.flujo.flujo_neto += r.flujo.flujo_neto;
+      aggregated.flujo.ingresos_cobrados_sin_conciliar += r.flujo.ingresos_cobrados_sin_conciliar;
+      aggregated.flujo.egresos_pagados_sin_conciliar += r.flujo.egresos_pagados_sin_conciliar;
       aggregated.devengado.ingresos_devengados += r.devengado.ingresos_devengados;
       aggregated.devengado.egresos_devengados += r.devengado.egresos_devengados;
       aggregated.devengado.resultado_devengado += r.devengado.resultado_devengado;
@@ -1046,6 +1143,10 @@ export class MetricsService {
     }
 
     aggregated.flujo.flujo_neto = Math.round(aggregated.flujo.flujo_neto * 100) / 100;
+    aggregated.flujo.ingresos_cobrados_sin_conciliar =
+      Math.round(aggregated.flujo.ingresos_cobrados_sin_conciliar * 100) / 100;
+    aggregated.flujo.egresos_pagados_sin_conciliar =
+      Math.round(aggregated.flujo.egresos_pagados_sin_conciliar * 100) / 100;
     aggregated.devengado.resultado_devengado =
       Math.round(aggregated.devengado.resultado_devengado * 100) / 100;
     aggregated.nomina.total_pagada = Math.round(aggregated.nomina.total_pagada * 100) / 100;
@@ -1053,6 +1154,98 @@ export class MetricsService {
     aggregated.nomina.deducciones = Math.round(aggregated.nomina.deducciones * 100) / 100;
 
     return aggregated;
+  }
+
+  private async getUnmatchedComplementTotalsForPeriod(
+    profileId: string,
+    periodId: string
+  ): Promise<{ ingresos: number; egresos: number }> {
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return { ingresos: 0, egresos: 0 };
+    }
+    return this.getUnmatchedComplementTotalsForRange(profileId, dateRange);
+  }
+
+  private async getUnmatchedComplementTotalsForRange(
+    profileId: string,
+    dateRange: { start: Date; end: Date },
+    regimenFiscal?: string
+  ): Promise<{ ingresos: number; egresos: number }> {
+    if (regimenFiscal) {
+      // Sin factura relacionada no podemos validar régimen fiscal de forma confiable.
+      return { ingresos: 0, egresos: 0 };
+    }
+
+    const profile = await Profile.findByPk(profileId, { attributes: ['id', 'rfc'] });
+    if (!profile) {
+      return { ingresos: 0, egresos: 0 };
+    }
+
+    const allPagos = await PaymentComplementItem.findAll({
+      where: {
+        profile_id: profileId,
+        fecha_pago: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      include: [
+        {
+          model: PaymentComplement,
+          as: 'complement',
+          attributes: ['rfc_emisor', 'rfc_receptor'],
+          required: false,
+        },
+      ],
+    });
+    if (allPagos.length === 0) {
+      return { ingresos: 0, egresos: 0 };
+    }
+
+    const facturaUUIDs = [...new Set(allPagos.map((item) => item.factura_uuid))];
+    const [invoicesPPD, expensesPPD] = await Promise.all([
+      Invoice.findAll({
+        where: {
+          profile_id: profileId,
+          uuid: { [Op.in]: facturaUUIDs },
+          tipo: 'PPD',
+        },
+        attributes: ['uuid'],
+      }),
+      AccruedExpense.findAll({
+        where: {
+          profile_id: profileId,
+          uuid: { [Op.in]: facturaUUIDs },
+          tipo: 'PPD',
+        },
+        attributes: ['uuid'],
+      }),
+    ]);
+
+    const invoiceUUIDsSet = new Set(invoicesPPD.map((invoice) => invoice.uuid));
+    const expenseUUIDsSet = new Set(
+      expensesPPD.map((expense) => expense.uuid || '').filter((uuid) => uuid !== '')
+    );
+    const profileRFCById = new Map<string, string>([[profile.id, profile.rfc]]);
+
+    let ingresos = 0;
+    let egresos = 0;
+    for (const item of allPagos) {
+      if (invoiceUUIDsSet.has(item.factura_uuid) || expenseUUIDsSet.has(item.factura_uuid)) {
+        continue;
+      }
+
+      const classification = this.classifyUnmatchedComplementItem(item, profileRFCById);
+      const monto = Number(item.imp_pagado || 0);
+      if (classification === 'INVOICE') {
+        ingresos += monto;
+      } else if (classification === 'EXPENSE') {
+        egresos += monto;
+      }
+    }
+
+    return {
+      ingresos: Math.round(ingresos * 100) / 100,
+      egresos: Math.round(egresos * 100) / 100,
+    };
   }
 
   private async calculateIngresosCobradosForRange(
@@ -1108,8 +1301,17 @@ export class MetricsService {
       (acc, m) => acc + Number(m.subtotal || 0),
       0
     );
+    const complementosSinConciliar = await this.getUnmatchedComplementTotalsForRange(
+      profileId,
+      dateRange,
+      regimenFiscal
+    );
 
-    return Math.round((sumPUE + sumComplementos + sumManualPaid) * 100) / 100;
+    return (
+      Math.round(
+        (sumPUE + sumComplementos + sumManualPaid + complementosSinConciliar.ingresos) * 100
+      ) / 100
+    );
   }
 
   private async calculateEgresosPagadosForRange(
@@ -1128,7 +1330,13 @@ export class MetricsService {
       where: expenseWhere,
       attributes: ['subtotal'],
     });
-    return Math.round(expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0) * 100) / 100;
+    const sumEgresosDirectos = expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
+    const complementosSinConciliar = await this.getUnmatchedComplementTotalsForRange(
+      profileId,
+      dateRange,
+      regimenFiscal
+    );
+    return Math.round((sumEgresosDirectos + complementosSinConciliar.egresos) * 100) / 100;
   }
 
   private async calculateIngresosDevengadosForRange(
@@ -1456,8 +1664,15 @@ export class MetricsService {
       (acc, m) => acc + Number(m.subtotal || 0),
       0
     );
-
-    return Math.round((sumPUE + sumComplementos + sumManualPaid) * 100) / 100;
+    const complementosSinConciliar = await this.getUnmatchedComplementTotalsForPeriod(
+      profileId,
+      periodId
+    );
+    return (
+      Math.round(
+        (sumPUE + sumComplementos + sumManualPaid + complementosSinConciliar.ingresos) * 100
+      ) / 100
+    );
   }
 
   /**
@@ -1482,7 +1697,11 @@ export class MetricsService {
       attributes: ['subtotal'],
     });
     const sum = expenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
-    return Math.round(sum * 100) / 100;
+    const complementosSinConciliar = await this.getUnmatchedComplementTotalsForPeriod(
+      profileId,
+      periodId
+    );
+    return Math.round((sum + complementosSinConciliar.egresos) * 100) / 100;
   }
 
   /**
