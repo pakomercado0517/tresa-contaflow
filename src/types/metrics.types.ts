@@ -13,6 +13,8 @@ export interface FlujoMetrics {
   ingresos_cobrados: number;
   egresos_pagados: number;
   flujo_neto: number;
+  ingresos_cobrados_sin_conciliar: number;
+  egresos_pagados_sin_conciliar: number;
 }
 
 export interface DevengadoMetrics {
