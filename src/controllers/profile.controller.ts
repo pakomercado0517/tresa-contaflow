@@ -351,7 +351,8 @@ export async function freezeOtherProfiles(req: AuthRequest, res: Response): Prom
 export async function unfreezeProfile(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.userId;
-    const { id } = req.params;
+    const idRaw = req.params.id;
+    const id = Array.isArray(idRaw) ? idRaw[0] : idRaw;
 
     if (!userId) {
       res.status(401).json({ error: 'Usuario no autenticado' });

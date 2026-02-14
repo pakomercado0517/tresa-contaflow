@@ -91,7 +91,8 @@ export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const periodId = req.params.period_id;
+    const periodIdRaw = req.params.period_id;
+    const periodId = Array.isArray(periodIdRaw) ? periodIdRaw[0] : periodIdRaw;
     if (!periodId) {
       res.status(400).json({ error: "period_id es requerido" });
       return;
