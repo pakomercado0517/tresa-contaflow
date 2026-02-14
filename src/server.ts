@@ -115,7 +115,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 app.get('/', (req: Request, res: Response) =>
-  res.send({ message: 'Bienvenido a la API de Tresa ContaFlow' })
+  res.send({ message: 'Bienvenido a la API de Tresa Contafy' })
 );
 
 // Routes

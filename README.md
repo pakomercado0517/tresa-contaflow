@@ -1,4 +1,4 @@
-# Tresa ContaFlow
+# Tresa Contafy
 
 Sistema de control financiero mediante procesamiento de facturas XML (CFDI México). Micro-SaaS que permite gestionar facturas, gastos y complementos de pago de manera eficiente.
 
@@ -24,7 +24,7 @@ Sistema de control financiero mediante procesamiento de facturas XML (CFDI Méxi
 
 ```bash
 git clone <repository-url>
-cd tresa-contaflow
+cd tresa-contafy
 ```
 
 2. Instala las dependencias:
@@ -42,7 +42,7 @@ NODE_ENV=development
 PORT=3001
 
 # Base de datos
-DATABASE_URL=postgresql://usuario:password@localhost:5432/tresa_contaflow
+DATABASE_URL=postgresql://usuario:password@localhost:5432/tresa_contafy
 
 # JWT
 JWT_SECRET=tu-secret-key-muy-segura
@@ -51,7 +51,7 @@ JWT_REFRESH_SECRET=tu-refresh-secret-key-muy-segura
 # Email (Brevo)
 BREVO_API_KEY=tu-api-key-brevo
 BREVO_FROM_EMAIL=noreply@tudominio.com
-BREVO_FROM_NAME=Tresa ContaFlow
+BREVO_FROM_NAME=Tresa Contafy
 
 # App URL (para links de verificación)
 APP_URL=http://localhost:3000
@@ -87,7 +87,7 @@ El servidor estará disponible en `http://localhost:3001`
 ## 🏗️ Estructura del Proyecto
 
 ```
-tresa-contaflow/
+tresa-contafy/
 ├── src/
 │   ├── controllers/     # Controladores de la API
 │   ├── database/
@@ -228,4 +228,4 @@ Este proyecto es privado y confidencial.
 
 ## 👥 Autor
 
-Tresa ContaFlow
+Tresa Contafy

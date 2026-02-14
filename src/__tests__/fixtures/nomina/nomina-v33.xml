@@ -2,7 +2,7 @@
 <Comprobante xmlns="http://www.sat.gob.mx/cfd/3" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
   version="3.3" serie="N" folio="501" fecha="2024-06-15T12:00:00" subTotal="7800.00" moneda="MXN" total="7800.00"
   tipoDeComprobante="N" lugarExpedicion="06100" formaPago="99" metodoDePago="PUE">
-  <Emisor rfc="TME120315AB1" nombre="Tresa Contaflow SA de CV" regimenFiscal="601"/>
+  <Emisor rfc="TME120315AB1" nombre="Tresa Contafy SA de CV" regimenFiscal="601"/>
   <Receptor rfc="PERE880303MDF" nombre="Perez Hernandez Ana" usoCFDI="P01" regimenFiscal="605"/>
   <Conceptos>
     <Concepto claveProdServ="84111506" cantidad="1" claveUnidad="E48" descripcion="Pago de nómina" valorUnitario="7800.00" importe="7800.00"/>

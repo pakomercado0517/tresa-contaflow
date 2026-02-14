@@ -1,4 +1,4 @@
-# Tests - Tresa ContaFlow
+# Tests - Tresa Contafy
 
 Este directorio contiene los tests principales del backend.
 

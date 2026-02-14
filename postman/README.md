@@ -1,6 +1,6 @@
-# Colección Postman - Tresa ContaFlow API
+# Colección Postman - Tresa Contafy API
 
-Esta carpeta contiene la colección de Postman para probar la API de Tresa ContaFlow.
+Esta carpeta contiene la colección de Postman para probar la API de Tresa Contafy.
 
 ## 📋 Configuración Inicial
 

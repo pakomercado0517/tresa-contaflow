@@ -2,7 +2,7 @@
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
   Version="4.0" Serie="N" Folio="1002" Fecha="2025-01-31T12:00:00" SubTotal="12500.00" Moneda="MXN" Total="12500.00"
   TipoDeComprobante="N" LugarExpedicion="06100" Exportacion="01" MetodoPago="NA">
-  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contaflow SA de CV" RegimenFiscal="601"/>
+  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contafy SA de CV" RegimenFiscal="601"/>
   <cfdi:Receptor Rfc="MARA850512MDF" Nombre="Maria Ramirez Lopez" RegimenFiscalReceptor="605" UsoCFDI="CN01" DomicilioFiscalReceptor="03100"/>
   <cfdi:Conceptos>
     <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="E48" Descripcion="Pago de nómina mensual" ValorUnitario="12500.00" Importe="12500.00" ObjetoImp="01"/>

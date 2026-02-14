@@ -8,8 +8,8 @@ if (!process.env.BREVO_API_KEY) {
 const apiInstance = new brevo.TransactionalEmailsApi();
 apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || "noreply@tresacontaflow.com";
-const FROM_NAME = process.env.BREVO_FROM_NAME || "Tresa ContaFlow";
+const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || "noreply@tresacontafy.com";
+const FROM_NAME = process.env.BREVO_FROM_NAME || "Tresa Contafy";
 
 interface SendEmailOptions {
   to: string;
@@ -56,7 +56,7 @@ export async function sendVerificationEmail(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>¡Bienvenido a bordo! - Tresa ContaFlow</title>
+  <title>¡Bienvenido a bordo! - Tresa Contafy</title>
   <!--[if mso]>
   <style type="text/css">
     body, table, td {font-family: Arial, sans-serif !important;}
@@ -76,7 +76,7 @@ export async function sendVerificationEmail(
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                 <tr>
                   <td>
-                    <span style="color: #265C46; font-size: 20px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">Tresa ContaFlow</span>
+                    <span style="color: #265C46; font-size: 20px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">Tresa Contafy</span>
                   </td>
                 </tr>
               </table>
@@ -196,7 +196,7 @@ export async function sendVerificationEmail(
                 <tr>
                   <td align="center" style="padding-bottom: 16px;">
                     <p style="margin: 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-                      © 2023 Tresa ContaFlow Solutions México.
+                      © 2023 Tresa Contafy Solutions México.
                     </p>
                     <p style="margin: 8px 0 0 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                       Av. de la Reforma 222, Cuauhtémoc, 06600 Ciudad de México, CDMX.
@@ -255,7 +255,7 @@ export async function sendVerificationEmail(
 </body>
 </html>`;
 
-  const textContent = `Tresa ContaFlow
+  const textContent = `Tresa Contafy
 
 ¡Bienvenido a bordo!
 
@@ -270,7 +270,7 @@ ${verificationUrl}
 Este enlace expirará en 24 horas. Si no solicitaste esta cuenta, puedes ignorar este correo.
 
 ---
-© 2023 Tresa ContaFlow Solutions México.
+© 2023 Tresa Contafy Solutions México.
 Av. de la Reforma 222, Cuauhtémoc, 06600 Ciudad de México, CDMX.
 
 Has recibido este correo porque te registraste en nuestra plataforma.
@@ -279,7 +279,7 @@ Privacidad | Términos | Soporte`;
 
   await sendEmail({
     to: email,
-    subject: "¡Bienvenido a bordo! - Tresa ContaFlow",
+    subject: "¡Bienvenido a bordo! - Tresa Contafy",
     htmlContent,
     textContent,
   });
@@ -298,7 +298,7 @@ export async function sendPasswordResetEmail(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Restablecer contraseña - Tresa ContaFlow</title>
+  <title>Restablecer contraseña - Tresa Contafy</title>
   <!--[if mso]>
   <style type="text/css">
     body, table, td {font-family: Arial, sans-serif !important;}
@@ -318,7 +318,7 @@ export async function sendPasswordResetEmail(
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                 <tr>
                   <td>
-                    <span style="color: #265C46; font-size: 20px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">Tresa ContaFlow</span>
+                    <span style="color: #265C46; font-size: 20px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">Tresa Contafy</span>
                   </td>
                 </tr>
               </table>
@@ -353,7 +353,7 @@ export async function sendPasswordResetEmail(
                 <tr>
                   <td align="center" style="padding-bottom: 32px;">
                     <p style="margin: 0; color: #1a1a1a; font-size: 16px; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 500px;">
-                      Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en Tresa ContaFlow. No te preocupes, puedes volver a ingresar haciendo clic en el botón de abajo.
+                      Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en Tresa Contafy. No te preocupes, puedes volver a ingresar haciendo clic en el botón de abajo.
                     </p>
                   </td>
                 </tr>
@@ -442,7 +442,7 @@ export async function sendPasswordResetEmail(
                 <tr>
                   <td align="center" style="padding-bottom: 16px;">
                     <p style="margin: 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-                      © 2023 Tresa ContaFlow Solutions México.
+                      © 2023 Tresa Contafy Solutions México.
                     </p>
                     <p style="margin: 8px 0 0 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                       Av. de la Reforma 222, Colonia Juárez, 06600 Ciudad de México, CDMX.
@@ -501,18 +501,18 @@ export async function sendPasswordResetEmail(
 </body>
 </html>`;
 
-  const textContent = `Tresa ContaFlow
+  const textContent = `Tresa Contafy
 
 ¿Olvidaste tu contraseña?
 
-Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en Tresa ContaFlow. No te preocupes, puedes volver a ingresar haciendo clic en el siguiente enlace:
+Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en Tresa Contafy. No te preocupes, puedes volver a ingresar haciendo clic en el siguiente enlace:
 
 ${resetUrl}
 
 Si tú no realizaste esta solicitud, puedes ignorar este correo de forma segura. Tu contraseña actual no cambiará a menos que accedas al enlace superior.
 
 ---
-© 2023 Tresa ContaFlow Solutions México.
+© 2023 Tresa Contafy Solutions México.
 Av. de la Reforma 222, Colonia Juárez, 06600 Ciudad de México, CDMX.
 
 Estás recibiendo este correo electrónico por una solicitud de seguridad relacionada con tu cuenta.
@@ -521,7 +521,7 @@ Privacidad | Términos y Condiciones | Soporte Técnico`;
 
   await sendEmail({
     to: email,
-    subject: "Restablecer contraseña - Tresa ContaFlow",
+    subject: "Restablecer contraseña - Tresa Contafy",
     htmlContent,
     textContent,
   });

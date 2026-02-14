@@ -2,7 +2,7 @@
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:nomina12="http://www.sat.gob.mx/nomina12" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital"
   Version="4.0" Serie="N" Folio="1001" Fecha="2025-01-15T12:00:00" SubTotal="8500.00" Moneda="MXN" Total="8500.00"
   TipoDeComprobante="N" LugarExpedicion="06100" Exportacion="01" MetodoPago="NA">
-  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contaflow SA de CV" RegimenFiscal="601"/>
+  <cfdi:Emisor Rfc="TME120315AB1" Nombre="Tresa Contafy SA de CV" RegimenFiscal="601"/>
   <cfdi:Receptor Rfc="HEGG800101ABC" Nombre="Hector Gonzalez Garcia" RegimenFiscalReceptor="605" UsoCFDI="CN01" DomicilioFiscalReceptor="06100"/>
   <cfdi:Conceptos>
     <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="E48" Descripcion="Pago de nómina" ValorUnitario="8500.00" Importe="8500.00" ObjetoImp="01"/>
