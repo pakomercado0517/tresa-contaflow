@@ -9,7 +9,7 @@ import { Op } from "sequelize";
 
 /**
  * Lista los gastos del usuario
- * Soporta filtros: profileId, mes, año, tipo, categoria, search (búsqueda por texto), y paginación
+ * Soporta filtros: profileId, mes, año, tipo, categoria, regimen_fiscal, search (búsqueda por texto), y paginación
  */
 export async function getExpenses(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -20,7 +20,7 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
     }
 
     // Obtener parámetros de query
-    const { profileId, mes, año, tipo, categoria, search, page = "1", limit = "50" } = req.query;
+    const { profileId, mes, año, tipo, categoria, regimen_fiscal, search, page = "1", limit = "50" } = req.query;
 
     // Construir filtros
     const whereClause: any = {};
@@ -50,6 +50,11 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
 
     if (categoria && typeof categoria === "string") {
       whereClause.categoria = categoria;
+    }
+
+    // Filtro por régimen fiscal del receptor (clave SAT 3 dígitos)
+    if (regimen_fiscal && typeof regimen_fiscal === "string" && /^\d{3}$/.test(regimen_fiscal)) {
+      whereClause.regimen_fiscal_receptor = regimen_fiscal;
     }
 
     // Búsqueda por texto (RFC, razón social, concepto)

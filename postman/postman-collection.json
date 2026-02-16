@@ -697,6 +697,11 @@
                   "description": "Tipo: PUE, PPD, COMPLEMENTO_PAGO (opcional)"
                 },
                 {
+                  "key": "regimen_fiscal",
+                  "value": "",
+                  "description": "Clave SAT régimen fiscal emisor 3 dígitos (ej: 601, 606, 626, opcional)"
+                },
+                {
                   "key": "page",
                   "value": "1",
                   "description": "Página (default: 1)"
@@ -1108,6 +1113,11 @@
                   "key": "categoria",
                   "value": "",
                   "description": "Categoría (opcional)"
+                },
+                {
+                  "key": "regimen_fiscal",
+                  "value": "",
+                  "description": "Clave SAT régimen fiscal receptor 3 dígitos (ej: 601, 606, 626, opcional)"
                 },
                 {
                   "key": "page",

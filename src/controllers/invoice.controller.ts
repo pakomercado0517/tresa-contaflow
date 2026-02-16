@@ -429,7 +429,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
 
 /**
  * Lista las facturas del usuario
- * Soporta filtros: profileId, mes, año, tipo, search (búsqueda por texto), y paginación
+ * Soporta filtros: profileId, mes, año, tipo, regimen_fiscal, search (búsqueda por texto), y paginación
  */
 export async function getInvoices(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -440,7 +440,7 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
     }
 
     // Obtener parámetros de query
-    const { profileId, mes, año, tipo, search, page = "1", limit = "50" } = req.query;
+    const { profileId, mes, año, tipo, regimen_fiscal, search, page = "1", limit = "50" } = req.query;
 
     // Construir filtros
     const whereClause: any = {};
@@ -466,6 +466,11 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
 
     if (tipo && typeof tipo === "string" && ["PUE", "PPD", "COMPLEMENTO_PAGO"].includes(tipo)) {
       whereClause.tipo = tipo;
+    }
+
+    // Filtro por régimen fiscal del emisor (clave SAT 3 dígitos)
+    if (regimen_fiscal && typeof regimen_fiscal === "string" && /^\d{3}$/.test(regimen_fiscal)) {
+      whereClause.regimen_fiscal_emisor = regimen_fiscal;
     }
 
     // Búsqueda por texto (RFC, razón social, concepto)

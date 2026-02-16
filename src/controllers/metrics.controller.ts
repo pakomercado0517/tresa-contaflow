@@ -82,6 +82,7 @@ export async function getMetricsByMonthYear(req: AuthRequest, res: Response): Pr
 /**
  * GET /api/metrics/:period_id
  * Retorna métricas consolidadas del período (por period_id). Valida que el período pertenezca al usuario.
+ * Query opcional: regimen_fiscal (clave SAT 3 dígitos) para filtrar facturas y gastos por régimen.
  */
 export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -98,9 +99,18 @@ export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Pro
       return;
     }
 
+    const regimenFiscal = req.query.regimen_fiscal as string | undefined;
+
     const period = await Period.findOne({
       where: { id: periodId },
-      include: [{ model: Profile, as: "profile", where: { user_id: userId }, attributes: ["id"] }],
+      include: [
+        {
+          model: Profile,
+          as: "profile",
+          where: { user_id: userId },
+          attributes: ["id", "regimenes_fiscales"],
+        },
+      ],
       attributes: ["id", "profile_id", "start_date", "end_date"],
     });
 
@@ -109,7 +119,23 @@ export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const result = await metricsService.getMetrics(period.profile_id, periodId);
+    if (regimenFiscal && typeof regimenFiscal === "string") {
+      const periodWithProfile = period as Period & { profile?: Profile };
+      const regimenes = periodWithProfile.profile?.regimenes_fiscales ?? [];
+      if (!regimenes.includes(regimenFiscal)) {
+        res.status(400).json({
+          error: "El perfil no tiene el régimen fiscal indicado",
+          message: `El perfil no incluye el régimen ${regimenFiscal}. Régimenes del perfil: ${regimenes.join(", ") || "ninguno"}`,
+        });
+        return;
+      }
+    }
+
+    const result = await metricsService.getMetricsForPeriod(
+      period.profile_id,
+      periodId,
+      regimenFiscal ?? undefined
+    );
 
     if (!result) {
       res.status(404).json({ error: "No se pudieron calcular las métricas del período" });

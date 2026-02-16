@@ -36,6 +36,11 @@ const periodIdParam = [
     .withMessage("period_id es requerido")
     .isUUID()
     .withMessage("period_id debe ser un UUID válido"),
+  query("regimen_fiscal")
+    .optional()
+    .isString()
+    .matches(/^\d{3}$/)
+    .withMessage("regimen_fiscal debe ser una clave SAT de 3 dígitos (ej: 601, 606, 626)"),
 ];
 
 router.get("/", monthYearValidation, validateRequest, getMetricsByMonthYear);

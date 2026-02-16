@@ -887,6 +887,44 @@ export class MetricsService {
   }
 
   /**
+   * Métricas del período, opcionalmente filtradas por régimen fiscal.
+   * Si regimenFiscal se indica, filtra facturas por regimen_fiscal_emisor y gastos por regimen_fiscal_receptor.
+   * Retorna null si el período no existe o no pertenece al perfil.
+   */
+  async getMetricsForPeriod(
+    profileId: string,
+    periodId: string,
+    regimenFiscal?: string
+  ): Promise<PeriodMetricsResponse | null> {
+    const period = await Period.findOne({
+      where: { id: periodId, profile_id: profileId },
+      attributes: ['id', 'start_date', 'end_date'],
+    });
+    if (!period) return null;
+
+    if (regimenFiscal) {
+      const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+      if (!dateRange) return null;
+      const result = await this.getMetricsByDateRange(
+        profileId,
+        dateRange.start,
+        dateRange.end,
+        regimenFiscal
+      );
+      return {
+        ...result,
+        period: {
+          id: period.id,
+          start: period.start_date,
+          end: period.end_date,
+        },
+      };
+    }
+
+    return this.getMetrics(profileId, periodId);
+  }
+
+  /**
    * Métricas consolidadas del período para el endpoint: flujo, devengado, impuestos y pendientes.
    * Retorna null si el período no existe o no pertenece al perfil.
    */
