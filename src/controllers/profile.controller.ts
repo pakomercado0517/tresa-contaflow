@@ -1,8 +1,11 @@
 import { type Response } from 'express';
+import { Op } from 'sequelize';
 import { Profile, Subscription } from '../database/models/index.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { ProfileService } from '../services/profile.service.js';
 import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
+import { SUPPORT_EMAIL, ERROR_CODE_RFC_IN_USE } from '../constants/support.constants.js';
+import { normalizeRFC } from '../utils/rfc.util.js';
 import type { ProfileServiceError, FreezeOthersRequest } from '../types/index.js';
 
 /**
@@ -99,13 +102,18 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Verificar si ya existe un perfil con el mismo RFC para este usuario
+    // Verificar si el RFC ya está en uso por cualquier usuario (un RFC solo puede existir en una cuenta)
+    const rfcNormalizado = normalizeRFC(rfc);
     const existingProfile = await Profile.findOne({
-      where: { user_id: userId, rfc: rfc.toUpperCase() },
+      where: { rfc: rfcNormalizado },
     });
 
     if (existingProfile) {
-      res.status(409).json({ error: 'Ya existe un perfil con este RFC' });
+      res.status(409).json({
+        error: 'Este RFC ya está en uso',
+        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
+        code: ERROR_CODE_RFC_IN_USE,
+      });
       return;
     }
 
@@ -120,7 +128,7 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
     const profile = await Profile.create({
       user_id: userId,
       nombre,
-      rfc: rfc.toUpperCase(),
+      rfc: rfcNormalizado,
       tipo_persona,
       regimenes_fiscales: regimenesNormalizados,
       validaciones_habilitadas: validaciones_habilitadas || {},
@@ -133,9 +141,13 @@ export async function createProfile(req: AuthRequest, res: Response): Promise<vo
   } catch (error: unknown) {
     console.error('Error al crear perfil:', error);
 
-    // Manejar error de validación única (RFC duplicado)
+    // Manejar error de constraint único (RFC duplicado a nivel BD)
     if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
-      res.status(409).json({ error: 'Ya existe un perfil con este RFC' });
+      res.status(409).json({
+        error: 'Este RFC ya está en uso',
+        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
+        code: ERROR_CODE_RFC_IN_USE,
+      });
       return;
     }
 
@@ -167,15 +179,25 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Si se está actualizando el RFC, verificar que no exista otro perfil con ese RFC
-    if (rfc && rfc.toUpperCase() !== profile.rfc) {
-      const existingProfile = await Profile.findOne({
-        where: { user_id: userId, rfc: rfc.toUpperCase() },
-      });
+    // Si se está actualizando el RFC, verificar que no esté en uso por otro usuario
+    if (rfc) {
+      const rfcNormalizado = normalizeRFC(rfc);
+      if (rfcNormalizado !== profile.rfc) {
+        const existingProfile = await Profile.findOne({
+          where: {
+            rfc: rfcNormalizado,
+            id: { [Op.ne]: profile.id },
+          },
+        });
 
-      if (existingProfile) {
-        res.status(409).json({ error: 'Ya existe otro perfil con este RFC' });
-        return;
+        if (existingProfile) {
+          res.status(409).json({
+            error: 'Este RFC ya está en uso',
+            message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
+            code: ERROR_CODE_RFC_IN_USE,
+          });
+          return;
+        }
       }
     }
 
@@ -192,7 +214,7 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     // Actualizar el perfil
     await profile.update({
       nombre: nombre || profile.nombre,
-      rfc: rfc ? rfc.toUpperCase() : profile.rfc,
+      rfc: rfc ? normalizeRFC(rfc) : profile.rfc,
       tipo_persona: tipo_persona || profile.tipo_persona,
       regimenes_fiscales: regimenesActualizados,
       validaciones_habilitadas:
@@ -208,9 +230,13 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
   } catch (error: unknown) {
     console.error('Error al actualizar perfil:', error);
 
-    // Manejar error de validación única (RFC duplicado)
+    // Manejar error de constraint único (RFC duplicado a nivel BD)
     if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
-      res.status(409).json({ error: 'Ya existe otro perfil con este RFC' });
+      res.status(409).json({
+        error: 'Este RFC ya está en uso',
+        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
+        code: ERROR_CODE_RFC_IN_USE,
+      });
       return;
     }
 

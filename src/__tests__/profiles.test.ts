@@ -3,6 +3,7 @@ import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
 import { Profile, Subscription } from "../database/models/index";
+import { SUPPORT_EMAIL, ERROR_CODE_RFC_IN_USE } from "../constants/support.constants";
 
 describe("Profiles API", () => {
   let accessToken: string;
@@ -53,7 +54,32 @@ describe("Profiles API", () => {
           regimenes_fiscales: ["601"],
         });
 
-      expectError(response, 409); // 409 Conflict
+      expectError(response, 409);
+      expect(response.body).toHaveProperty("message");
+      expect(response.body.message).toContain(SUPPORT_EMAIL);
+      expect(response.body).toHaveProperty("code", ERROR_CODE_RFC_IN_USE);
+    });
+
+    it("debe rechazar perfil con RFC ya usado por otro usuario", async () => {
+      // XAXX010101AA0 ya existe (creado en el primer test de este describe)
+      const otherUser = await createTestUser("rfc-conflict@example.com");
+      const otherTokens = generateTestTokens(otherUser.id, "rfc-conflict@example.com");
+
+      const response = await request(app)
+        .post("/api/profiles")
+        .set("Authorization", `Bearer ${otherTokens.accessToken}`)
+        .send({
+          nombre: "Empresa del Cliente",
+          rfc: "XAXX010101AA0", // Mismo RFC que el usuario profiles@example.com
+          tipo_persona: "MORAL",
+          regimenes_fiscales: ["601"],
+        });
+
+      expectError(response, 409);
+      expect(response.body).toHaveProperty("error", "Este RFC ya está en uso");
+      expect(response.body).toHaveProperty("message");
+      expect(response.body.message).toContain(SUPPORT_EMAIL);
+      expect(response.body).toHaveProperty("code", ERROR_CODE_RFC_IN_USE);
     });
 
     it("debe rechazar perfil sin RFC", async () => {

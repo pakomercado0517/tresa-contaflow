@@ -123,7 +123,10 @@ Profile.init(
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
-    indexes: [{ fields: ['user_id'] }, { unique: true, fields: ['user_id', 'rfc'] }],
+    indexes: [
+      { fields: ['user_id'] },
+      { unique: true, fields: ['rfc'], name: 'profiles_rfc_unique' },
+    ],
   }
 );
 
