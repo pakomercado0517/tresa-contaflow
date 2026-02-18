@@ -10,6 +10,117 @@ apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BR
 
 const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || "noreply@tresacontafy.com";
 const FROM_NAME = process.env.BREVO_FROM_NAME || "Tresa Contafy";
+const REDACTED_VALUE = "[REDACTED]";
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function getNestedRecord(source: UnknownRecord, key: string): UnknownRecord | null {
+  const value = source[key];
+  return isRecord(value) ? value : null;
+}
+
+function getStringValue(source: UnknownRecord, key: string): string | null {
+  const value = source[key];
+  return typeof value === "string" ? value : null;
+}
+
+function getNumberValue(source: UnknownRecord, key: string): number | null {
+  const value = source[key];
+  return typeof value === "number" ? value : null;
+}
+
+function serializeHeaderValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((entry: unknown) => String(entry)).join(", ");
+  }
+  return String(value);
+}
+
+function sanitizeHeaders(headers: UnknownRecord): Record<string, string> {
+  const sensitiveHeaderKeys: Set<string> = new Set<string>([
+    "api-key",
+    "authorization",
+    "proxy-authorization",
+    "x-api-key",
+    "x-auth-token",
+    "cookie",
+    "set-cookie",
+  ]);
+
+  const sanitizedHeaders: Record<string, string> = {};
+  for (const [headerKey, headerValue] of Object.entries(headers)) {
+    const normalizedHeader = headerKey.toLowerCase();
+    sanitizedHeaders[headerKey] = sensitiveHeaderKeys.has(normalizedHeader)
+      ? REDACTED_VALUE
+      : serializeHeaderValue(headerValue);
+  }
+  return sanitizedHeaders;
+}
+
+function buildSafeEmailErrorLog(error: unknown): UnknownRecord {
+  const safeLog: UnknownRecord = {
+    message: error instanceof Error ? error.message : "Error desconocido al enviar email",
+  };
+
+  if (!isRecord(error)) {
+    return safeLog;
+  }
+
+  const code = getStringValue(error, "code");
+  if (code) {
+    safeLog.code = code;
+  }
+
+  const response = getNestedRecord(error, "response");
+  if (response) {
+    const status = getNumberValue(response, "status");
+    const statusText = getStringValue(response, "statusText");
+
+    if (status !== null) {
+      safeLog.status = status;
+    }
+    if (statusText) {
+      safeLog.statusText = statusText;
+    }
+
+    const responseData = getNestedRecord(response, "data");
+    if (responseData) {
+      const providerMessage = getStringValue(responseData, "message");
+      const providerCode = getStringValue(responseData, "code");
+
+      if (providerMessage) {
+        safeLog.providerMessage = providerMessage;
+      }
+      if (providerCode) {
+        safeLog.providerCode = providerCode;
+      }
+    }
+  }
+
+  const config = getNestedRecord(error, "config");
+  if (config) {
+    const method = getStringValue(config, "method");
+    const url = getStringValue(config, "url");
+
+    if (method) {
+      safeLog.method = method;
+    }
+    if (url) {
+      safeLog.url = url;
+    }
+
+    const headers = getNestedRecord(config, "headers");
+    if (headers) {
+      safeLog.headers = sanitizeHeaders(headers);
+    }
+  }
+
+  return safeLog;
+}
 
 interface SendEmailOptions {
   to: string;
@@ -36,7 +147,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
 
     await apiInstance.sendTransacEmail(sendSmtpEmail);
   } catch (error) {
-    console.error("Error al enviar email:", error);
+    console.error("Error al enviar email:", buildSafeEmailErrorLog(error));
     throw new Error("Error al enviar email");
   }
 }
