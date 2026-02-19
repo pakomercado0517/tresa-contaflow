@@ -8,6 +8,7 @@ import {
 } from "../utils/jwt.util.js";
 import { generateVerificationToken, hashVerificationToken } from "../utils/verification.util.js";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service.js";
+import { verifyFirebaseIdToken } from "../utils/firebase.util.js";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
@@ -227,6 +228,14 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    if (!user.password_hash) {
+      res.status(401).json({
+        error: "Cuenta sin contraseña",
+        message: "Esta cuenta se registró con Google. Inicia sesión con Google."
+      });
+      return;
+    }
+
     // Verificar password
     let passwordValid: boolean;
     try {
@@ -298,6 +307,171 @@ export async function login(req: Request, res: Response): Promise<void> {
     res.status(500).json({ 
       error: "Error desconocido",
       message: "Ocurrió un error inesperado. Por favor intenta nuevamente."
+    });
+  }
+}
+
+/**
+ * Login con Google: verifica el ID token de Firebase, busca o crea usuario por email,
+ * emite JWT propios (mismo contrato que POST /login).
+ */
+export async function loginGoogle(req: Request, res: Response): Promise<void> {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken || typeof idToken !== "string") {
+      res.status(400).json({
+        error: "Token requerido",
+        message: "El idToken de Firebase es obligatorio",
+      });
+      return;
+    }
+
+    let decoded;
+    try {
+      decoded = await verifyFirebaseIdToken(idToken);
+    } catch (firebaseError) {
+      console.error("Error al verificar token de Firebase:", firebaseError);
+      res.status(401).json({
+        error: "Token inválido",
+        message: "El token de Google no es válido o ha expirado. Intenta iniciar sesión de nuevo.",
+      });
+      return;
+    }
+
+    const email = decoded.email?.trim().toLowerCase();
+    if (!email) {
+      res.status(400).json({
+        error: "Email no disponible",
+        message: "No se pudo obtener el email de la cuenta de Google.",
+      });
+      return;
+    }
+
+    let user;
+    try {
+      user = await User.findOne({ where: { email } });
+    } catch (dbError) {
+      console.error("Error al buscar usuario:", dbError);
+      res.status(500).json({
+        error: "Error de base de datos",
+        message: "No se pudo verificar la cuenta. Por favor intenta nuevamente.",
+      });
+      return;
+    }
+
+    if (user) {
+      const updateData: {
+        firebase_uid: string;
+        email_verified: boolean;
+        nombre?: string | null;
+      } = {
+        firebase_uid: decoded.uid,
+        email_verified: true,
+      };
+      if (user.nombre == null || user.nombre.trim() === "") {
+        updateData.nombre = decoded.name?.trim() || null;
+      }
+      try {
+        await user.update(updateData);
+      } catch (updateError) {
+        console.error("Error al actualizar usuario:", updateError);
+        res.status(500).json({
+          error: "Error al actualizar cuenta",
+          message: "No se pudo completar el inicio de sesión. Por favor intenta nuevamente.",
+        });
+        return;
+      }
+    } else {
+      try {
+        user = await User.create({
+          email,
+          password_hash: null,
+          firebase_uid: decoded.uid,
+          nombre: decoded.name?.trim() || null,
+          apellido: null,
+          telefono: null,
+          email_verified: true,
+        });
+      } catch (createError: unknown) {
+        console.error("Error al crear usuario:", createError);
+        const err = createError as { name?: string };
+        if (err.name === "SequelizeUniqueConstraintError") {
+          res.status(409).json({
+            error: "El email ya está registrado",
+            message: "Este correo ya está en uso.",
+          });
+          return;
+        }
+        res.status(500).json({
+          error: "Error al crear cuenta",
+          message: "No se pudo completar el registro. Por favor intenta nuevamente.",
+        });
+        return;
+      }
+
+      try {
+        await Subscription.create({
+          user_id: user.id,
+          plan: "FREE",
+          plan_price: 0,
+          status: "ACTIVE",
+        });
+      } catch (subError: unknown) {
+        console.error("Error al crear suscripción:", subError);
+        try {
+          await user.destroy();
+        } catch (deleteError) {
+          console.error("Error al eliminar usuario huérfano:", deleteError);
+        }
+        res.status(500).json({
+          error: "Error al completar registro",
+          message: "No se pudo completar el registro. Por favor intenta nuevamente.",
+        });
+        return;
+      }
+    }
+
+    const tokenPayload = { userId: user.id, email: user.email };
+    let accessToken: string;
+    let refreshToken: string;
+    try {
+      accessToken = generateAccessToken(tokenPayload);
+      refreshToken = generateRefreshToken(tokenPayload);
+    } catch (tokenError) {
+      console.error("Error al generar tokens:", tokenError);
+      res.status(500).json({
+        error: "Error al generar tokens",
+        message: "No se pudieron generar los tokens de acceso. Por favor intenta nuevamente.",
+      });
+      return;
+    }
+
+    res.json({
+      message: "Login exitoso",
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        apellido: user.apellido,
+        telefono: user.telefono,
+        email_verified: user.email_verified,
+      },
+    });
+  } catch (error) {
+    console.error("Error inesperado en login Google:", error);
+    if (error instanceof Error) {
+      res.status(500).json({
+        error: "Error al iniciar sesión",
+        message: "Ocurrió un error inesperado. Por favor intenta nuevamente.",
+      });
+      return;
+    }
+    res.status(500).json({
+      error: "Error desconocido",
+      message: "Ocurrió un error inesperado. Por favor intenta nuevamente.",
     });
   }
 }

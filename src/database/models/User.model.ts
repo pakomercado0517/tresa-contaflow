@@ -4,7 +4,8 @@ import sequelize from "../config.js";
 interface UserAttributes {
   id: string;
   email: string;
-  password_hash: string;
+  password_hash: string | null;
+  firebase_uid: string | null;
   nombre: string | null;
   apellido: string | null;
   telefono: string | null;
@@ -21,7 +22,12 @@ interface UserAttributes {
 }
 
 interface UserCreationAttributes
-  extends Omit<UserAttributes, "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at"> {
+  extends Omit<
+    UserAttributes,
+    "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at" | "password_hash" | "firebase_uid"
+  > {
+  password_hash?: string | null;
+  firebase_uid?: string | null;
   email_verified?: boolean;
   trial_used?: boolean;
   tour_version?: string | null;
@@ -31,7 +37,8 @@ interface UserCreationAttributes
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   declare id: string;
   declare email: string;
-  declare password_hash: string;
+  declare password_hash: string | null;
+  declare firebase_uid: string | null;
   declare nombre: string | null;
   declare apellido: string | null;
   declare telefono: string | null;
@@ -61,7 +68,12 @@ User.init(
     },
     password_hash: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
+    },
+    firebase_uid: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
     },
     nombre: {
       type: DataTypes.STRING,
