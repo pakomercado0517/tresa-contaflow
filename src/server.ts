@@ -83,6 +83,7 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/google', authLimiter);
 app.use('/api/auth/request-password-reset', authLimiter);
 
 // Middleware para webhooks de Stripe (debe estar ANTES de express.json())

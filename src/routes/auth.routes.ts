@@ -3,6 +3,7 @@ import { body } from "express-validator";
 import {
   register,
   login,
+  loginGoogle,
   logout,
   refresh,
   verifyEmail,
@@ -95,9 +96,14 @@ const completeTourValidation = [
     .withMessage("El campo tour_version es obligatorio y debe tener entre 1 y 50 caracteres"),
 ];
 
+const googleLoginValidation = [
+  body("idToken").notEmpty().withMessage("El idToken de Firebase es obligatorio"),
+];
+
 // Rutas
 router.post("/register", registerValidation, validateRequest, register);
 router.post("/login", loginValidation, validateRequest, login);
+router.post("/google", googleLoginValidation, validateRequest, loginGoogle);
 router.post("/logout", authenticateToken, logout); // Agregado middleware de auth
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
