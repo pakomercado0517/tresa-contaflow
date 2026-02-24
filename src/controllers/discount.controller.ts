@@ -27,6 +27,7 @@ function mapDiscountResponse(record: {
   times_redeemed: number;
   created_by: string;
   metadata: Record<string, string> | null;
+  trial_days: number | null;
   created_at: Date;
   updated_at: Date;
 }): DiscountCodeResponse {
@@ -42,6 +43,7 @@ function mapDiscountResponse(record: {
     timesRedeemed: record.times_redeemed,
     createdBy: record.created_by,
     metadata: record.metadata,
+    trialDays: record.trial_days,
     createdAt: record.created_at,
     updatedAt: record.updated_at,
   };
@@ -69,6 +71,7 @@ export async function createDiscountCode(req: AuthRequest, res: Response): Promi
       expiresAt,
       active,
       metadata,
+      trialDays,
     } = req.body as {
       code: string;
       duration: "once" | "repeating" | "forever";
@@ -80,6 +83,7 @@ export async function createDiscountCode(req: AuthRequest, res: Response): Promi
       expiresAt?: string;
       active?: boolean;
       metadata?: Record<string, string>;
+      trialDays?: number;
     };
 
     const input: DiscountCodeCreateInput = {
@@ -93,6 +97,7 @@ export async function createDiscountCode(req: AuthRequest, res: Response): Promi
       ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
       ...(typeof active === "boolean" ? { active } : {}),
       ...(metadata ? { metadata } : {}),
+      ...(typeof trialDays === "number" ? { trialDays } : {}),
     };
 
     const discountService = new DiscountService();

@@ -3,9 +3,10 @@ import { DiscountCode } from "../database/models/index.js";
 import { getStripeService } from "./stripe.service.js";
 import type { DiscountCodeCreateInput } from "../types/index.js";
 
-interface PromotionCodeLookup {
+export interface PromotionCodeLookup {
   promotionCodeId: string;
   code: string;
+  trialDays: number | null;
 }
 
 /**
@@ -76,6 +77,8 @@ export class DiscountService {
       times_redeemed: promotionCode.times_redeemed || 0,
       created_by: createdBy,
       metadata: input.metadata ?? null,
+      trial_days:
+        typeof input.trialDays === "number" ? input.trialDays : null,
     });
 
     return record;
@@ -148,6 +151,7 @@ export class DiscountService {
     return {
       promotionCodeId: promotion.id,
       code: promotion.code || code,
+      trialDays: record.trial_days,
     };
   }
 
