@@ -91,6 +91,22 @@ describe("Subscription API", () => {
       expectError(response, 400);
     });
 
+    it("debe rechazar checkout con código de descuento inválido", async () => {
+      const response = await request(app)
+        .post("/api/subscription/create-checkout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          plan: "BASIC",
+          promotionCode: "CODIGO_INEXISTENTE",
+        });
+
+      expectError(response, 400);
+      expect(response.body).toHaveProperty(
+        "message",
+        "El código de descuento no es válido, ya expiró o no está activo"
+      );
+    });
+
     // Nota: Los tests de creación exitosa de checkout requieren configuración de Stripe
     // y variables de entorno, por lo que se omiten en tests básicos
   });

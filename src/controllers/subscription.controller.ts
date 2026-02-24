@@ -13,6 +13,7 @@ import { SubscriptionService } from '../services/subscription.service.js';
 import { PlanLimitsService } from '../services/plan-limits.service.js';
 import { User } from '../database/models/index.js';
 import { DiscountService } from '../services/discount.service.js';
+import { resolveTrialDaysForCheckout } from '../utils/subscription-trial.util.js';
 
 /**
  * Crea una sesión de checkout de Stripe para suscribirse a un plan
@@ -83,6 +84,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
 
     const normalizedPromotionCode = promotionCode?.trim().toUpperCase();
     let promotionCodeId: string | null = null;
+    let promotionTrialDays: number | null = null;
 
     if (normalizedPromotionCode) {
       const discountService = new DiscountService();
@@ -97,6 +99,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
       }
 
       promotionCodeId = promotion.promotionCodeId;
+      promotionTrialDays = promotion.trialDays;
     }
 
     const metadata: Record<string, string> = {
@@ -112,9 +115,13 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
 
     // Verificar si el usuario es elegible para periodo de prueba
     const isEligibleForTrial = await subscriptionService.isEligibleForTrial(userId);
-    const trialDays = isEligibleForTrial ? PLAN_TRIAL_DAYS[plan as 'BASIC' | 'PRO'] : undefined;
+    const trialDays = resolveTrialDaysForCheckout(
+      isEligibleForTrial,
+      plan as 'BASIC' | 'PRO',
+      promotionTrialDays
+    );
 
-    // Preparar subscription_data con trial si es elegible
+    // Preparar subscription_data con trial si aplica
     const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
       metadata,
     };

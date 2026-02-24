@@ -13,6 +13,7 @@ interface DiscountCodeAttributes {
   times_redeemed: number;
   created_by: string;
   metadata: Record<string, string> | null;
+  trial_days: number | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -20,9 +21,11 @@ interface DiscountCodeAttributes {
 interface DiscountCodeCreationAttributes
   extends Omit<
       DiscountCodeAttributes,
-      "id" | "created_at" | "updated_at" | "expires_at" | "max_redemptions" | "metadata"
+      "id" | "created_at" | "updated_at" | "expires_at" | "max_redemptions" | "metadata" | "trial_days"
     >,
-    Partial<Pick<DiscountCodeAttributes, "expires_at" | "max_redemptions" | "metadata">> {}
+    Partial<
+      Pick<DiscountCodeAttributes, "expires_at" | "max_redemptions" | "metadata" | "trial_days">
+    > {}
 
 class DiscountCode
   extends Model<DiscountCodeAttributes, DiscountCodeCreationAttributes>
@@ -38,6 +41,7 @@ class DiscountCode
   declare times_redeemed: number;
   declare created_by: string;
   declare metadata: Record<string, string> | null;
+  declare trial_days: number | null;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -91,6 +95,10 @@ DiscountCode.init(
     },
     metadata: {
       type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    trial_days: {
+      type: DataTypes.INTEGER,
       allowNull: true,
     },
     created_at: {

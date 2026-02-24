@@ -74,6 +74,10 @@ router.post(
       .optional()
       .isBoolean()
       .withMessage("active debe ser booleano"),
+    body("trialDays")
+      .optional()
+      .isInt({ min: 0 })
+      .withMessage("trialDays debe ser un entero mayor o igual a 0"),
     body().custom((value, { req }) => {
       const payload = req.body as { percentOff?: number; amountOff?: number };
       const hasPercent = typeof payload.percentOff === "number";

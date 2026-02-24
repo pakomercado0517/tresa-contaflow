@@ -15,6 +15,8 @@ export interface DiscountCodeCreateInput {
   expiresAt?: Date;
   active?: boolean;
   metadata?: Record<string, string>;
+  /** Días de trial en checkout cuando el usuario es elegible. 0 = sin trial. Si no se envía, se usa el trial por defecto del plan. */
+  trialDays?: number;
 }
 
 export interface DiscountCodeResponse {
@@ -29,6 +31,7 @@ export interface DiscountCodeResponse {
   timesRedeemed: number;
   createdBy: string;
   metadata: Record<string, string> | null;
+  trialDays: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
