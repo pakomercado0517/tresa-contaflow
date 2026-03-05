@@ -638,3 +638,80 @@ Privacidad | Términos y Condiciones | Soporte Técnico`;
   });
 }
 
+/**
+ * Envía invitación para ver reporte público de métricas.
+ * Mensaje: "El Despacho [Nombre] te invita a revisar tus finanzas..."
+ */
+export async function sendPublicReportInvitation(
+  email: string,
+  link: string,
+  nombreDespacho: string,
+  logoUrl?: string | null
+): Promise<void> {
+  const nombre = nombreDespacho.trim() || "Tu despacho";
+  const logoBlock = logoUrl
+    ? `<tr><td style="padding-bottom: 16px;"><img src="${logoUrl}" alt="${nombre}" style="max-width: 180px; max-height: 60px; height: auto;" /></td></tr>`
+    : "";
+
+  const htmlContent = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitación a revisar tu reporte - Tresa Contafy</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #ffffff;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px;">
+          ${logoBlock}
+          <tr>
+            <td style="background-color: #265C46; padding: 24px 40px;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 600;">Invitación a tu reporte</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 24px 0; color: #1a1a1a; font-size: 16px; line-height: 1.6;">
+                El despacho <strong>${nombre}</strong> te invita a revisar tus finanzas en un reporte actualizado.
+              </p>
+              <p style="margin: 0 0 24px 0; color: #1a1a1a; font-size: 16px; line-height: 1.6;">
+                Haz clic en el siguiente enlace para ver tu dashboard de métricas (no necesitas iniciar sesión):
+              </p>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="border-radius: 8px; background-color: #265C46;">
+                    <a href="${link}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
+                      Ver mi reporte
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px;">
+                Este enlace es privado. Si no esperabas esta invitación, puedes ignorar este correo.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 24px 40px; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; color: #6b7280; font-size: 12px;">© ${new Date().getFullYear()} Tresa Contafy.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const textContent = `El despacho ${nombre} te invita a revisar tus finanzas.\n\nVer tu reporte: ${link}\n\nEste enlace es privado. Si no esperabas esta invitación, puedes ignorar este correo.`;
+
+  await sendEmail({
+    to: email,
+    subject: `${nombre} te invita a revisar tu reporte - Tresa Contafy`,
+    htmlContent,
+    textContent,
+  });
+}
+

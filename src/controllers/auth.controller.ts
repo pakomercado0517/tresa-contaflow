@@ -770,38 +770,61 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { nombre, apellido, telefono } = req.body;
+    const { nombre, apellido, telefono, logo_url, nombre_comercial } = req.body;
 
     // Validar que al menos un campo esté presente
-    if (nombre === undefined && apellido === undefined && telefono === undefined) {
-      res.status(400).json({ 
+    const hasAny =
+      nombre !== undefined ||
+      apellido !== undefined ||
+      telefono !== undefined ||
+      logo_url !== undefined ||
+      nombre_comercial !== undefined;
+    if (!hasAny) {
+      res.status(400).json({
         error: "Datos requeridos",
-        message: "Debes proporcionar al menos un campo para actualizar (nombre, apellido o teléfono)"
+        message:
+          "Debes proporcionar al menos un campo para actualizar (nombre, apellido, telefono, logo_url o nombre_comercial)",
       });
       return;
     }
 
     // Validar tipos de datos
     if (nombre !== undefined && typeof nombre !== "string") {
-      res.status(400).json({ 
+      res.status(400).json({
         error: "Nombre inválido",
-        message: "El nombre debe ser una cadena de texto"
+        message: "El nombre debe ser una cadena de texto",
       });
       return;
     }
 
     if (apellido !== undefined && typeof apellido !== "string") {
-      res.status(400).json({ 
+      res.status(400).json({
         error: "Apellido inválido",
-        message: "El apellido debe ser una cadena de texto"
+        message: "El apellido debe ser una cadena de texto",
       });
       return;
     }
 
     if (telefono !== undefined && typeof telefono !== "string") {
-      res.status(400).json({ 
+      res.status(400).json({
         error: "Teléfono inválido",
-        message: "El teléfono debe ser una cadena de texto"
+        message: "El teléfono debe ser una cadena de texto",
+      });
+      return;
+    }
+
+    if (logo_url !== undefined && typeof logo_url !== "string") {
+      res.status(400).json({
+        error: "Logo URL inválido",
+        message: "El logo_url debe ser una URL válida",
+      });
+      return;
+    }
+
+    if (nombre_comercial !== undefined && typeof nombre_comercial !== "string") {
+      res.status(400).json({
+        error: "Nombre comercial inválido",
+        message: "El nombre comercial debe ser una cadena de texto",
       });
       return;
     }
@@ -832,6 +855,8 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
       nombre?: string | null;
       apellido?: string | null;
       telefono?: string | null;
+      logo_url?: string | null;
+      nombre_comercial?: string | null;
     } = {};
 
     if (nombre !== undefined) {
@@ -844,6 +869,14 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
 
     if (telefono !== undefined) {
       updateData.telefono = telefono.trim() || null;
+    }
+
+    if (logo_url !== undefined) {
+      updateData.logo_url = logo_url.trim() || null;
+    }
+
+    if (nombre_comercial !== undefined) {
+      updateData.nombre_comercial = nombre_comercial.trim() || null;
     }
 
     // Actualizar usuario
@@ -870,6 +903,8 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
         apellido: user.apellido,
         telefono: user.telefono,
         email_verified: user.email_verified,
+        logo_url: user.logo_url,
+        nombre_comercial: user.nombre_comercial,
       },
     });
   } catch (error) {
@@ -935,6 +970,8 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
         email_verified: user.email_verified,
         tour_version: user.tour_version,
         tour_completed_at: user.tour_completed_at,
+        logo_url: user.logo_url,
+        nombre_comercial: user.nombre_comercial,
       },
     });
   } catch (error) {

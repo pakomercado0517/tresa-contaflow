@@ -86,6 +86,16 @@ const updateProfileValidation = [
     .trim()
     .isString()
     .withMessage("El teléfono debe ser una cadena de texto"),
+  body("logo_url")
+    .optional()
+    .trim()
+    .isURL()
+    .withMessage("El logo_url debe ser una URL válida"),
+  body("nombre_comercial")
+    .optional()
+    .trim()
+    .isString()
+    .withMessage("El nombre comercial debe ser una cadena de texto"),
 ];
 
 const completeTourValidation = [

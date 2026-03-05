@@ -61,3 +61,16 @@ export type {
   PeriodMetricsResponse,
 } from './metrics.types.js';
 export type { PluginListItem, PluginsResponse } from './plugin.types.js';
+export type {
+  PublicReportTokenAttributes,
+  PublicReportBranding,
+  PublicReportProfileInfo,
+  PublicReportResponse,
+  GenerateTokenRequest,
+  GenerateTokenResponse,
+} from './public-report.types.js';
+export type {
+  RegisterFielDto,
+  SatDescargaSyncStatus,
+  SatDescargaSyncResult,
+} from './sat-descarga.types.js';

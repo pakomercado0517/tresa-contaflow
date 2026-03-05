@@ -16,6 +16,11 @@ interface ProfileAttributes {
   frozen: boolean;
   frozen_reason: FrozenReason | null;
   frozen_at: Date | null;
+  fiel_cer_encrypted: string | null;
+  fiel_key_encrypted: string | null;
+  fiel_password_encrypted: string | null;
+  sat_download_last_sync_at: Date | null;
+  sat_download_sync_enabled: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -30,7 +35,17 @@ interface ProfileCreationAttributes extends Omit<
   | 'frozen'
   | 'frozen_reason'
   | 'frozen_at'
+  | 'fiel_cer_encrypted'
+  | 'fiel_key_encrypted'
+  | 'fiel_password_encrypted'
+  | 'sat_download_last_sync_at'
+  | 'sat_download_sync_enabled'
 > {
+  fiel_cer_encrypted?: string | null;
+  fiel_key_encrypted?: string | null;
+  fiel_password_encrypted?: string | null;
+  sat_download_last_sync_at?: Date | null;
+  sat_download_sync_enabled?: boolean;
   regimenes_fiscales?: string[];
   validaciones_habilitadas?: object;
   frozen?: boolean;
@@ -52,6 +67,11 @@ class Profile
   declare frozen: boolean;
   declare frozen_reason: FrozenReason | null;
   declare frozen_at: Date | null;
+  declare fiel_cer_encrypted: string | null;
+  declare fiel_key_encrypted: string | null;
+  declare fiel_password_encrypted: string | null;
+  declare sat_download_last_sync_at: Date | null;
+  declare sat_download_sync_enabled: boolean;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -105,6 +125,27 @@ Profile.init(
     frozen_at: {
       type: DataTypes.DATE,
       allowNull: true,
+    },
+    fiel_cer_encrypted: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    fiel_key_encrypted: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    fiel_password_encrypted: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    sat_download_last_sync_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    sat_download_sync_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     created_at: {
       type: DataTypes.DATE,

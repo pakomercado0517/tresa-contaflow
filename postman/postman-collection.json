@@ -268,6 +268,8 @@
                   "        pm.expect(jsonData.user).to.have.property('nombre');",
                   "        pm.expect(jsonData.user).to.have.property('apellido');",
                   "        pm.expect(jsonData.user).to.have.property('telefono');",
+                  "        if (jsonData.user.logo_url) console.log('Logo URL:', jsonData.user.logo_url);",
+                  "        if (jsonData.user.nombre_comercial) console.log('Nombre comercial:', jsonData.user.nombre_comercial);",
                   "        ",
                   "        console.log('✅ Perfil actualizado correctamente');",
                   "        console.log('Nombre:', jsonData.user.nombre);",
@@ -301,7 +303,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Pérez\",\n  \"telefono\": \"+521234567890\"\n}",
+              "raw": "{\n  \"nombre\": \"Juan\",\n  \"apellido\": \"Pérez\",\n  \"telefono\": \"+521234567890\",\n  \"logo_url\": \"https://ejemplo.com/logo.png\",\n  \"nombre_comercial\": \"Despacho Contable XYZ\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -313,7 +315,47 @@
               "host": ["{{base_url}}"],
               "path": ["api", "auth", "profile"]
             },
-            "description": "Actualizar el perfil del usuario autenticado (nombre, apellido, teléfono). Puedes actualizar todos los campos o solo algunos."
+            "description": "Actualizar el perfil del usuario (nombre, apellido, teléfono, logo_url, nombre_comercial). El logo se sube a Firebase en el frontend; aquí solo se envía la URL. Al menos un campo es requerido."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Me (current user)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Usuario actual obtenido\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('user');",
+                  "    pm.expect(jsonData.user).to.have.property('id');",
+                  "    pm.expect(jsonData.user).to.have.property('email');",
+                  "    pm.expect(jsonData.user).to.have.property('logo_url');",
+                  "    pm.expect(jsonData.user).to.have.property('nombre_comercial');",
+                  "    console.log('Usuario:', jsonData.user.email, '| Logo:', jsonData.user.logo_url || '(sin logo)', '| Nombre comercial:', jsonData.user.nombre_comercial || '(sin nombre comercial)');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "me"]
+            },
+            "description": "Obtener el usuario autenticado (incluye logo_url y nombre_comercial para branding)"
           },
           "response": []
         },
@@ -1883,6 +1925,263 @@
         }
       ],
       "description": "Endpoints para gestionar suscripciones y pagos con Stripe"
+    },
+    {
+      "name": "Public Reports",
+      "item": [
+        {
+          "name": "Generate public report link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    pm.test(\"Link generado\", function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('token');",
+                  "        pm.expect(jsonData).to.have.property('url');",
+                  "        pm.expect(jsonData).to.have.property('expires_at');",
+                  "        pm.collectionVariables.set('publicReportToken', jsonData.token);",
+                  "        console.log('✅ URL pública:', jsonData.url);",
+                  "        console.log('Token (para GET/DELETE):', jsonData.token);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error al generar\", function () {",
+                  "        pm.response.to.have.status(400);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": \"{{profileId}}\",\n  \"expires_in_days\": 30,\n  \"send_to_email\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/public-reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public-reports", "generate"]
+            },
+            "description": "Genera un token y URL para ver el reporte del perfil sin login. Opcional: send_to_email para enviar invitación por correo."
+          },
+          "response": []
+        },
+        {
+          "name": "Get public report by token (no auth)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Reporte público obtenido\", function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('branding');",
+                  "        pm.expect(jsonData).to.have.property('profile');",
+                  "        pm.expect(jsonData).to.have.property('metrics');",
+                  "        console.log('Branding:', jsonData.branding);",
+                  "        console.log('Profile:', jsonData.profile);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Token inválido o expirado\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public-reports/{{publicReportToken}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public-reports", "{{publicReportToken}}"]
+            },
+            "description": "Obtener reporte público (branding + profile + metrics). No requiere Authorization. Usar el token devuelto por Generate."
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke public report token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Token revocado\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        console.log('✅ Enlace revocado');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/public-reports/{{publicReportToken}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public-reports", "{{publicReportToken}}"]
+            },
+            "description": "Revoca el token de reporte público (solo el dueño)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Reportes públicos: generar link, ver por token (sin auth), revocar"
+    },
+    {
+      "name": "SAT Descarga",
+      "item": [
+        {
+          "name": "Register FIEL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"FIEL registrada\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('message');",
+                  "        pm.expect(jsonData).to.have.property('profile_id');",
+                  "        console.log('✅ Credenciales FIEL guardadas para perfil:', jsonData.profile_id);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error\", function () {",
+                  "        console.log(pm.response.json());",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": \"{{profileId}}\",\n  \"certificate_base64\": \"CONTENIDO_BASE64_DEL_ARCHIVO_.cer\",\n  \"private_key_base64\": \"CONTENIDO_BASE64_DEL_ARCHIVO_.key\",\n  \"password\": \"contraseña_de_la_llave_privada\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sat-descarga/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sat-descarga", "register"]
+            },
+            "description": "Registra e.firma (.cer y .key en Base64 + contraseña) para el perfil. Requiere SAT_FIEL_ENCRYPTION_KEY en el backend."
+          },
+          "response": []
+        },
+        {
+          "name": "Get sync status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Estado obtenido\", function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('profile_id');",
+                  "        pm.expect(jsonData).to.have.property('sync_enabled');",
+                  "        pm.expect(jsonData).to.have.property('has_credentials');",
+                  "        pm.expect(jsonData).to.have.property('last_sync_at');",
+                  "        console.log('Credenciales:', jsonData.has_credentials, '| Última sync:', jsonData.last_sync_at || 'nunca');",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error\", function () {",
+                  "        pm.response.to.have.status(404);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/sat-descarga/status/{{profileId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sat-descarga", "status", "{{profileId}}"]
+            },
+            "description": "Estado de sincronización SAT del perfil (last_sync_at, sync_enabled, has_credentials)"
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger sync (manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Sync disparada\", function () {",
+                  "        const jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('profile_id');",
+                  "        pm.expect(jsonData).to.have.property('synced');",
+                  "        pm.expect(jsonData).to.have.property('errors');",
+                  "        console.log('Synced:', jsonData.synced, '| Errors:', jsonData.errors);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Error\", function () {",
+                  "        pm.response.to.have.status(500);",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/sat-descarga/trigger/{{profileId}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sat-descarga", "trigger", "{{profileId}}"]
+            },
+            "description": "Dispara sincronización manual. Implementación actual: stub (no descarga real del SAT aún)."
+          },
+          "response": []
+        }
+      ],
+      "description": "Descarga masiva SAT: registrar FIEL, estado y trigger manual"
     }
   ],
   "variable": [
@@ -1915,6 +2214,12 @@
       "key": "profileId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "publicReportToken",
+      "value": "",
+      "type": "string",
+      "description": "Token del reporte público (se rellena al ejecutar Generate public report link)"
     },
     {
       "key": "invoiceId",
