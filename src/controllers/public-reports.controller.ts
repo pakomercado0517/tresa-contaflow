@@ -33,11 +33,7 @@ export async function generate(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    const result = await publicReportService.generateToken(
-      profile_id.trim(),
-      userId,
-      days
-    );
+    const result = await publicReportService.generateToken(profile_id.trim(), userId, days);
 
     if (send_to_email && typeof send_to_email === 'string' && send_to_email.trim()) {
       const email = send_to_email.trim();
@@ -45,8 +41,7 @@ export async function generate(req: AuthRequest, res: Response): Promise<void> {
         attributes: ['nombre_comercial', 'logo_url', 'nombre'],
       });
       const nombreDespacho =
-        user?.nombre_comercial?.trim() ||
-        (user?.nombre ? `${user.nombre}`.trim() : 'Tu despacho');
+        user?.nombre_comercial?.trim() || (user?.nombre ? `${user.nombre}`.trim() : 'Tu despacho');
       try {
         await sendPublicReportInvitation(
           email,
@@ -88,7 +83,12 @@ export async function getByToken(req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const data = await publicReportService.getPublicData(token);
+    const mesRaw = req.query.mes as string | undefined;
+    const añoRaw = req.query.año as string | undefined;
+    const mes = mesRaw !== undefined ? parseInt(mesRaw, 10) : undefined;
+    const año = añoRaw !== undefined ? parseInt(añoRaw, 10) : undefined;
+
+    const data = await publicReportService.getPublicData(token, mes, año);
     if (!data) {
       res.status(404).json({
         error: 'Enlace no válido o expirado',

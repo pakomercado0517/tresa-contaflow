@@ -1,14 +1,12 @@
 import { randomUUID } from 'crypto';
 import { Op } from 'sequelize';
-import {
-  PublicReportToken,
-  Profile,
-  User,
-} from '../database/models/index.js';
+import { PublicReportToken, Profile, User } from '../database/models/index.js';
 import { MetricsService } from './metrics.service.js';
+import type { PeriodMetricsResponse } from '../types/metrics.types.js';
 import type {
   PublicReportResponse,
   GenerateTokenResponse,
+  MetricsByRegimen,
 } from '../types/public-report.types.js';
 
 const DEFAULT_EXPIRES_IN_DAYS = 30;
@@ -57,7 +55,11 @@ export async function generateToken(
  * Obtiene los datos públicos para mostrar el dashboard: branding del usuario,
  * datos del perfil y métricas del mes actual.
  */
-export async function getPublicData(tokenValue: string): Promise<PublicReportResponse | null> {
+export async function getPublicData(
+  tokenValue: string,
+  mes?: number,
+  año?: number
+): Promise<PublicReportResponse | null> {
   const record = await PublicReportToken.findOne({
     where: {
       token: tokenValue,
@@ -65,7 +67,7 @@ export async function getPublicData(tokenValue: string): Promise<PublicReportRes
       expires_at: { [Op.gt]: new Date() },
     },
     include: [
-      { model: Profile, as: 'profile', attributes: ['id', 'nombre', 'rfc'] },
+      { model: Profile, as: 'profile', attributes: ['id', 'nombre', 'rfc', 'regimenes_fiscales'] },
       { model: User, as: 'user', attributes: ['logo_url', 'nombre_comercial'] },
     ],
   });
@@ -77,14 +79,28 @@ export async function getPublicData(tokenValue: string): Promise<PublicReportRes
   }
 
   const now = new Date();
-  const mes = now.getMonth() + 1;
-  const año = now.getFullYear();
-  const start = new Date(año, mes - 1, 1, 0, 0, 0);
-  const end = new Date(año, mes, 1, 0, 0, 0);
+  const resolvedMes = mes ?? now.getMonth() + 1;
+  const resolvedAño = año ?? now.getFullYear();
+  const start = new Date(resolvedAño, resolvedMes - 1, 1, 0, 0, 0);
+  const end = new Date(resolvedAño, resolvedMes, 1, 0, 0, 0);
 
-  let metrics = null;
+  let metrics: PeriodMetricsResponse | null = null;
+  let metrics_by_regimen: MetricsByRegimen[] = [];
+
+  const regimenes = profile.regimenes_fiscales ?? [];
+
   try {
-    metrics = await metricsService.getMetricsByDateRange(profile.id, start, end);
+    const [totalMetrics, ...perRegimenMetrics] = await Promise.all([
+      metricsService.getMetricsByDateRange(profile.id, start, end),
+      ...regimenes.map((r) =>
+        metricsService.getMetricsByDateRange(profile.id, start, end, r).catch(() => null)
+      ),
+    ]);
+    metrics = totalMetrics;
+    metrics_by_regimen = regimenes.map((r, i) => ({
+      regimen: r,
+      metrics: perRegimenMetrics[i] ?? null,
+    }));
   } catch {
     // Si falla el cálculo de métricas, devolver null en metrics
   }
@@ -98,8 +114,10 @@ export async function getPublicData(tokenValue: string): Promise<PublicReportRes
       id: profile.id,
       nombre: profile.nombre,
       rfc: profile.rfc,
+      regimenes_fiscales: regimenes,
     },
     metrics,
+    metrics_by_regimen,
   };
 }
 
