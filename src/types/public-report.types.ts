@@ -19,12 +19,19 @@ export interface PublicReportProfileInfo {
   id: string;
   nombre: string;
   rfc: string;
+  regimenes_fiscales: string[];
+}
+
+export interface MetricsByRegimen {
+  regimen: string;
+  metrics: PeriodMetricsResponse | null;
 }
 
 export interface PublicReportResponse {
   branding: PublicReportBranding;
   profile: PublicReportProfileInfo;
   metrics: PeriodMetricsResponse | null;
+  metrics_by_regimen: MetricsByRegimen[];
 }
 
 export interface GenerateTokenRequest {

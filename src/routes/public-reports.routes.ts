@@ -1,12 +1,8 @@
 import { Router, type IRouter } from 'express';
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
-import {
-  generate,
-  getByToken,
-  revoke,
-} from '../controllers/public-reports.controller.js';
+import { generate, getByToken, revoke } from '../controllers/public-reports.controller.js';
 
 const router: IRouter = Router();
 
@@ -35,8 +31,20 @@ const tokenParam = [
     .withMessage('Token debe ser un UUID válido'),
 ];
 
+const getByTokenValidation = [
+  ...tokenParam,
+  query('mes')
+    .optional()
+    .isInt({ min: 1, max: 12 })
+    .withMessage('mes debe ser un número entre 1 y 12'),
+  query('año')
+    .optional()
+    .isInt({ min: 2000, max: 2100 })
+    .withMessage('año debe ser un número entre 2000 y 2100'),
+];
+
 // Público: sin autenticación
-router.get('/:token', tokenParam, validateRequest, getByToken);
+router.get('/:token', getByTokenValidation, validateRequest, getByToken);
 
 // Protegidas
 router.post('/generate', authenticateToken, generateValidation, validateRequest, generate);
