@@ -17,6 +17,8 @@ interface UserAttributes {
   trial_used: boolean;
   tour_version: string | null;
   tour_completed_at: Date | null;
+  logo_url: string | null;
+  nombre_comercial: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -24,7 +26,7 @@ interface UserAttributes {
 interface UserCreationAttributes
   extends Omit<
     UserAttributes,
-    "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at" | "password_hash" | "firebase_uid"
+    "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at" | "password_hash" | "firebase_uid" | "logo_url" | "nombre_comercial"
   > {
   password_hash?: string | null;
   firebase_uid?: string | null;
@@ -50,6 +52,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   declare trial_used: boolean;
   declare tour_version: string | null;
   declare tour_completed_at: Date | null;
+  declare logo_url: string | null;
+  declare nombre_comercial: string | null;
   declare created_at: Date;
   declare updated_at: Date;
 }
@@ -122,6 +126,14 @@ User.init(
       type: DataTypes.DATE,
       allowNull: true,
       defaultValue: null,
+    },
+    logo_url: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    nombre_comercial: {
+      type: DataTypes.STRING,
+      allowNull: true,
     },
     created_at: {
       type: DataTypes.DATE,

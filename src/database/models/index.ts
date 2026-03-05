@@ -19,6 +19,7 @@ import SatSearchLog from "./SatSearchLog.model.js";
 import Payroll from "./Payroll.model.js";
 import Plugin from "./Plugin.model.js";
 import SubscriptionPlugin from "./SubscriptionPlugin.model.js";
+import PublicReportToken from "./PublicReportToken.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -26,6 +27,7 @@ export {
   sequelize,
   User,
   Profile,
+  PublicReportToken,
   Subscription,
   PaymentEvent,
   Invoice,

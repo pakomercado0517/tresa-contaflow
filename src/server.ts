@@ -19,6 +19,9 @@ import accruedExpensesRoutes from './routes/accrued-expenses.routes.js';
 import metricsRoutes from './routes/metrics.routes.js';
 import payrollRoutes from './routes/payroll.routes.js';
 import pluginRoutes from './routes/plugin.routes.js';
+import publicReportsRoutes from './routes/public-reports.routes.js';
+import internalRoutes from './routes/internal.routes.js';
+import satDescargaRoutes from './routes/sat-descarga.routes.js';
 import { logger } from './utils/logger.util.js';
 
 dotenv.config();
@@ -132,6 +135,9 @@ app.use('/api/accrued-expenses', accruedExpensesRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/payrolls', payrollRoutes);
 app.use('/api/plugins', pluginRoutes);
+app.use('/api/public-reports', publicReportsRoutes);
+app.use('/api/internal', internalRoutes);
+app.use('/api/sat-descarga', satDescargaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Middleware de manejo de errores centralizado (debe ir al final, después de todas las rutas)
