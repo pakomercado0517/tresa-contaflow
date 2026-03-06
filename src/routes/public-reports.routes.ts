@@ -2,7 +2,10 @@ import { Router, type IRouter } from 'express';
 import { body, param, query } from 'express-validator';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
-import { validatePublicReportAccess, validatePublicReportTokenLimit } from '../middlewares/plan-limits.middleware.js';
+import {
+  validatePublicReportAccess,
+  validatePublicReportTokenLimit,
+} from '../middlewares/plan-limits.middleware.js';
 import { generate, getByToken, revoke } from '../controllers/public-reports.controller.js';
 
 const router: IRouter = Router();
@@ -48,7 +51,15 @@ const getByTokenValidation = [
 router.get('/:token', getByTokenValidation, validateRequest, getByToken);
 
 // Protegidas
-router.post('/generate', authenticateToken, validatePublicReportAccess, validatePublicReportTokenLimit, generateValidation, validateRequest, generate);
+router.post(
+  '/generate',
+  authenticateToken,
+  validatePublicReportAccess,
+  validatePublicReportTokenLimit,
+  generateValidation,
+  validateRequest,
+  generate
+);
 router.delete('/:token', authenticateToken, tokenParam, validateRequest, revoke);
 
 export default router;

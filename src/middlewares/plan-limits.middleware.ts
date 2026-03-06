@@ -1,18 +1,14 @@
-import { type Response, type NextFunction } from "express";
-import type { AuthRequest } from "./auth.middleware.js";
-import { PlanLimitsService } from "../services/plan-limits.service.js";
+import { type Response, type NextFunction } from 'express';
+import type { AuthRequest } from './auth.middleware.js';
+import { PlanLimitsService } from '../services/plan-limits.service.js';
 
 /**
  * Middleware para validar límite de perfiles antes de crear uno nuevo
  */
-export function validateProfileLimit(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void {
+export function validateProfileLimit(req: AuthRequest, res: Response, next: NextFunction): void {
   const userId = req.userId;
   if (!userId) {
-    res.status(401).json({ error: "Usuario no autenticado" });
+    res.status(401).json({ error: 'Usuario no autenticado' });
     return;
   }
 
@@ -23,7 +19,7 @@ export function validateProfileLimit(
     .then((result) => {
       if (!result.allowed) {
         res.status(403).json({
-          error: "Límite de plan alcanzado",
+          error: 'Límite de plan alcanzado',
           message: result.reason,
           limit: result.limit,
           currentCount: result.currentCount,
@@ -36,22 +32,18 @@ export function validateProfileLimit(
       next();
     })
     .catch((error) => {
-      console.error("Error al validar límite de perfiles:", error);
-      res.status(500).json({ error: "Error al validar límite de plan" });
+      console.error('Error al validar límite de perfiles:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
     });
 }
 
 /**
  * Middleware para validar límite de facturas antes de crear una nueva
  */
-export function validateInvoiceLimit(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void {
+export function validateInvoiceLimit(req: AuthRequest, res: Response, next: NextFunction): void {
   const userId = req.userId;
   if (!userId) {
-    res.status(401).json({ error: "Usuario no autenticado" });
+    res.status(401).json({ error: 'Usuario no autenticado' });
     return;
   }
 
@@ -59,7 +51,7 @@ export function validateInvoiceLimit(
   const profileId = req.body.profileId || req.params.profileId;
 
   if (!profileId) {
-    res.status(400).json({ error: "profileId es requerido" });
+    res.status(400).json({ error: 'profileId es requerido' });
     return;
   }
 
@@ -70,7 +62,7 @@ export function validateInvoiceLimit(
     .then((result) => {
       if (!result.allowed) {
         res.status(403).json({
-          error: "Límite de plan alcanzado",
+          error: 'Límite de plan alcanzado',
           message: result.reason,
           limit: result.limit,
           currentCount: result.currentCount,
@@ -83,22 +75,18 @@ export function validateInvoiceLimit(
       next();
     })
     .catch((error) => {
-      console.error("Error al validar límite de facturas:", error);
-      res.status(500).json({ error: "Error al validar límite de plan" });
+      console.error('Error al validar límite de facturas:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
     });
 }
 
 /**
  * Middleware para validar límite de gastos antes de crear uno nuevo
  */
-export function validateExpenseLimit(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void {
+export function validateExpenseLimit(req: AuthRequest, res: Response, next: NextFunction): void {
   const userId = req.userId;
   if (!userId) {
-    res.status(401).json({ error: "Usuario no autenticado" });
+    res.status(401).json({ error: 'Usuario no autenticado' });
     return;
   }
 
@@ -106,7 +94,7 @@ export function validateExpenseLimit(
   const profileId = req.body.profileId || req.params.profileId;
 
   if (!profileId) {
-    res.status(400).json({ error: "profileId es requerido" });
+    res.status(400).json({ error: 'profileId es requerido' });
     return;
   }
 
@@ -117,7 +105,7 @@ export function validateExpenseLimit(
     .then((result) => {
       if (!result.allowed) {
         res.status(403).json({
-          error: "Límite de plan alcanzado",
+          error: 'Límite de plan alcanzado',
           message: result.reason,
           limit: result.limit,
           currentCount: result.currentCount,
@@ -130,8 +118,8 @@ export function validateExpenseLimit(
       next();
     })
     .catch((error) => {
-      console.error("Error al validar límite de gastos:", error);
-      res.status(500).json({ error: "Error al validar límite de plan" });
+      console.error('Error al validar límite de gastos:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
     });
 }
 
@@ -242,14 +230,10 @@ export function validateSatDownloadAccess(
 /**
  * Middleware para validar límite de búsquedas con IA del SAT
  */
-export function validateSATSearchLimit(
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void {
+export function validateSATSearchLimit(req: AuthRequest, res: Response, next: NextFunction): void {
   const userId = req.userId;
   if (!userId) {
-    res.status(401).json({ error: "Usuario no autenticado" });
+    res.status(401).json({ error: 'Usuario no autenticado' });
     return;
   }
 
@@ -260,7 +244,7 @@ export function validateSATSearchLimit(
     .then((result) => {
       if (!result.allowed) {
         res.status(403).json({
-          error: "Límite de plan alcanzado",
+          error: 'Límite de plan alcanzado',
           message: result.reason,
           limit: result.limit,
           currentCount: result.currentCount,
@@ -274,8 +258,7 @@ export function validateSATSearchLimit(
       next();
     })
     .catch((error) => {
-      console.error("Error al validar límite de búsquedas SAT:", error);
-      res.status(500).json({ error: "Error al validar límite de plan" });
+      console.error('Error al validar límite de búsquedas SAT:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
     });
 }
-

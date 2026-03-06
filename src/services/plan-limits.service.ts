@@ -1,9 +1,9 @@
-import { SubscriptionService } from "./subscription.service.js";
-import { PLAN_LIMITS, type Plan, type PlanLimits } from "../constants/plans.constants.js";
-import { Profile, Invoice, AccruedExpense, PublicReportToken } from "../database/models/index.js";
-import { Op as OpLimits } from "sequelize";
-import SatSearchLog from "../database/models/SatSearchLog.model.js";
-import { Op } from "sequelize";
+import { SubscriptionService } from './subscription.service.js';
+import { PLAN_LIMITS, type Plan, type PlanLimits } from '../constants/plans.constants.js';
+import { Profile, Invoice, AccruedExpense, PublicReportToken } from '../database/models/index.js';
+import { Op as OpLimits } from 'sequelize';
+import SatSearchLog from '../database/models/SatSearchLog.model.js';
+import { Op } from 'sequelize';
 
 /**
  * Servicio para validar límites de planes
@@ -233,7 +233,7 @@ export class PlanLimitsService {
       where: {
         user_id: userId,
         search_type: {
-          [Op.in]: ["ai_similarity", "ai_search"],
+          [Op.in]: ['ai_similarity', 'ai_search'],
         },
         mes: currentMonth,
         año: currentYear,
@@ -285,7 +285,7 @@ export class PlanLimitsService {
       where: {
         user_id: userId,
         search_type: {
-          [Op.in]: ["ai_similarity", "ai_search"],
+          [Op.in]: ['ai_similarity', 'ai_search'],
         },
         mes: currentMonth,
         año: currentYear,
@@ -322,7 +322,8 @@ export class PlanLimitsService {
     if (!limits.publicReports) {
       return {
         allowed: false,
-        reason: 'Los reportes públicos no están disponibles en tu plan. Actualiza a BASIC o superior.',
+        reason:
+          'Los reportes públicos no están disponibles en tu plan. Actualiza a BASIC o superior.',
       };
     }
     return { allowed: true };
@@ -399,7 +400,7 @@ export class PlanLimitsService {
       where: {
         user_id: userId,
         search_type: {
-          [Op.in]: ["ai_similarity", "ai_search"],
+          [Op.in]: ['ai_similarity', 'ai_search'],
         },
         mes: currentMonth,
         año: currentYear,
@@ -409,4 +410,3 @@ export class PlanLimitsService {
     return Math.max(0, limits.satAISearchesPerMonth - aiSearchCount);
   }
 }
-

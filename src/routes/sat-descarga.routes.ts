@@ -3,11 +3,7 @@ import { body, param } from 'express-validator';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
 import { validateSatDownloadAccess } from '../middlewares/plan-limits.middleware.js';
-import {
-  register,
-  trigger,
-  getStatus,
-} from '../controllers/sat-descarga.controller.js';
+import { register, trigger, getStatus } from '../controllers/sat-descarga.controller.js';
 
 const router: IRouter = Router();
 
