@@ -1,6 +1,7 @@
 import { SubscriptionService } from "./subscription.service.js";
 import { PLAN_LIMITS, type Plan, type PlanLimits } from "../constants/plans.constants.js";
-import { Profile, Invoice, AccruedExpense } from "../database/models/index.js";
+import { Profile, Invoice, AccruedExpense, PublicReportToken } from "../database/models/index.js";
+import { Op as OpLimits } from "sequelize";
 import SatSearchLog from "../database/models/SatSearchLog.model.js";
 import { Op } from "sequelize";
 
@@ -308,6 +309,76 @@ export class PlanLimitsService {
       hasLearning: limits.satHasLearning,
       hasAdvancedRanking: limits.satHasAdvancedRanking,
     };
+  }
+
+  /**
+   * Valida si el usuario puede usar reportes públicos compartibles
+   */
+  async canUsePublicReports(userId: string): Promise<{
+    allowed: boolean;
+    reason?: string;
+  }> {
+    const limits = await this.getUserLimits(userId);
+    if (!limits.publicReports) {
+      return {
+        allowed: false,
+        reason: 'Los reportes públicos no están disponibles en tu plan. Actualiza a BASIC o superior.',
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
+   * Valida si el usuario puede generar un nuevo token de reporte público
+   * (no supera el límite de tokens activos simultáneos de su plan)
+   */
+  async canCreatePublicReportToken(userId: string): Promise<{
+    allowed: boolean;
+    reason?: string;
+    currentCount: number;
+    limit: number | null;
+  }> {
+    const limits = await this.getUserLimits(userId);
+
+    if (limits.publicReportTokensActive === null) {
+      return { allowed: true, currentCount: 0, limit: null };
+    }
+
+    const activeCount = await PublicReportToken.count({
+      where: {
+        user_id: userId,
+        is_active: true,
+        expires_at: { [OpLimits.gt]: new Date() },
+      },
+    });
+
+    if (activeCount >= limits.publicReportTokensActive) {
+      return {
+        allowed: false,
+        reason: `Has alcanzado el límite de ${limits.publicReportTokensActive} reportes públicos activos para tu plan. Revoca uno existente para crear uno nuevo.`,
+        currentCount: activeCount,
+        limit: limits.publicReportTokensActive,
+      };
+    }
+
+    return { allowed: true, currentCount: activeCount, limit: limits.publicReportTokensActive };
+  }
+
+  /**
+   * Valida si el usuario puede usar la descarga masiva SAT (FIEL)
+   */
+  async canUseSatDownload(userId: string): Promise<{
+    allowed: boolean;
+    reason?: string;
+  }> {
+    const limits = await this.getUserLimits(userId);
+    if (!limits.satDownload) {
+      return {
+        allowed: false,
+        reason: 'La descarga masiva SAT no está disponible en tu plan. Actualiza a PRO o superior.',
+      };
+    }
+    return { allowed: true };
   }
 
   /**

@@ -136,6 +136,110 @@ export function validateExpenseLimit(
 }
 
 /**
+ * Middleware para validar límite de tokens activos de reportes públicos
+ */
+export function validatePublicReportTokenLimit(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Usuario no autenticado' });
+    return;
+  }
+
+  const limitsService = new PlanLimitsService();
+
+  limitsService
+    .canCreatePublicReportToken(userId)
+    .then((result) => {
+      if (!result.allowed) {
+        res.status(403).json({
+          error: 'Límite de plan alcanzado',
+          message: result.reason,
+          limit: result.limit,
+          currentCount: result.currentCount,
+        });
+        return;
+      }
+      next();
+    })
+    .catch((error) => {
+      console.error('Error al validar límite de tokens públicos:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
+    });
+}
+
+/**
+ * Middleware para validar acceso a reportes públicos (BASIC en adelante)
+ */
+export function validatePublicReportAccess(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Usuario no autenticado' });
+    return;
+  }
+
+  const limitsService = new PlanLimitsService();
+
+  limitsService
+    .canUsePublicReports(userId)
+    .then((result) => {
+      if (!result.allowed) {
+        res.status(403).json({
+          error: 'Feature no disponible en tu plan',
+          message: result.reason,
+        });
+        return;
+      }
+      next();
+    })
+    .catch((error) => {
+      console.error('Error al validar acceso a reportes públicos:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
+    });
+}
+
+/**
+ * Middleware para validar acceso a descarga masiva SAT (PRO en adelante)
+ */
+export function validateSatDownloadAccess(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  const userId = req.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Usuario no autenticado' });
+    return;
+  }
+
+  const limitsService = new PlanLimitsService();
+
+  limitsService
+    .canUseSatDownload(userId)
+    .then((result) => {
+      if (!result.allowed) {
+        res.status(403).json({
+          error: 'Feature no disponible en tu plan',
+          message: result.reason,
+        });
+        return;
+      }
+      next();
+    })
+    .catch((error) => {
+      console.error('Error al validar acceso a descarga SAT:', error);
+      res.status(500).json({ error: 'Error al validar límite de plan' });
+    });
+}
+
+/**
  * Middleware para validar límite de búsquedas con IA del SAT
  */
 export function validateSATSearchLimit(

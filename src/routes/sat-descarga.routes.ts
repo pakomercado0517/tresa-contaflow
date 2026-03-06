@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import { body, param } from 'express-validator';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
+import { validateSatDownloadAccess } from '../middlewares/plan-limits.middleware.js';
 import {
   register,
   trigger,
@@ -11,6 +12,7 @@ import {
 const router: IRouter = Router();
 
 router.use(authenticateToken);
+router.use(validateSatDownloadAccess);
 
 const registerValidation = [
   body('profile_id')
