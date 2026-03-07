@@ -8,6 +8,7 @@ import {
   AccruedExpense,
   ManualIncome,
   PaymentComplement,
+  ProfilePaymentComplement,
   PaymentComplementItem,
   Payroll,
 } from "../database/models/index";
@@ -50,7 +51,8 @@ describe("MetricsService", () => {
     await Payroll.destroy({ where: { profile_id: profileId } });
     await ManualIncome.destroy({ where: { profile_id: profileId } });
     await PaymentComplementItem.destroy({ where: { profile_id: profileId } });
-    await PaymentComplement.destroy({ where: { profile_id: profileId } });
+    await ProfilePaymentComplement.destroy({ where: { profile_id: profileId } });
+    await PaymentComplement.destroy({ where: {} });
     await AccruedExpense.destroy({ where: { profile_id: profileId } });
     await Invoice.destroy({ where: { profile_id: profileId } });
   }
@@ -120,12 +122,16 @@ describe("MetricsService", () => {
         validacion: {},
       });
       const complement = await PaymentComplement.create({
-        profile_id: profileId,
         uuid: `COMP-${Date.now()}`,
         fecha_emision: new Date("2024-12-20"),
         rfc_emisor: "MET123456ABC",
         rfc_receptor: "CLI",
         complemento_data: {},
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complement.id,
+        role: "INGRESO",
       });
       await PaymentComplementItem.create({
         complement_id: complement.id,
@@ -263,12 +269,16 @@ describe("MetricsService", () => {
         validacion: {},
       });
       const complement = await PaymentComplement.create({
-        profile_id: profileId,
         uuid: `COMP-IVA-${Date.now()}`,
         fecha_emision: new Date("2024-12-20"),
         rfc_emisor: "MET123456ABC",
         rfc_receptor: "CLI",
         complemento_data: {},
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complement.id,
+        role: "INGRESO",
       });
       await PaymentComplementItem.create({
         complement_id: complement.id,
@@ -377,12 +387,16 @@ describe("MetricsService", () => {
         validacion: {},
       });
       const complement = await PaymentComplement.create({
-        profile_id: profileId,
         uuid: `COMP-RET-${Date.now()}`,
         fecha_emision: new Date("2024-12-20"),
         rfc_emisor: "MET123456ABC",
         rfc_receptor: "CLI",
         complemento_data: {},
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complement.id,
+        role: "INGRESO",
       });
       await PaymentComplementItem.create({
         complement_id: complement.id,
@@ -434,12 +448,16 @@ describe("MetricsService", () => {
         validacion: {},
       });
       const complement = await PaymentComplement.create({
-        profile_id: profileId,
         uuid: `COMP-PEND-${Date.now()}`,
         fecha_emision: new Date("2024-12-20"),
         rfc_emisor: "MET123456ABC",
         rfc_receptor: "CLI",
         complemento_data: {},
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complement.id,
+        role: "INGRESO",
       });
       await PaymentComplementItem.create({
         complement_id: complement.id,

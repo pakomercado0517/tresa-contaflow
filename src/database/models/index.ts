@@ -12,6 +12,7 @@ import Period from "./Period.model.js";
 import ManualIncome from "./ManualIncome.model.js";
 import DiscountCode from "./DiscountCode.model.js";
 import PaymentComplement from "./PaymentComplement.model.js";
+import ProfilePaymentComplement from "./ProfilePaymentComplement.model.js";
 import PaymentComplementItem from "./PaymentComplementItem.model.js";
 import SatProductService from "./SatProductService.model.js";
 import SatRegimenFiscal from "./SatRegimenFiscal.model.js";
@@ -39,6 +40,7 @@ export {
   SubscriptionPlugin,
   DiscountCode,
   PaymentComplement,
+  ProfilePaymentComplement,
   PaymentComplementItem,
   SatProductService,
   SatRegimenFiscal,

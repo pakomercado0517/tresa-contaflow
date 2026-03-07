@@ -15,7 +15,6 @@ export interface PagoParcial {
 
 export interface PaymentComplementAttributes {
   id: string;
-  profile_id: string;
   uuid: string;
   fecha_emision: Date;
   rfc_emisor: string;
@@ -27,6 +26,20 @@ export interface PaymentComplementAttributes {
 
 export interface PaymentComplementCreationAttributes
   extends Omit<PaymentComplementAttributes, "id" | "created_at" | "updated_at"> {}
+
+export type ComplementRole = "INGRESO" | "EGRESO";
+
+export interface ProfilePaymentComplementAttributes {
+  id: string;
+  profile_id: string;
+  complement_id: string;
+  role: ComplementRole;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ProfilePaymentComplementCreationAttributes
+  extends Omit<ProfilePaymentComplementAttributes, "id" | "created_at" | "updated_at"> {}
 
 export interface PaymentComplementItemAttributes {
   id: string;

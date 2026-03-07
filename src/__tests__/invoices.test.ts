@@ -2,7 +2,7 @@ import request from "supertest";
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
-import { Profile, Invoice, PaymentComplement, PaymentComplementItem } from "../database/models/index";
+import { Profile, Invoice, PaymentComplement, ProfilePaymentComplement, PaymentComplementItem } from "../database/models/index";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -61,7 +61,8 @@ describe("Invoices API", () => {
       // Limpiar facturas previas
       await Invoice.destroy({ where: { profile_id: profileId } });
       await PaymentComplementItem.destroy({ where: { profile_id: profileId } });
-      await PaymentComplement.destroy({ where: { profile_id: profileId } });
+      await ProfilePaymentComplement.destroy({ where: { profile_id: profileId } });
+      await PaymentComplement.destroy({ where: {} });
       
       // Crear algunas facturas de prueba
       await Invoice.create({
@@ -141,12 +142,16 @@ describe("Invoices API", () => {
 
     it("debe incluir pagos de complementos por fecha de pago", async () => {
       const complemento = await PaymentComplement.create({
-        profile_id: profileId,
         uuid: `COMP-${Date.now()}`,
         fecha_emision: new Date("2024-12-20"),
         rfc_emisor: "EPR123456ABC",
         rfc_receptor: "CLI123456XYZ",
         complemento_data: { pagos: [] },
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complemento.id,
+        role: "INGRESO",
       });
 
       // Complemento con fecha_pago en diciembre: imp_pagado 500, saldo insoluto 500 (en subtotal)

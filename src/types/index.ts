@@ -21,8 +21,11 @@ export type {
 export type {
   PagoParcial,
   PagoOrigen,
+  ComplementRole,
   PaymentComplementAttributes,
   PaymentComplementCreationAttributes,
+  ProfilePaymentComplementAttributes,
+  ProfilePaymentComplementCreationAttributes,
   PaymentComplementItemAttributes,
   PaymentComplementItemCreationAttributes,
   EstadoPago,

@@ -1,7 +1,7 @@
 import type { CFDI } from "../types/cfdi.types.js";
 import type { EstadoValidacionCFDI, EstadoValidacionGasto, EstadoValidacionComplemento, ValidacionesConfig } from "../types/validation.types.js";
 import { compareRFCs, isValidRFCFormat, normalizeRFC } from "../utils/rfc.util.js";
-import { Invoice, AccruedExpense, PaymentComplement } from "../database/models/index.js";
+import { Invoice, AccruedExpense, PaymentComplement, ProfilePaymentComplement } from "../database/models/index.js";
 import { Op } from "sequelize";
 
 /**
@@ -376,29 +376,36 @@ export class FiscalValidationService {
   ): Promise<boolean> {
     try {
       if (tipo === "both") {
-        // Verificar en facturas, gastos y complementos
         const existingInvoice = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
         });
         const existingAccruedExpense = await AccruedExpense.findOne({
           where: { uuid, profile_id: profileId },
         });
-        // Para complementos, el constraint único es GLOBAL (solo uuid, sin profile_id)
-        // Por lo tanto, debemos verificar solo por UUID, no por profile_id
-        const existingComplement = await PaymentComplement.findOne({
-          where: { uuid },
+        const existingLink = await ProfilePaymentComplement.findOne({
+          where: { profile_id: profileId },
+          include: [{
+            model: PaymentComplement,
+            as: "complement",
+            where: { uuid },
+            required: true,
+          }],
         });
-        return !!(existingInvoice || existingAccruedExpense || existingComplement);
+        return !!(existingInvoice || existingAccruedExpense || existingLink);
       } else if (tipo === "invoice") {
         const existing = await Invoice.findOne({
           where: { uuid, profile_id: profileId },
         });
         return !!existing;
       } else if (tipo === "complement") {
-        // Para complementos, el constraint único es GLOBAL (solo uuid, sin profile_id)
-        // Por lo tanto, debemos verificar solo por UUID, no por profile_id
-        const existing = await PaymentComplement.findOne({
-          where: { uuid },
+        const existing = await ProfilePaymentComplement.findOne({
+          where: { profile_id: profileId },
+          include: [{
+            model: PaymentComplement,
+            as: "complement",
+            where: { uuid },
+            required: true,
+          }],
         });
         return !!existing;
       } else {

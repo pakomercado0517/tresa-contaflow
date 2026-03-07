@@ -1,6 +1,5 @@
 import { DataTypes, Model } from "sequelize";
 import sequelize from "../config.js";
-import Profile from "./Profile.model.js";
 
 import type {
   PaymentComplementAttributes,
@@ -12,7 +11,6 @@ class PaymentComplement
   implements PaymentComplementAttributes
 {
   declare id: string;
-  declare profile_id: string;
   declare uuid: string;
   declare fecha_emision: Date;
   declare rfc_emisor: string;
@@ -28,14 +26,6 @@ PaymentComplement.init(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
-    },
-    profile_id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "profiles",
-        key: "id",
-      },
     },
     uuid: {
       type: DataTypes.STRING,
@@ -75,23 +65,9 @@ PaymentComplement.init(
     timestamps: true,
     createdAt: "created_at",
     updatedAt: "updated_at",
-    indexes: [{ fields: ["profile_id"] }, { fields: ["uuid"] }, { fields: ["fecha_emision"] }],
+    indexes: [{ fields: ["uuid"] }, { fields: ["fecha_emision"] }],
   }
 );
-
-PaymentComplement.belongsTo(Profile, {
-  foreignKey: "profile_id",
-  as: "profile",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-
-Profile.hasMany(PaymentComplement, {
-  foreignKey: "profile_id",
-  as: "payment_complements",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
 
 export default PaymentComplement;
 export type { PaymentComplementAttributes, PaymentComplementCreationAttributes };
