@@ -290,7 +290,7 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
       // Guardar complemento usando findOrCreate (maneja duplicados automáticamente)
       // Esto previene race conditions donde dos requests simultáneos pasan la validación
       try {
-        const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId);
+        const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId, profile.rfc);
 
         res.json({
           message: "Complemento de pago procesado exitosamente",

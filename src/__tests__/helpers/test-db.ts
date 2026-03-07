@@ -8,6 +8,7 @@ import {
   Period,
   ManualIncome,
   PaymentComplement,
+  ProfilePaymentComplement,
   PaymentComplementItem,
   Payroll,
   Plugin,
@@ -29,6 +30,7 @@ export async function cleanDatabase(): Promise<void> {
     // Eliminar en orden inverso de dependencias (hijos primero, padres al final)
     await ManualIncome.destroy({ where: {}, truncate: true, cascade: true });
     await PaymentComplementItem.destroy({ where: {}, truncate: true, cascade: true });
+    await ProfilePaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
     await PaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
     await AccruedExpense.destroy({ where: {}, truncate: true, cascade: true });
     await Invoice.destroy({ where: {}, truncate: true, cascade: true });

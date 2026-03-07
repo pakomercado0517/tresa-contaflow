@@ -1,28 +1,35 @@
 import { Op } from "sequelize";
 
-import { Invoice, AccruedExpense, PaymentComplement, PaymentComplementItem } from "../database/models/index.js";
+import {
+  Invoice,
+  AccruedExpense,
+  PaymentComplement,
+  ProfilePaymentComplement,
+  PaymentComplementItem,
+} from "../database/models/index.js";
+import { compareRFCs } from "../utils/rfc.util.js";
 
 import type { CFDI, ComplementoPagoItem, FacturaRelacionada } from "../types/cfdi.types.js";
 import type {
+  ComplementRole,
   PagoParcial,
   PaymentComplementItemCreationAttributes,
 } from "../types/payment.types.js";
 
 export class PaymentComplementService {
-  async saveComplemento(cfdi: CFDI, profileId: string): Promise<PaymentComplement> {
+  async saveComplemento(
+    cfdi: CFDI,
+    profileId: string,
+    profileRFC: string
+  ): Promise<PaymentComplement> {
     if (!cfdi.complementoPago) {
       throw new Error("El CFDI no contiene un complemento de pago");
     }
 
-    // Usar findOrCreate para evitar race conditions y errores de constraint único
-    // El constraint único es sobre uuid (global), no sobre (uuid, profile_id)
-    // Si el complemento ya existe, lo retornamos sin error
-    const [complemento, created] = await PaymentComplement.findOrCreate({
-      where: {
-        uuid: cfdi.uuid,
-      },
+    // 1. Buscar o crear el documento del complemento (entidad global por UUID)
+    const [complemento] = await PaymentComplement.findOrCreate({
+      where: { uuid: cfdi.uuid },
       defaults: {
-        profile_id: profileId,
         uuid: cfdi.uuid,
         fecha_emision: cfdi.fecha,
         rfc_emisor: cfdi.rfcEmisor,
@@ -31,48 +38,30 @@ export class PaymentComplementService {
       },
     });
 
-    // Si el complemento ya existía, actualizar los datos por si acaso cambió algo
-    // (aunque normalmente no debería cambiar)
-    if (!created) {
-      // Solo actualizar si los datos son diferentes para evitar updates innecesarios
-      const fechaEmisionTime = complemento.fecha_emision instanceof Date 
-        ? complemento.fecha_emision.getTime() 
-        : new Date(complemento.fecha_emision).getTime();
-      const cfdiFechaTime = cfdi.fecha instanceof Date 
-        ? cfdi.fecha.getTime() 
-        : new Date(cfdi.fecha).getTime();
-      
-      const needsUpdate = 
-        complemento.profile_id !== profileId ||
-        Math.abs(fechaEmisionTime - cfdiFechaTime) > 1000 || // Tolerancia de 1 segundo
-        complemento.rfc_emisor !== cfdi.rfcEmisor ||
-        complemento.rfc_receptor !== cfdi.rfcReceptor;
+    // 2. Determinar el rol del perfil respecto a este complemento
+    const role = this.determineRole(cfdi.rfcEmisor, cfdi.rfcReceptor, profileRFC);
 
-      if (needsUpdate) {
-        complemento.profile_id = profileId;
-        complemento.fecha_emision = cfdi.fecha;
-        complemento.rfc_emisor = cfdi.rfcEmisor;
-        complemento.rfc_receptor = cfdi.rfcReceptor;
-        complemento.complemento_data = cfdi.complementoPago;
-        await complemento.save();
-      }
-    }
+    // 3. Crear el vínculo perfil ↔ complemento (si no existe)
+    await ProfilePaymentComplement.findOrCreate({
+      where: {
+        profile_id: profileId,
+        complement_id: complemento.id,
+      },
+      defaults: {
+        profile_id: profileId,
+        complement_id: complemento.id,
+        role,
+      },
+    });
 
-    // Construir items del complemento
+    // 4. Crear items del complemento para este perfil
     const items = this.buildComplementItems(
       cfdi.complementoPago.pagos,
       profileId,
       complemento.id
     );
 
-    // Solo crear items si el complemento fue recién creado
-    // Si ya existía, los items ya deberían estar creados
-    if (created && items.length > 0) {
-      await PaymentComplementItem.bulkCreate(items);
-      await this.applyComplementItemsToInvoices(profileId, items);
-    } else if (!created && items.length > 0) {
-      // Si el complemento ya existía, verificar si los items ya existen
-      // y solo crear los que falten (por si acaso se agregaron nuevos pagos)
+    if (items.length > 0) {
       const existingItems = await PaymentComplementItem.findAll({
         where: {
           complement_id: complemento.id,
@@ -80,28 +69,31 @@ export class PaymentComplementService {
         },
       });
 
-      // Crear un set de items existentes para comparar
-      const existingItemsSet = new Set(
-        existingItems.map((item) => {
-          const fechaPago = item.fecha_pago instanceof Date 
-            ? item.fecha_pago.toISOString() 
+      if (existingItems.length === 0) {
+        await PaymentComplementItem.bulkCreate(items);
+        await this.applyComplementItemsToDocuments(profileId, items);
+      } else {
+        const existingItemsSet = new Set(
+          existingItems.map((item) => {
+            const fechaPago = item.fecha_pago instanceof Date
+              ? item.fecha_pago.toISOString()
+              : new Date(item.fecha_pago).toISOString();
+            return `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
+          })
+        );
+
+        const newItems = items.filter((item) => {
+          const fechaPago = item.fecha_pago instanceof Date
+            ? item.fecha_pago.toISOString()
             : new Date(item.fecha_pago).toISOString();
-          return `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
-        })
-      );
+          const key = `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
+          return !existingItemsSet.has(key);
+        });
 
-      // Filtrar items nuevos que no existen
-      const newItems = items.filter((item) => {
-        const fechaPago = item.fecha_pago instanceof Date 
-          ? item.fecha_pago.toISOString() 
-          : new Date(item.fecha_pago).toISOString();
-        const key = `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
-        return !existingItemsSet.has(key);
-      });
-
-      if (newItems.length > 0) {
-        await PaymentComplementItem.bulkCreate(newItems);
-        await this.applyComplementItemsToInvoices(profileId, newItems);
+        if (newItems.length > 0) {
+          await PaymentComplementItem.bulkCreate(newItems);
+          await this.applyComplementItemsToDocuments(profileId, newItems);
+        }
       }
     }
 
@@ -140,6 +132,34 @@ export class PaymentComplementService {
 
     expense.pagos = pagos;
     await expense.save();
+  }
+
+  /**
+   * Verifica si ya existe un vínculo entre un perfil y un complemento con el UUID dado.
+   */
+  async isLinkedToProfile(complementUUID: string, profileId: string): Promise<boolean> {
+    const complement = await PaymentComplement.findOne({
+      where: { uuid: complementUUID },
+    });
+    if (!complement) return false;
+
+    const link = await ProfilePaymentComplement.findOne({
+      where: {
+        profile_id: profileId,
+        complement_id: complement.id,
+      },
+    });
+    return !!link;
+  }
+
+  private determineRole(
+    rfcEmisor: string,
+    rfcReceptor: string,
+    profileRFC: string
+  ): ComplementRole {
+    if (compareRFCs(rfcEmisor, profileRFC)) return "INGRESO";
+    if (compareRFCs(rfcReceptor, profileRFC)) return "EGRESO";
+    return "INGRESO";
   }
 
   private buildComplementItems(
@@ -222,7 +242,7 @@ export class PaymentComplementService {
     ].join("|");
   }
 
-  private async applyComplementItemsToInvoices(
+  private async applyComplementItemsToDocuments(
     profileId: string,
     items: PaymentComplementItemCreationAttributes[]
   ): Promise<void> {
@@ -231,13 +251,10 @@ export class PaymentComplementService {
       return;
     }
 
-    // Buscar facturas (invoices) PPD relacionadas
     const facturas = await Invoice.findAll({
       where: {
         profile_id: profileId,
-        uuid: {
-          [Op.in]: facturasUUIDs,
-        },
+        uuid: { [Op.in]: facturasUUIDs },
         tipo: "PPD",
       },
     });
@@ -246,13 +263,10 @@ export class PaymentComplementService {
       await this.applyPaymentsToInvoice(factura, profileId);
     }
 
-    // Buscar gastos (expenses) PPD relacionados
     const gastos = await AccruedExpense.findAll({
       where: {
         profile_id: profileId,
-        uuid: {
-          [Op.in]: facturasUUIDs,
-        },
+        uuid: { [Op.in]: facturasUUIDs },
         tipo: "PPD",
       },
     });
