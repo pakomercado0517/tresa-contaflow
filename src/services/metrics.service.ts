@@ -1493,15 +1493,11 @@ export class MetricsService {
       return w;
     };
 
-    const [invoicesPUE, invoicesPPD, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
+    const [invoicesPUE, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
           where: baseInvoiceWhere('PUE'),
           attributes: ['iva_amount'],
-        }),
-        Invoice.findAll({
-          where: baseInvoiceWhere('PPD'),
-          attributes: ['uuid', 'iva_amount', 'total'],
         }),
         Invoice.findAll({
           where: baseInvoiceWhere(['PUE', 'PPD']),
@@ -1518,13 +1514,27 @@ export class MetricsService {
         this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
       ]);
 
+    const complementUUIDs = Object.keys(complementosPorFactura);
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      uuid: { [Op.in]: complementUUIDs },
+      tipo: 'PPD',
+    };
+    if (regimenFiscal) ppdWhere.regimen_fiscal_emisor = regimenFiscal;
+    const invoicesPPD = complementUUIDs.length
+      ? await Invoice.findAll({
+          where: ppdWhere,
+          attributes: ['uuid', 'subtotal', 'iva_amount'],
+        })
+      : [];
+
     let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const total = Number(inv.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(inv.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       cobrado += Number(inv.iva_amount ?? 0) * ratio;
     }
     const devengado =
@@ -1551,14 +1561,10 @@ export class MetricsService {
       return w;
     };
 
-    const [expensesPUE, expensesPPD, expensesTodos, complementosPorGasto] = await Promise.all([
+    const [expensesPUE, expensesTodos, complementosPorGasto] = await Promise.all([
       AccruedExpense.findAll({
         where: baseExpenseWhere('PUE'),
         attributes: ['iva_amount'],
-      }),
-      AccruedExpense.findAll({
-        where: baseExpenseWhere('PPD'),
-        attributes: ['uuid', 'iva_amount', 'total'],
       }),
       AccruedExpense.findAll({
         where: baseExpenseWhere(),
@@ -1567,12 +1573,26 @@ export class MetricsService {
       this.getComplementosPorGastoEnPeriodo(profileId, dateRange),
     ]);
 
+    const complementUUIDs = Object.keys(complementosPorGasto);
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      uuid: { [Op.in]: complementUUIDs },
+      tipo: 'PPD',
+    };
+    if (regimenFiscal) ppdWhere.regimen_fiscal_receptor = regimenFiscal;
+    const expensesPPD = complementUUIDs.length
+      ? await AccruedExpense.findAll({
+          where: ppdWhere,
+          attributes: ['uuid', 'subtotal', 'iva_amount'],
+        })
+      : [];
+
     let pagado = expensesPUE.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
     for (const expense of expensesPPD) {
-      const total = Number(expense.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(expense.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo = complementosPorGasto[expense.uuid || ''] || 0;
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       pagado += Number(expense.iva_amount ?? 0) * ratio;
     }
     const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
@@ -1603,15 +1623,11 @@ export class MetricsService {
       return w;
     };
 
-    const [invoicesPUE, invoicesPPD, allInvoices, complementosPorFactura, manualPorFactura] =
+    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
           where: baseInvoiceWhere('PUE'),
           attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        Invoice.findAll({
-          where: baseInvoiceWhere('PPD'),
-          attributes: ['uuid', 'total', 'retencion_iva_amount', 'retencion_isr_amount'],
         }),
         Invoice.findAll({
           where: baseInvoiceWhere(['PUE', 'PPD']),
@@ -1621,14 +1637,28 @@ export class MetricsService {
         this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
       ]);
 
+    const complementUUIDs = Object.keys(complementosPorFactura);
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      uuid: { [Op.in]: complementUUIDs },
+      tipo: 'PPD',
+    };
+    if (regimenFiscal) ppdWhere.regimen_fiscal_emisor = regimenFiscal;
+    const invoicesPPD = complementUUIDs.length
+      ? await Invoice.findAll({
+          where: ppdWhere,
+          attributes: ['uuid', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
+        })
+      : [];
+
     let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
     let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const total = Number(inv.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(inv.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
       isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
     }
@@ -1678,12 +1708,12 @@ export class MetricsService {
     ]);
     let total = 0;
     for (const inv of invoicesPPD) {
-      const totalFactura = Number(inv.total || 0);
-      if (totalFactura <= 0) continue;
+      const subtotalFactura = Number(inv.subtotal || 0);
+      if (subtotalFactura <= 0) continue;
       const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= totalFactura) continue;
-      const subtotalIva = Number(inv.subtotal ?? 0) + Number(inv.iva_amount ?? 0);
-      total += subtotalIva * (1 - cobrado / totalFactura);
+      if (cobrado >= subtotalFactura) continue;
+      const subtotalIva = subtotalFactura + Number(inv.iva_amount ?? 0);
+      total += subtotalIva * (1 - cobrado / subtotalFactura);
     }
     return Math.round(total * 100) / 100;
   }
@@ -1898,7 +1928,7 @@ export class MetricsService {
       return { cobrado: 0, devengado: 0 };
     }
 
-    const [invoicesPUE, invoicesPPD, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
+    const [invoicesPUE, allInvoices, manualIncomes, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
           where: {
@@ -1907,14 +1937,6 @@ export class MetricsService {
             fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
           },
           attributes: ['iva_amount'],
-        }),
-        Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PPD',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
-          attributes: ['uuid', 'iva_amount', 'total'],
         }),
         Invoice.findAll({
           where: {
@@ -1932,13 +1954,25 @@ export class MetricsService {
         this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
       ]);
 
+    const complementUUIDs = Object.keys(complementosPorFactura);
+    const invoicesPPD = complementUUIDs.length
+      ? await Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            uuid: { [Op.in]: complementUUIDs },
+            tipo: 'PPD',
+          },
+          attributes: ['uuid', 'subtotal', 'iva_amount'],
+        })
+      : [];
+
     let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const total = Number(inv.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(inv.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       cobrado += Number(inv.iva_amount ?? 0) * ratio;
     }
 
@@ -1965,7 +1999,7 @@ export class MetricsService {
       return { pagado: 0, devengado: 0 };
     }
 
-    const [expensesPUE, expensesPPD, expensesTodos, complementosPorGasto] = await Promise.all([
+    const [expensesPUE, expensesTodos, complementosPorGasto] = await Promise.all([
       AccruedExpense.findAll({
         where: {
           profile_id: profileId,
@@ -1977,14 +2011,6 @@ export class MetricsService {
       AccruedExpense.findAll({
         where: {
           profile_id: profileId,
-          tipo: 'PPD',
-          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-        },
-        attributes: ['uuid', 'iva_amount', 'total'],
-      }),
-      AccruedExpense.findAll({
-        where: {
-          profile_id: profileId,
           fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
         },
         attributes: ['iva_amount'],
@@ -1992,12 +2018,24 @@ export class MetricsService {
       this.getComplementosPorGastoEnPeriodo(profileId, dateRange),
     ]);
 
+    const complementUUIDs = Object.keys(complementosPorGasto);
+    const expensesPPD = complementUUIDs.length
+      ? await AccruedExpense.findAll({
+          where: {
+            profile_id: profileId,
+            uuid: { [Op.in]: complementUUIDs },
+            tipo: 'PPD',
+          },
+          attributes: ['uuid', 'subtotal', 'iva_amount'],
+        })
+      : [];
+
     let pagado = expensesPUE.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
     for (const expense of expensesPPD) {
-      const total = Number(expense.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(expense.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo = complementosPorGasto[expense.uuid || ''] || 0;
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       pagado += Number(expense.iva_amount ?? 0) * ratio;
     }
     const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
@@ -2026,7 +2064,7 @@ export class MetricsService {
       return { iva_cobrado: 0, iva_devengado: 0, isr_cobrado: 0, isr_devengado: 0 };
     }
 
-    const [invoicesPUE, invoicesPPD, allInvoices, complementosPorFactura, manualPorFactura] =
+    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] =
       await Promise.all([
         Invoice.findAll({
           where: {
@@ -2035,14 +2073,6 @@ export class MetricsService {
             fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
           },
           attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PPD',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
-          attributes: ['uuid', 'total', 'retencion_iva_amount', 'retencion_isr_amount'],
         }),
         Invoice.findAll({
           where: {
@@ -2056,14 +2086,26 @@ export class MetricsService {
         this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
       ]);
 
+    const complementUUIDs = Object.keys(complementosPorFactura);
+    const invoicesPPD = complementUUIDs.length
+      ? await Invoice.findAll({
+          where: {
+            profile_id: profileId,
+            uuid: { [Op.in]: complementUUIDs },
+            tipo: 'PPD',
+          },
+          attributes: ['uuid', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
+        })
+      : [];
+
     let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
     let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const total = Number(inv.total || 0);
-      if (total <= 0) continue;
+      const subtotal = Number(inv.subtotal || 0);
+      if (subtotal <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / total);
+      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
       iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
       isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
     }
@@ -2101,7 +2143,7 @@ export class MetricsService {
         tipo: 'PPD',
         fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
       },
-      attributes: ['uuid', 'subtotal', 'iva_amount', 'total'],
+      attributes: ['uuid', 'subtotal', 'iva_amount'],
     });
     if (invoicesPPD.length === 0) return 0;
 
@@ -2119,12 +2161,12 @@ export class MetricsService {
 
     let total = 0;
     for (const inv of invoicesPPD) {
-      const totalFactura = Number(inv.total || 0);
-      if (totalFactura <= 0) continue;
+      const subtotalFactura = Number(inv.subtotal || 0);
+      if (subtotalFactura <= 0) continue;
       const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= totalFactura) continue;
-      const subtotalIva = Number(inv.subtotal ?? 0) + Number(inv.iva_amount ?? 0);
-      const pendiente = subtotalIva * (1 - cobrado / totalFactura);
+      if (cobrado >= subtotalFactura) continue;
+      const subtotalIva = subtotalFactura + Number(inv.iva_amount ?? 0);
+      const pendiente = subtotalIva * (1 - cobrado / subtotalFactura);
       total += pendiente;
     }
     return Math.round(total * 100) / 100;
