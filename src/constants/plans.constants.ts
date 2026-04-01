@@ -127,20 +127,21 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
  */
 export const PLAN_PRICES: Record<Plan, number> = {
   FREE: 0,
-  BASIC: 299,
-  PRO: 799,
-  ENTERPRISE: 1499,
+  BASIC: 300,
+  PRO: 800,
+  ENTERPRISE: 1500,
 };
 
 /**
  * Precios anuales fijos de los planes (en MXN)
- * Usados cuando se solicita `billing=annual` desde el frontend
+ * Usados cuando se solicita `billing=annual` desde el frontend.
+ * Deben coincidir con los Prices anuales en Stripe (STRIPE_PRICE_ID_*_ANNUAL).
  */
 export const PLAN_PRICES_ANNUAL: Record<Plan, number> = {
   FREE: 0,
-  BASIC: 2999,
-  PRO: 7999,
-  ENTERPRISE: 14999,
+  BASIC: 3000,
+  PRO: 8000,
+  ENTERPRISE: 15000,
 };
 
 /**
