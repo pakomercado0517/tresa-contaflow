@@ -1,9 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DiscountService } from "../services/discount.service";
 
-const mockCouponCreate = vi.fn();
-const mockPromotionCodesCreate = vi.fn();
-const mockGetClient = vi.fn();
+const {
+  mockCouponCreate,
+  mockPromotionCodesCreate,
+  mockGetClient,
+  mockDiscountCodeCreate,
+  mockDiscountCodeFindOne,
+} = vi.hoisted(() => ({
+  mockCouponCreate: vi.fn(),
+  mockPromotionCodesCreate: vi.fn(),
+  mockGetClient: vi.fn(),
+  mockDiscountCodeCreate: vi.fn(),
+  mockDiscountCodeFindOne: vi.fn(),
+}));
 
 vi.mock("../services/stripe.service.js", () => ({
   getStripeService: () => ({
@@ -11,8 +21,6 @@ vi.mock("../services/stripe.service.js", () => ({
   }),
 }));
 
-const mockDiscountCodeCreate = vi.fn();
-const mockDiscountCodeFindOne = vi.fn();
 vi.mock("../database/models/index.js", () => ({
   DiscountCode: {
     create: mockDiscountCodeCreate,

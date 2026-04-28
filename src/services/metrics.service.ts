@@ -840,6 +840,26 @@ export class MetricsService {
     return leftRFC.trim().toUpperCase() === rightRFC.trim().toUpperCase();
   }
 
+  private getDocumentTotalBase(document: {
+    total?: number | null;
+    subtotal?: number | null;
+    iva_amount?: number | null;
+  }): number {
+    const total = Number(document.total ?? 0);
+    if (total > 0) {
+      return total;
+    }
+
+    const subtotal = Number(document.subtotal ?? 0);
+    const iva = Number(document.iva_amount ?? 0);
+    const subtotalMasIva = subtotal + iva;
+    if (subtotalMasIva > 0) {
+      return subtotalMasIva;
+    }
+
+    return subtotal;
+  }
+
   private async sumComplementosPorFactura(
     profileIds: string[],
     facturaUUIDs: string[]
@@ -1429,7 +1449,24 @@ export class MetricsService {
       dateRange,
       regimenFiscal
     );
-    return Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos) * 100) / 100;
+
+    const manualPaidWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo_origen: 'MANUAL',
+      is_paid: true,
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscal) manualPaidWhere.regimen_fiscal_receptor = regimenFiscal;
+    const manualPaidExpenses = await AccruedExpense.findAll({
+      where: manualPaidWhere,
+      attributes: ['subtotal'],
+    });
+    const sumManualPaid = manualPaidExpenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
+
+    return (
+      Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100) /
+      100
+    );
   }
 
   private async calculateIngresosDevengadosForRange(
@@ -1524,17 +1561,17 @@ export class MetricsService {
     const invoicesPPD = complementUUIDs.length
       ? await Invoice.findAll({
           where: ppdWhere,
-          attributes: ['uuid', 'subtotal', 'iva_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
         })
       : [];
 
     let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const subtotal = Number(inv.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(inv);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       cobrado += Number(inv.iva_amount ?? 0) * ratio;
     }
     const devengado =
@@ -1583,16 +1620,16 @@ export class MetricsService {
     const expensesPPD = complementUUIDs.length
       ? await AccruedExpense.findAll({
           where: ppdWhere,
-          attributes: ['uuid', 'subtotal', 'iva_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
         })
       : [];
 
     let pagado = expensesPUE.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
     for (const expense of expensesPPD) {
-      const subtotal = Number(expense.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(expense);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo = complementosPorGasto[expense.uuid || ''] || 0;
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       pagado += Number(expense.iva_amount ?? 0) * ratio;
     }
     const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
@@ -1647,18 +1684,18 @@ export class MetricsService {
     const invoicesPPD = complementUUIDs.length
       ? await Invoice.findAll({
           where: ppdWhere,
-          attributes: ['uuid', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
         })
       : [];
 
     let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
     let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const subtotal = Number(inv.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(inv);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
       isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
     }
@@ -1708,12 +1745,11 @@ export class MetricsService {
     ]);
     let total = 0;
     for (const inv of invoicesPPD) {
-      const subtotalFactura = Number(inv.subtotal || 0);
-      if (subtotalFactura <= 0) continue;
+      const totalFactura = this.getDocumentTotalBase(inv);
+      if (totalFactura <= 0) continue;
       const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= subtotalFactura) continue;
-      const subtotalIva = subtotalFactura + Number(inv.iva_amount ?? 0);
-      total += subtotalIva * (1 - cobrado / subtotalFactura);
+      if (cobrado >= totalFactura) continue;
+      total += totalFactura - cobrado;
     }
     return Math.round(total * 100) / 100;
   }
@@ -1843,7 +1879,21 @@ export class MetricsService {
       profileId,
       periodId
     );
-    return Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos) * 100) / 100;
+    const manualPaidExpenses = await AccruedExpense.findAll({
+      where: {
+        profile_id: profileId,
+        tipo_origen: 'MANUAL',
+        is_paid: true,
+        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+      },
+      attributes: ['subtotal'],
+    });
+    const sumManualPaid = manualPaidExpenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
+
+    return (
+      Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100) /
+      100
+    );
   }
 
   /**
@@ -1962,17 +2012,17 @@ export class MetricsService {
             uuid: { [Op.in]: complementUUIDs },
             tipo: 'PPD',
           },
-          attributes: ['uuid', 'subtotal', 'iva_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
         })
       : [];
 
     let cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.iva_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const subtotal = Number(inv.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(inv);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       cobrado += Number(inv.iva_amount ?? 0) * ratio;
     }
 
@@ -2026,16 +2076,16 @@ export class MetricsService {
             uuid: { [Op.in]: complementUUIDs },
             tipo: 'PPD',
           },
-          attributes: ['uuid', 'subtotal', 'iva_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
         })
       : [];
 
     let pagado = expensesPUE.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
     for (const expense of expensesPPD) {
-      const subtotal = Number(expense.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(expense);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo = complementosPorGasto[expense.uuid || ''] || 0;
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       pagado += Number(expense.iva_amount ?? 0) * ratio;
     }
     const devengado = expensesTodos.reduce((acc, e) => acc + Number(e.iva_amount ?? 0), 0);
@@ -2094,18 +2144,18 @@ export class MetricsService {
             uuid: { [Op.in]: complementUUIDs },
             tipo: 'PPD',
           },
-          attributes: ['uuid', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
+          attributes: ['uuid', 'total', 'subtotal', 'retencion_iva_amount', 'retencion_isr_amount'],
         })
       : [];
 
     let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
     let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
     for (const inv of invoicesPPD) {
-      const subtotal = Number(inv.subtotal || 0);
-      if (subtotal <= 0) continue;
+      const totalDocumento = this.getDocumentTotalBase(inv);
+      if (totalDocumento <= 0) continue;
       const pagadoEnPeriodo =
         (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      const ratio = Math.min(1, pagadoEnPeriodo / subtotal);
+      const ratio = Math.min(1, pagadoEnPeriodo / totalDocumento);
       iva_cobrado += Number(inv.retencion_iva_amount ?? 0) * ratio;
       isr_cobrado += Number(inv.retencion_isr_amount ?? 0) * ratio;
     }
@@ -2143,7 +2193,7 @@ export class MetricsService {
         tipo: 'PPD',
         fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
       },
-      attributes: ['uuid', 'subtotal', 'iva_amount'],
+      attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
     });
     if (invoicesPPD.length === 0) return 0;
 
@@ -2161,13 +2211,11 @@ export class MetricsService {
 
     let total = 0;
     for (const inv of invoicesPPD) {
-      const subtotalFactura = Number(inv.subtotal || 0);
-      if (subtotalFactura <= 0) continue;
+      const totalFactura = this.getDocumentTotalBase(inv);
+      if (totalFactura <= 0) continue;
       const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= subtotalFactura) continue;
-      const subtotalIva = subtotalFactura + Number(inv.iva_amount ?? 0);
-      const pendiente = subtotalIva * (1 - cobrado / subtotalFactura);
-      total += pendiente;
+      if (cobrado >= totalFactura) continue;
+      total += totalFactura - cobrado;
     }
     return Math.round(total * 100) / 100;
   }

@@ -21,6 +21,13 @@ describe("Subscription API", () => {
     await closeDatabase();
   });
 
+  beforeEach(async () => {
+    if (!userId) {
+      return;
+    }
+    await Subscription.destroy({ where: { user_id: userId } });
+  });
+
   describe("GET /api/subscription", () => {
     it("debe retornar plan FREE cuando no hay suscripción activa", async () => {
       const response = await request(app)
