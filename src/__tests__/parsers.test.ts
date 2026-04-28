@@ -82,6 +82,24 @@ const COMPLEMENTO_PAGO_CON_BASEP = `<?xml version="1.0" encoding="UTF-8"?>
   </cfdi:Complemento>
 </cfdi:Comprobante>`;
 
+const COMPLEMENTO_PAGO_MULTI_FACTURA = `<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:pago20="http://www.sat.gob.mx/Pagos20" Version="4.0" TipoDeComprobante="P" SubTotal="0" Total="0" Moneda="XXX" Fecha="2025-12-30T17:02:11">
+  <cfdi:Emisor Rfc="AAA010101AAA" Nombre="Emisor SA" RegimenFiscal="601"/>
+  <cfdi:Receptor Rfc="BBB020202BBB" Nombre="Receptor SA" RegimenFiscalReceptor="601" UsoCFDI="CP01" DomicilioFiscalReceptor="06100"/>
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="84111506" Cantidad="1" ClaveUnidad="ACT" Descripcion="Pago" ObjetoImp="01" ValorUnitario="0" Importe="0"/>
+  </cfdi:Conceptos>
+  <cfdi:Complemento>
+    <pago20:Pagos Version="2.0">
+      <pago20:Pago FechaPago="2025-12-30T17:00:45" FormaDePagoP="03" MonedaP="MXN" TipoCambioP="1" Monto="1000.00">
+        <pago20:DoctoRelacionado IdDocumento="AAAA1111-2222-3333-4444-555555555555" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="600.00" ImpPagado="600.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02"/>
+        <pago20:DoctoRelacionado IdDocumento="BBBB1111-2222-3333-4444-555555555555" MonedaDR="MXN" EquivalenciaDR="1" NumParcialidad="1" ImpSaldoAnt="400.00" ImpPagado="400.00" ImpSaldoInsoluto="0.00" ObjetoImpDR="02"/>
+      </pago20:Pago>
+    </pago20:Pagos>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Version="1.1" UUID="376775A9-BD1E-43C0-B3DA-487631FB9DF5" FechaTimbrado="2025-12-30T17:02:12" RfcProvCertif="AAA010101AAA" SelloCFD="xxx" NoCertificadoSAT="12345678" SelloSAT="yyy"/>
+  </cfdi:Complemento>
+</cfdi:Comprobante>`;
+
 describe("Parsers", () => {
   describe("parseXML", () => {
     it("debe parsear un buffer XML a Document", () => {
@@ -149,6 +167,16 @@ describe("Parsers", () => {
       const facturaRelacionada = complemento.pagos[0]?.facturasRelacionadas[0];
       expect(facturaRelacionada).toBeDefined();
       expect(facturaRelacionada?.impPagado).toBe(500);
+    });
+
+    it("conserva impPagado por factura cuando un Pago tiene multiples DoctoRelacionado", () => {
+      const doc = parseXML(Buffer.from(COMPLEMENTO_PAGO_MULTI_FACTURA, "utf-8"));
+      const complemento = extractComplementoPago(doc);
+      const facturasRelacionadas = complemento.pagos[0]?.facturasRelacionadas ?? [];
+
+      expect(facturasRelacionadas).toHaveLength(2);
+      expect(facturasRelacionadas[0]?.impPagado).toBe(600);
+      expect(facturasRelacionadas[1]?.impPagado).toBe(400);
     });
   });
 
