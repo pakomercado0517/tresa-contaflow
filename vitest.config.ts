@@ -25,12 +25,6 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
-    // @ts-expect-error - poolOptions may not be in type definitions but is supported by Vitest
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
   },
   resolve: {
     alias: {

@@ -7,7 +7,9 @@
   "scripts": {
     "test:migrate": "node scripts/test-with-migrations.mjs",
     "test": "pnpm test:migrate && vitest run",
+    "pretest:only": "pnpm test:migrate",
     "test:only": "vitest run",
+    "test:quick": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",

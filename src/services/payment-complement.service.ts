@@ -78,7 +78,7 @@ export class PaymentComplementService {
             const fechaPago = item.fecha_pago instanceof Date
               ? item.fecha_pago.toISOString()
               : new Date(item.fecha_pago).toISOString();
-            return `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
+            return `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}-${Number(item.imp_pagado)}-${item.num_operacion ?? ""}`;
           })
         );
 
@@ -86,7 +86,7 @@ export class PaymentComplementService {
           const fechaPago = item.fecha_pago instanceof Date
             ? item.fecha_pago.toISOString()
             : new Date(item.fecha_pago).toISOString();
-          const key = `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}`;
+          const key = `${item.factura_uuid}-${item.num_parcialidad}-${fechaPago}-${item.imp_pagado}-${item.num_operacion ?? ""}`;
           return !existingItemsSet.has(key);
         });
 
@@ -192,7 +192,8 @@ export class PaymentComplementService {
       forma_pago: pago.formaPago,
       moneda_pago: pago.monedaPago,
       tipo_cambio_pago: pago.tipoCambio,
-      monto_pago: pago.monto,
+      // En pagos con múltiples DoctoRelacionado, el monto aplicable por factura es ImpPagado.
+      monto_pago: factura.impPagado,
       num_operacion: pago.numOperacion ?? null,
       moneda_dr: factura.monedaDR,
       tipo_cambio_dr: factura.tipoCambioDR,
