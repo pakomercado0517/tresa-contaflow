@@ -10,7 +10,12 @@ import {
 } from '../database/models/index.js';
 import { PaymentStatusService } from './payment-status.service.js';
 import { Op } from 'sequelize';
-import type { PeriodMetricsResponse, NominaMetrics } from '../types/metrics.types.js';
+import type {
+  PeriodMetricsResponse,
+  NominaMetrics,
+  PendientesImpuestosDesglose,
+} from '../types/metrics.types.js';
+import type { PagoParcial } from '../types/payment.types.js';
 
 /**
  * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
@@ -630,15 +635,20 @@ export class MetricsService {
     return this.sumManualPagos(facturas, dateRange).porFactura;
   }
 
-  private sumManualPagos(
-    facturas: Invoice[],
+  /**
+   * Pagos manuales acumulados por UUID de CFDI/documento (misma regla para facturas y gastos XML).
+   * Filas sin `uuid` no entran en `porFactura`.
+   */
+  private sumManualPagosFromUuidDocuments(
+    documents: readonly { uuid: string | null; pagos: PagoParcial[] }[],
     dateRange: { start: Date; end: Date } | null
   ): { total: number; porFactura: Record<string, number> } {
     const porFactura: Record<string, number> = {};
     let total = 0;
 
-    facturas.forEach((factura) => {
-      const pagos = factura.pagos.filter((pago) => (pago.origen ?? 'MANUAL') === 'MANUAL');
+    documents.forEach((document) => {
+      const uuid = document.uuid;
+      const pagos = document.pagos.filter((pago) => (pago.origen ?? 'MANUAL') === 'MANUAL');
       const pagosFiltrados = dateRange
         ? pagos.filter((pago) => {
             const fecha =
@@ -647,12 +657,25 @@ export class MetricsService {
           })
         : pagos;
 
-      const totalFactura = pagosFiltrados.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
-      porFactura[factura.uuid] = (porFactura[factura.uuid] || 0) + totalFactura;
-      total += totalFactura;
+      const sumDoc = pagosFiltrados.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
+      if (uuid !== null && uuid.trim() !== '') {
+        porFactura[uuid] = (porFactura[uuid] || 0) + sumDoc;
+      }
+      total += sumDoc;
     });
 
     return { total, porFactura };
+  }
+
+  private sumManualPagos(
+    facturas: Invoice[],
+    dateRange: { start: Date; end: Date } | null
+  ): { total: number; porFactura: Record<string, number> } {
+    const documents = facturas.map((factura) => ({
+      uuid: factura.uuid,
+      pagos: factura.pagos,
+    }));
+    return this.sumManualPagosFromUuidDocuments(documents, dateRange);
   }
 
   private async sumComplementosPeriodo(
@@ -860,6 +883,219 @@ export class MetricsService {
     return subtotal;
   }
 
+  /**
+   * Base subtotal sin IVA para KPI de pendientes (por cobrar / por pagar), alineado con el resto de métricas de flujo.
+   * Impuestos y retenciones se muestran por separado.
+   */
+  private getDocumentSubtotalForPendientes(document: { subtotal?: number | null }): number {
+    return Number(document.subtotal ?? 0);
+  }
+
+  private static readonly pendientesImpuestosCero: PendientesImpuestosDesglose = {
+    iva: 0,
+    retenciones_iva: 0,
+    retenciones_isr: 0,
+  };
+
+  private roundPendientesImpuestos(d: PendientesImpuestosDesglose): PendientesImpuestosDesglose {
+    return {
+      iva: Math.round(d.iva * 100) / 100,
+      retenciones_iva: Math.round(d.retenciones_iva * 100) / 100,
+      retenciones_isr: Math.round(d.retenciones_isr * 100) / 100,
+    };
+  }
+
+  /** Subtotal pendiente por cobrar (PPD) más IVA/ret proporcionales a ese subtotal pendiente por factura. */
+  private async aggregatePendientesPorCobrarConImpuestos(
+    profileId: string,
+    dateRange: { start: Date; end: Date },
+    regimenFiscalEmisor?: string
+  ): Promise<{
+    por_cobrar: number;
+    por_cobrar_impuestos: PendientesImpuestosDesglose;
+  }> {
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo: 'PPD',
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscalEmisor) {
+      ppdWhere.regimen_fiscal_emisor = regimenFiscalEmisor;
+    }
+
+    const invoicesPPD = await Invoice.findAll({
+      where: ppdWhere,
+      attributes: [
+        'uuid',
+        'subtotal',
+        'iva_amount',
+        'total',
+        'retencion_iva_amount',
+        'retencion_isr_amount',
+      ],
+    });
+    if (invoicesPPD.length === 0) {
+      return { por_cobrar: 0, por_cobrar_impuestos: MetricsService.pendientesImpuestosCero };
+    }
+
+    const uuids = invoicesPPD.map((inv) => inv.uuid);
+    const [complementosPorFactura, manualPorFactura] = await Promise.all([
+      this.sumComplementosPorFactura([profileId], uuids),
+      (async (): Promise<Record<string, number>> => {
+        const facturas = await Invoice.findAll({
+          where: { profile_id: profileId },
+          attributes: ['uuid', 'pagos'],
+        });
+        return this.sumManualPagos(facturas, null).porFactura;
+      })(),
+    ]);
+
+    let subtotalPend = 0;
+    const impAgg: PendientesImpuestosDesglose = {
+      iva: 0,
+      retenciones_iva: 0,
+      retenciones_isr: 0,
+    };
+
+    for (const inv of invoicesPPD) {
+      const baseSubtotal = this.getDocumentSubtotalForPendientes(inv);
+      if (baseSubtotal <= 0) continue;
+      const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
+      if (cobrado >= baseSubtotal) continue;
+      const pendBase = baseSubtotal - cobrado;
+      subtotalPend += pendBase;
+      const ratio = pendBase / baseSubtotal;
+      impAgg.iva += Number(inv.iva_amount ?? 0) * ratio;
+      impAgg.retenciones_iva += Number(inv.retencion_iva_amount ?? 0) * ratio;
+      impAgg.retenciones_isr += Number(inv.retencion_isr_amount ?? 0) * ratio;
+    }
+
+    return {
+      por_cobrar: Math.round(subtotalPend * 100) / 100,
+      por_cobrar_impuestos: this.roundPendientesImpuestos(impAgg),
+    };
+  }
+
+  /**
+   * Igual que `calculatePPDPorPagar` + desglose: PPD proporcional sobre subtotal; MANUAL pendiente cuenta IVA/rets íntegros.
+   */
+  private async aggregatePendientesPorPagarConImpuestos(
+    profileId: string,
+    dateRange: { start: Date; end: Date },
+    regimenFiscalReceptor?: string
+  ): Promise<{ por_pagar: number; por_pagar_impuestos: PendientesImpuestosDesglose }> {
+    const ppdWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo: 'PPD',
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscalReceptor) {
+      ppdWhere.regimen_fiscal_receptor = regimenFiscalReceptor;
+    }
+
+    const gastosPPD = await AccruedExpense.findAll({
+      where: ppdWhere,
+      attributes: [
+        'uuid',
+        'total',
+        'subtotal',
+        'iva_amount',
+        'pagos',
+        'retencion_iva_amount',
+        'retencion_isr_amount',
+      ],
+    });
+
+    const uuids = gastosPPD
+      .map((gasto) => gasto.uuid)
+      .filter((uuid): uuid is string => typeof uuid === 'string' && uuid.trim() !== '');
+
+    let complementosPorUuid: Record<string, number> = {};
+    let manualPorUuid: Record<string, number> = {};
+
+    if (uuids.length > 0) {
+      const [comps, manuals] = await Promise.all([
+        this.sumComplementosPorFactura([profileId], uuids),
+        (async (): Promise<Record<string, number>> => {
+          const todos = await AccruedExpense.findAll({
+            where: { profile_id: profileId },
+            attributes: ['uuid', 'pagos'],
+          });
+          return this.sumManualPagosFromUuidDocuments(
+            todos.map((row) => ({ uuid: row.uuid, pagos: row.pagos })),
+            null
+          ).porFactura;
+        })(),
+      ]);
+      complementosPorUuid = comps;
+      manualPorUuid = manuals;
+    }
+
+    let totalPpdSubtotal = 0;
+    const ppdImp: PendientesImpuestosDesglose = {
+      iva: 0,
+      retenciones_iva: 0,
+      retenciones_isr: 0,
+    };
+
+    for (const gasto of gastosPPD) {
+      const uuid = gasto.uuid?.trim();
+      if (!uuid) continue;
+      const baseSubtotal = this.getDocumentSubtotalForPendientes(gasto);
+      if (baseSubtotal <= 0) continue;
+      const pagado = (complementosPorUuid[uuid] ?? 0) + (manualPorUuid[uuid] ?? 0);
+      if (pagado >= baseSubtotal) continue;
+      const pendBase = baseSubtotal - pagado;
+      totalPpdSubtotal += pendBase;
+      const ratio = pendBase / baseSubtotal;
+      ppdImp.iva += Number(gasto.iva_amount ?? 0) * ratio;
+      ppdImp.retenciones_iva += Number(gasto.retencion_iva_amount ?? 0) * ratio;
+      ppdImp.retenciones_isr += Number(gasto.retencion_isr_amount ?? 0) * ratio;
+    }
+
+    const manualWhere: Record<string, unknown> = {
+      profile_id: profileId,
+      tipo_origen: 'MANUAL',
+      is_paid: false,
+      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+    };
+    if (regimenFiscalReceptor) {
+      manualWhere.regimen_fiscal_receptor = regimenFiscalReceptor;
+    }
+
+    const manualesPendientes = await AccruedExpense.findAll({
+      where: manualWhere,
+      attributes: ['subtotal', 'iva_amount', 'retencion_iva_amount', 'retencion_isr_amount'],
+    });
+
+    let totalManualMonto = 0;
+    const manualImp: PendientesImpuestosDesglose = {
+      iva: 0,
+      retenciones_iva: 0,
+      retenciones_isr: 0,
+    };
+
+    manualesPendientes.forEach((fila) => {
+      totalManualMonto += Number(fila.subtotal ?? 0) + Number(fila.iva_amount ?? 0);
+      manualImp.iva += Number(fila.iva_amount ?? 0);
+      manualImp.retenciones_iva += Number(fila.retencion_iva_amount ?? 0);
+      manualImp.retenciones_isr += Number(fila.retencion_isr_amount ?? 0);
+    });
+
+    const porPagarImp: PendientesImpuestosDesglose = this.roundPendientesImpuestos({
+      iva: ppdImp.iva + manualImp.iva,
+      retenciones_iva: ppdImp.retenciones_iva + manualImp.retenciones_iva,
+      retenciones_isr: ppdImp.retenciones_isr + manualImp.retenciones_isr,
+    });
+
+    const por_pagar = Math.round((totalPpdSubtotal + totalManualMonto) * 100) / 100;
+
+    return {
+      por_pagar,
+      por_pagar_impuestos: porPagarImp,
+    };
+  }
+
   private async sumComplementosPorFactura(
     profileIds: string[],
     facturaUUIDs: string[]
@@ -983,6 +1219,11 @@ export class MetricsService {
     });
     if (!period) return null;
 
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) {
+      return null;
+    }
+
     const [
       ingresosCobrados,
       egresosPagados,
@@ -992,8 +1233,8 @@ export class MetricsService {
       ivaTrasladado,
       ivaAcreditable,
       retenciones,
-      porCobrar,
-      porPagar,
+      pendientesCobrarAgg,
+      pendientesPagarAgg,
       nomina,
     ] = await Promise.all([
       this.calculateIngresosCobrados(profileId, periodId),
@@ -1004,8 +1245,8 @@ export class MetricsService {
       this.calculateIVATrasladado(profileId, periodId),
       this.calculateIVAAcreditable(profileId, periodId),
       this.calculateRetenciones(profileId, periodId),
-      this.calculatePPDPorCobrar(profileId, periodId),
-      this.calculatePPDPorPagar(profileId, periodId),
+      this.aggregatePendientesPorCobrarConImpuestos(profileId, dateRange),
+      this.aggregatePendientesPorPagarConImpuestos(profileId, dateRange),
       this.getNominaMetrics(profileId, periodId),
     ]);
 
@@ -1043,8 +1284,10 @@ export class MetricsService {
         },
       },
       pendientes: {
-        por_cobrar: porCobrar,
-        por_pagar: porPagar,
+        por_cobrar: pendientesCobrarAgg.por_cobrar,
+        por_pagar: pendientesPagarAgg.por_pagar,
+        por_cobrar_impuestos: pendientesCobrarAgg.por_cobrar_impuestos,
+        por_pagar_impuestos: pendientesPagarAgg.por_pagar_impuestos,
       },
       nomina,
     };
@@ -1074,8 +1317,8 @@ export class MetricsService {
       ivaTrasladado,
       ivaAcreditable,
       retenciones,
-      porCobrar,
-      porPagar,
+      pendientesCobrarAgg,
+      pendientesPagarAgg,
       nomina,
     ] = await Promise.all([
       this.calculateIngresosCobradosForRange(profileId, dateRange, regimenFilter),
@@ -1086,8 +1329,8 @@ export class MetricsService {
       this.calculateIVATrasladadoForRange(profileId, dateRange, regimenFilter),
       this.calculateIVAAcreditableForRange(profileId, dateRange, regimenFilter),
       this.calculateRetencionesForRange(profileId, dateRange, regimenFilter),
-      this.calculatePPDPorCobrarForRange(profileId, dateRange, regimenFilter),
-      this.calculatePPDPorPagarForRange(profileId, dateRange, regimenFilter),
+      this.aggregatePendientesPorCobrarConImpuestos(profileId, dateRange, regimenFilter),
+      this.aggregatePendientesPorPagarConImpuestos(profileId, dateRange, regimenFilter),
       this.getNominaMetricsForRange(profileId, dateRange),
     ]);
 
@@ -1120,7 +1363,12 @@ export class MetricsService {
           devengado: retenciones.isr_devengado,
         },
       },
-      pendientes: { por_cobrar: porCobrar, por_pagar: porPagar },
+      pendientes: {
+        por_cobrar: pendientesCobrarAgg.por_cobrar,
+        por_pagar: pendientesPagarAgg.por_pagar,
+        por_cobrar_impuestos: pendientesCobrarAgg.por_cobrar_impuestos,
+        por_pagar_impuestos: pendientesPagarAgg.por_pagar_impuestos,
+      },
       nomina,
     };
   }
@@ -1194,7 +1442,12 @@ export class MetricsService {
         retenciones_iva: { cobrado: 0, devengado: 0 },
         retenciones_isr: { cobrado: 0, devengado: 0 },
       },
-      pendientes: { por_cobrar: 0, por_pagar: 0 },
+      pendientes: {
+        por_cobrar: 0,
+        por_pagar: 0,
+        por_cobrar_impuestos: { ...MetricsService.pendientesImpuestosCero },
+        por_pagar_impuestos: { ...MetricsService.pendientesImpuestosCero },
+      },
       nomina: {
         total_pagada: 0,
         percepciones: 0,
@@ -1222,6 +1475,16 @@ export class MetricsService {
       aggregated.impuestos.retenciones_isr.devengado += r.impuestos.retenciones_isr.devengado;
       aggregated.pendientes.por_cobrar += r.pendientes.por_cobrar;
       aggregated.pendientes.por_pagar += r.pendientes.por_pagar;
+      aggregated.pendientes.por_cobrar_impuestos.iva += r.pendientes.por_cobrar_impuestos.iva;
+      aggregated.pendientes.por_cobrar_impuestos.retenciones_iva +=
+        r.pendientes.por_cobrar_impuestos.retenciones_iva;
+      aggregated.pendientes.por_cobrar_impuestos.retenciones_isr +=
+        r.pendientes.por_cobrar_impuestos.retenciones_isr;
+      aggregated.pendientes.por_pagar_impuestos.iva += r.pendientes.por_pagar_impuestos.iva;
+      aggregated.pendientes.por_pagar_impuestos.retenciones_iva +=
+        r.pendientes.por_pagar_impuestos.retenciones_iva;
+      aggregated.pendientes.por_pagar_impuestos.retenciones_isr +=
+        r.pendientes.por_pagar_impuestos.retenciones_isr;
       aggregated.nomina.total_pagada += r.nomina.total_pagada;
       aggregated.nomina.percepciones += r.nomina.percepciones;
       aggregated.nomina.deducciones += r.nomina.deducciones;
@@ -1235,9 +1498,17 @@ export class MetricsService {
       Math.round(aggregated.flujo.egresos_pagados_sin_conciliar * 100) / 100;
     aggregated.devengado.resultado_devengado =
       Math.round(aggregated.devengado.resultado_devengado * 100) / 100;
+    aggregated.pendientes.por_cobrar = Math.round(aggregated.pendientes.por_cobrar * 100) / 100;
+    aggregated.pendientes.por_pagar = Math.round(aggregated.pendientes.por_pagar * 100) / 100;
     aggregated.nomina.total_pagada = Math.round(aggregated.nomina.total_pagada * 100) / 100;
     aggregated.nomina.percepciones = Math.round(aggregated.nomina.percepciones * 100) / 100;
     aggregated.nomina.deducciones = Math.round(aggregated.nomina.deducciones * 100) / 100;
+    aggregated.pendientes.por_cobrar_impuestos = this.roundPendientesImpuestos(
+      aggregated.pendientes.por_cobrar_impuestos
+    );
+    aggregated.pendientes.por_pagar_impuestos = this.roundPendientesImpuestos(
+      aggregated.pendientes.por_pagar_impuestos
+    );
 
     return aggregated;
   }
@@ -1715,68 +1986,6 @@ export class MetricsService {
     };
   }
 
-  private async calculatePPDPorCobrarForRange(
-    profileId: string,
-    dateRange: { start: Date; end: Date },
-    regimenFiscal?: string
-  ): Promise<number> {
-    const ppdWhere: Record<string, unknown> = {
-      profile_id: profileId,
-      tipo: 'PPD',
-      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-    };
-    if (regimenFiscal) ppdWhere.regimen_fiscal_emisor = regimenFiscal;
-
-    const invoicesPPD = await Invoice.findAll({
-      where: ppdWhere,
-      attributes: ['uuid', 'subtotal', 'iva_amount', 'total'],
-    });
-    if (invoicesPPD.length === 0) return 0;
-    const uuids = invoicesPPD.map((inv) => inv.uuid);
-    const [complementosPorFactura, manualPorFactura] = await Promise.all([
-      this.sumComplementosPorFactura([profileId], uuids),
-      (async () => {
-        const facturas = await Invoice.findAll({
-          where: { profile_id: profileId },
-          attributes: ['uuid', 'pagos'],
-        });
-        return this.sumManualPagos(facturas, null).porFactura;
-      })(),
-    ]);
-    let total = 0;
-    for (const inv of invoicesPPD) {
-      const totalFactura = this.getDocumentTotalBase(inv);
-      if (totalFactura <= 0) continue;
-      const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= totalFactura) continue;
-      total += totalFactura - cobrado;
-    }
-    return Math.round(total * 100) / 100;
-  }
-
-  private async calculatePPDPorPagarForRange(
-    profileId: string,
-    dateRange: { start: Date; end: Date },
-    regimenFiscal?: string
-  ): Promise<number> {
-    const expenseWhere: Record<string, unknown> = {
-      profile_id: profileId,
-      is_paid: false,
-      fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-    };
-    if (regimenFiscal) expenseWhere.regimen_fiscal_receptor = regimenFiscal;
-
-    const expenses = await AccruedExpense.findAll({
-      where: expenseWhere,
-      attributes: ['subtotal', 'iva_amount'],
-    });
-    const sum = expenses.reduce(
-      (acc, e) => acc + Number(e.subtotal ?? 0) + Number(e.iva_amount ?? 0),
-      0
-    );
-    return Math.round(sum * 100) / 100;
-  }
-
   /**
    * Ingresos cobrados (flujo de efectivo - ingresos): subtotal de facturas PUE del período
    * + montos cobrados por complementos de pago de facturas PPD (por fecha_pago en el período)
@@ -2178,69 +2387,26 @@ export class MetricsService {
   }
 
   /**
-   * PPD por cobrar: facturas PPD del período que no tienen complemento completo (saldo pendiente).
-   * Suma la parte pendiente en base (subtotal + iva_amount) prorrateada por lo que falta por cobrar.
+   * PPD por cobrar (solo subtotal pendiente). Ver `aggregatePendientesPorCobrarConImpuestos` para desglose de impuestos.
    */
   async calculatePPDPorCobrar(profileId: string, periodId: string): Promise<number> {
     const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
     if (!dateRange) {
       return 0;
     }
-
-    const invoicesPPD = await Invoice.findAll({
-      where: {
-        profile_id: profileId,
-        tipo: 'PPD',
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
-      attributes: ['uuid', 'total', 'subtotal', 'iva_amount'],
-    });
-    if (invoicesPPD.length === 0) return 0;
-
-    const uuids = invoicesPPD.map((inv) => inv.uuid);
-    const [complementosPorFactura, manualPorFactura] = await Promise.all([
-      this.sumComplementosPorFactura([profileId], uuids),
-      (async () => {
-        const facturas = await Invoice.findAll({
-          where: { profile_id: profileId },
-          attributes: ['uuid', 'pagos'],
-        });
-        return this.sumManualPagos(facturas, null).porFactura;
-      })(),
-    ]);
-
-    let total = 0;
-    for (const inv of invoicesPPD) {
-      const totalFactura = this.getDocumentTotalBase(inv);
-      if (totalFactura <= 0) continue;
-      const cobrado = (complementosPorFactura[inv.uuid] || 0) + (manualPorFactura[inv.uuid] || 0);
-      if (cobrado >= totalFactura) continue;
-      total += totalFactura - cobrado;
-    }
-    return Math.round(total * 100) / 100;
+    const ag = await this.aggregatePendientesPorCobrarConImpuestos(profileId, dateRange);
+    return ag.por_cobrar;
   }
 
   /**
-   * PPD por pagar: gastos del período con is_paid = false. Suma (subtotal + iva_amount).
+   * Igual que métricas `pendientes.por_pagar` (numeric). Desglose en `aggregatePendientesPorPagarConImpuestos`.
    */
   async calculatePPDPorPagar(profileId: string, periodId: string): Promise<number> {
     const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
     if (!dateRange) {
       return 0;
     }
-
-    const expenses = await AccruedExpense.findAll({
-      where: {
-        profile_id: profileId,
-        is_paid: false,
-        fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-      },
-      attributes: ['subtotal', 'iva_amount'],
-    });
-    const sum = expenses.reduce(
-      (acc, e) => acc + Number(e.subtotal ?? 0) + Number(e.iva_amount ?? 0),
-      0
-    );
-    return Math.round(sum * 100) / 100;
+    const ag = await this.aggregatePendientesPorPagarConImpuestos(profileId, dateRange);
+    return ag.por_pagar;
   }
 }

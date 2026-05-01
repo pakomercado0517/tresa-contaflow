@@ -424,10 +424,10 @@ describe("MetricsService", () => {
     });
   });
 
-  describe("calculatePPDPorCobrar (sin complementos completos)", () => {
+  describe("calculatePPDPorCobrar (pendiente en subtotal sin IVA)", () => {
     beforeEach(cleanMetricsData);
 
-    it("suma pendiente (subtotal+iva) prorrateado para PPD no cobrados completamente", async () => {
+    it("pendiente contra subtotal solo: pendiente es subtotal menos imp_pagado acumulado", async () => {
       const ppdUuid = `PPD-PEND-${Date.now()}`;
       await Invoice.create({
         profile_id: profileId,
@@ -478,7 +478,116 @@ describe("MetricsService", () => {
         imp_saldo_insoluto: 600,
       });
       const result = await metricsService.calculatePPDPorCobrar(profileId, periodId);
-      expect(result).toBe(600);
+      expect(result).toBe(Math.round((862.07 - 400) * 100) / 100);
+
+      const metrics = await metricsService.getMetrics(profileId, periodId);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.pendientes.por_cobrar).toBe(result);
+      const ratio = (862.07 - 400) / 862.07;
+      expect(metrics!.pendientes.por_cobrar_impuestos.iva).toBe(
+        Math.round(137.93 * ratio * 100) / 100
+      );
+      expect(metrics!.pendientes.por_cobrar_impuestos.retenciones_iva).toBe(0);
+      expect(metrics!.pendientes.por_cobrar_impuestos.retenciones_isr).toBe(0);
+    });
+  });
+
+  describe("calculatePPDPorPagar (PPD XML + MANUAL)", () => {
+    beforeEach(cleanMetricsData);
+
+    async function crearGastoPPD(uuid: string, totalFactura: number, subFactura: number, ivaAmount: number): Promise<void> {
+      await AccruedExpense.create({
+        profile_id: profileId,
+        tipo_origen: "XML",
+        tipo: "PPD",
+        uuid,
+        fecha: new Date("2024-12-15"),
+        mes: 12,
+        año: 2024,
+        total: totalFactura,
+        subtotal: subFactura,
+        iva: ivaAmount,
+        iva_amount: ivaAmount,
+        retencion_iva_amount: 0,
+        retencion_isr_amount: 0,
+        is_paid: false,
+        pagos: [],
+        validacion: {},
+        concepto: "Compra XML PPD",
+        rfc_emisor: "PROV123456XYZ",
+        nombre_emisor: "Proveedor",
+        rfc_receptor: "MET123456ABC",
+        nombre_receptor: "Cliente",
+      });
+    }
+
+    it("excluye del pendiente gasto XML PPD con complemento que cubre el subtotal pese a is_paid false", async () => {
+      const gastoUuid = `EG-PPD-PA-${Date.now()}`;
+      await crearGastoPPD(gastoUuid, 2320, 2000, 320);
+      const complement = await PaymentComplement.create({
+        uuid: `COMP-EG-${Date.now()}`,
+        fecha_emision: new Date("2024-12-20"),
+        rfc_emisor: "MET123456ABC",
+        rfc_receptor: "CLI",
+        complemento_data: {},
+      });
+      await ProfilePaymentComplement.create({
+        profile_id: profileId,
+        complement_id: complement.id,
+        role: "EGRESO",
+      });
+      await PaymentComplementItem.create({
+        complement_id: complement.id,
+        profile_id: profileId,
+        factura_uuid: gastoUuid,
+        fecha_pago: new Date("2024-12-20"),
+        forma_pago: "03",
+        moneda_pago: "MXN",
+        tipo_cambio_pago: 1,
+        monto_pago: 2320,
+        num_operacion: null,
+        moneda_dr: "MXN",
+        tipo_cambio_dr: 1,
+        metodo_pago_dr: "PPD",
+        num_parcialidad: 1,
+        imp_saldo_ant: 2320,
+        imp_pagado: 2320,
+        imp_saldo_insoluto: 0,
+      });
+      const pendiente = await metricsService.calculatePPDPorPagar(profileId, periodId);
+      expect(pendiente).toBe(0);
+    });
+
+    it("PPD sin complementos cuenta pendiente en subtotal sin IVA", async () => {
+      await crearGastoPPD(`EG-PPD-SINC-${Date.now()}`, 1160, 1000, 160);
+      const pendiente = await metricsService.calculatePPDPorPagar(profileId, periodId);
+      expect(pendiente).toBe(1000);
+    });
+
+    it("gasto MANUAL is_paid false sigue sumando subtotal + iva_amount", async () => {
+      await AccruedExpense.create({
+        profile_id: profileId,
+        tipo_origen: "MANUAL",
+        fecha: new Date("2024-12-11"),
+        mes: 12,
+        año: 2024,
+        total: 236,
+        subtotal: 200,
+        iva: 36,
+        iva_amount: 36,
+        is_paid: false,
+        concepto: "Manual pendiente",
+        categoria: "Otros",
+      });
+      const pendiente = await metricsService.calculatePPDPorPagar(profileId, periodId);
+      expect(pendiente).toBe(236);
+
+      const metrics = await metricsService.getMetrics(profileId, periodId);
+      expect(metrics).not.toBeNull();
+      expect(metrics!.pendientes.por_pagar).toBe(236);
+      expect(metrics!.pendientes.por_pagar_impuestos.iva).toBe(36);
+      expect(metrics!.pendientes.por_pagar_impuestos.retenciones_iva).toBe(0);
+      expect(metrics!.pendientes.por_pagar_impuestos.retenciones_isr).toBe(0);
     });
   });
 
@@ -543,8 +652,14 @@ describe("MetricsService", () => {
       expect(result!.impuestos).toHaveProperty("iva_acreditable");
       expect(result!.impuestos).toHaveProperty("retenciones_iva");
       expect(result!.impuestos).toHaveProperty("retenciones_isr");
-      expect(result!.pendientes).toHaveProperty("por_cobrar");
-      expect(result!.pendientes).toHaveProperty("por_pagar");
+      expect(result!.pendientes).toHaveProperty("por_cobrar_impuestos");
+      expect(result!.pendientes.por_cobrar_impuestos).toHaveProperty("iva");
+      expect(result!.pendientes.por_cobrar_impuestos).toHaveProperty("retenciones_iva");
+      expect(result!.pendientes.por_cobrar_impuestos).toHaveProperty("retenciones_isr");
+      expect(result!.pendientes).toHaveProperty("por_pagar_impuestos");
+      expect(result!.pendientes.por_pagar_impuestos).toHaveProperty("iva");
+      expect(result!.pendientes.por_pagar_impuestos).toHaveProperty("retenciones_iva");
+      expect(result!.pendientes.por_pagar_impuestos).toHaveProperty("retenciones_isr");
       expect(result!.nomina).toHaveProperty("total_pagada");
       expect(result!.nomina).toHaveProperty("percepciones");
       expect(result!.nomina).toHaveProperty("deducciones");

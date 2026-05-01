@@ -30,9 +30,20 @@ export interface ImpuestosMetrics {
   retenciones_isr: { cobrado: number; devengado: number };
 }
 
+/** IVA trasladado y retenciones (ingreso) proporcionales al subtotal pendiente de PPD por cobrar, o pendiente íntegro en egresos manuales. */
+export interface PendientesImpuestosDesglose {
+  iva: number;
+  retenciones_iva: number;
+  retenciones_isr: number;
+}
+
 export interface PendientesMetrics {
   por_cobrar: number;
   por_pagar: number;
+  /** IVA trasladado y retenciones de facturas PPD proporcionales al subtotal pendiente de cobro. */
+  por_cobrar_impuestos: PendientesImpuestosDesglose;
+  /** IVA acreditable (y retenciones del CFDI) proporcional al pendiente por PPD; más IVA/rets de gastos MANUAL sin pagar. */
+  por_pagar_impuestos: PendientesImpuestosDesglose;
 }
 
 export interface NominaMetrics {
