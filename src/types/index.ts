@@ -59,6 +59,7 @@ export type {
   FlujoMetrics,
   DevengadoMetrics,
   ImpuestosMetrics,
+  PendientesImpuestosDesglose,
   PendientesMetrics,
   NominaMetrics,
   PeriodMetricsResponse,
