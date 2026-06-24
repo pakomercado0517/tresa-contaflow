@@ -1,4 +1,5 @@
 import type { PeriodMetricsResponse } from './metrics.types.js';
+import type { TaxEstimateResult } from './tax-estimate.types.js';
 
 export interface PublicReportTokenAttributes {
   id: string;
@@ -25,6 +26,7 @@ export interface PublicReportProfileInfo {
 export interface MetricsByRegimen {
   regimen: string;
   metrics: PeriodMetricsResponse | null;
+  tax_estimate: TaxEstimateResult | null;
 }
 
 export interface PublicReportResponse {

@@ -78,3 +78,28 @@ export type {
   SatDescargaSyncStatus,
   SatDescargaSyncResult,
 } from './sat-descarga.types.js';
+export type {
+  UpsertProfileFiscalSettingsBody,
+  ProfileFiscalSettingsResponse,
+  ProfileFiscalSettingsSnapshot,
+  ProfileFiscalSettingsAttributes,
+} from './profile-fiscal.types.js';
+export { EMPTY_FISCAL_SETTINGS_SNAPSHOT } from './profile-fiscal.types.js';
+export type {
+  TipoPersonaFiscal,
+  TaxEstimateAlertSeverity,
+  TaxEstimateContext,
+  TaxEstimateAlert,
+  TaxEstimateIsrBlock,
+  TaxEstimateIvaBlock,
+  TaxEstimateResult,
+  TaxEstimateByRegimen,
+  TaxEstimateListResponse,
+  BuildTaxEstimateOptions,
+} from './tax-estimate.types.js';
+export type {
+  TaxEstimateRowAttributes,
+  TaxEstimateSnapshotRecord,
+  PersistTaxEstimateOptions,
+  TaxEstimateHistoryResponse,
+} from './tax-estimate-persistence.types.js';
