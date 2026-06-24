@@ -21,6 +21,8 @@ import Payroll from "./Payroll.model.js";
 import Plugin from "./Plugin.model.js";
 import SubscriptionPlugin from "./SubscriptionPlugin.model.js";
 import PublicReportToken from "./PublicReportToken.model.js";
+import ProfileFiscalSettings from "./ProfileFiscalSettings.model.js";
+import TaxEstimate from "./TaxEstimate.model.js";
 
 // Las relaciones ya están definidas en cada modelo
 
@@ -29,6 +31,8 @@ export {
   User,
   Profile,
   PublicReportToken,
+  ProfileFiscalSettings,
+  TaxEstimate,
   Subscription,
   PaymentEvent,
   Invoice,

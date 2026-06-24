@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import { Op } from 'sequelize';
 import { PublicReportToken, Profile, User } from '../database/models/index.js';
 import { MetricsService } from './metrics.service.js';
+import { taxEstimateService } from './tax-estimate.service.js';
+import { loadFiscalSettingsSnapshot } from './profile-fiscal.service.js';
 import type { PeriodMetricsResponse } from '../types/metrics.types.js';
 import type {
   PublicReportResponse,
@@ -67,7 +69,7 @@ export async function getPublicData(
       expires_at: { [Op.gt]: new Date() },
     },
     include: [
-      { model: Profile, as: 'profile', attributes: ['id', 'nombre', 'rfc', 'regimenes_fiscales'] },
+      { model: Profile, as: 'profile', attributes: ['id', 'nombre', 'rfc', 'tipo_persona', 'regimenes_fiscales'] },
       { model: User, as: 'user', attributes: ['logo_url', 'nombre_comercial'] },
     ],
   });
@@ -97,9 +99,24 @@ export async function getPublicData(
       ),
     ]);
     metrics = totalMetrics;
-    metrics_by_regimen = regimenes.map((r, i) => ({
+    const metricsRows = regimenes.map((r, i) => ({
       regimen: r,
       metrics: perRegimenMetrics[i] ?? null,
+    }));
+    const tipoPersona = profile.tipo_persona === 'MORAL' ? 'MORAL' : 'FISICA';
+    const fiscalSettings = await loadFiscalSettingsSnapshot(profile.id, resolvedAño);
+    const withEstimates = await taxEstimateService.estimateFromMetricsByRegimen(
+      profile.id,
+      tipoPersona,
+      resolvedMes,
+      resolvedAño,
+      metricsRows,
+      fiscalSettings
+    );
+    metrics_by_regimen = withEstimates.map((row, i) => ({
+      regimen: row.regimen,
+      metrics: metricsRows[i]?.metrics ?? null,
+      tax_estimate: row.tax_estimate,
     }));
   } catch {
     // Si falla el cálculo de métricas, devolver null en metrics

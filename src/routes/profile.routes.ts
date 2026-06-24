@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
-import { body, param } from 'express-validator';
+import { validateProfileLimit } from '../middlewares/plan-limits.middleware.js';
+import { body, param, query } from 'express-validator';
 import {
   getProfiles,
   getProfileById,
@@ -12,7 +13,10 @@ import {
 import { getProfilePlugins } from '../controllers/plugin.controller.js';
 import { validateRequest } from '../middlewares/validate.middleware.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
-import { validateProfileLimit } from '../middlewares/plan-limits.middleware.js';
+import {
+  getProfileFiscalSettings,
+  putProfileFiscalSettings,
+} from '../controllers/profile-fiscal.controller.js';
 
 const router: IRouter = Router();
 
@@ -96,8 +100,52 @@ const freezeOthersValidation = [
     .withMessage("El 'targetPlan' debe ser FREE, BASIC, PRO o ENTERPRISE"),
 ];
 
+const fiscalSettingsGetValidation = [
+  param('id').isUUID().withMessage('ID de perfil inválido'),
+  query('ejercicio')
+    .notEmpty()
+    .withMessage('ejercicio es requerido')
+    .isInt({ min: 2000, max: 2100 })
+    .withMessage('ejercicio debe ser un año válido'),
+];
+
+const fiscalSettingsPutValidation = [
+  param('id').isUUID().withMessage('ID de perfil inválido'),
+  body('ejercicio')
+    .isInt({ min: 2000, max: 2100 })
+    .withMessage('ejercicio es requerido y debe ser un año válido'),
+  body('coeficiente_utilidad')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('coeficiente_utilidad debe estar entre 0 y 1'),
+  body('coeficiente_utilidad_ejercicio_anterior')
+    .optional({ nullable: true })
+    .isFloat({ min: 0, max: 1 })
+    .withMessage('coeficiente_utilidad_ejercicio_anterior debe estar entre 0 y 1'),
+  body('isr_pagos_provisionales_acum')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('isr_pagos_provisionales_acum debe ser >= 0'),
+  body('saldo_a_favor_isr').optional().isFloat({ min: 0 }),
+  body('saldo_a_favor_iva').optional().isFloat({ min: 0 }),
+  body('perdidas_fiscales_pendientes').optional().isFloat({ min: 0 }),
+  body('ptu_pagada_acum').optional().isFloat({ min: 0 }),
+];
+
 // Rutas
 router.get('/', getProfiles);
+router.get(
+  '/:id/fiscal-settings',
+  fiscalSettingsGetValidation,
+  validateRequest,
+  getProfileFiscalSettings
+);
+router.put(
+  '/:id/fiscal-settings',
+  fiscalSettingsPutValidation,
+  validateRequest,
+  putProfileFiscalSettings
+);
 router.get('/:id/plugins', profileIdValidation, validateRequest, getProfilePlugins);
 router.get('/:id', profileIdValidation, validateRequest, getProfileById);
 router.post('/', createProfileValidation, validateRequest, validateProfileLimit, createProfile);
