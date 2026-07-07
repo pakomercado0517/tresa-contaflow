@@ -28,6 +28,12 @@ export type {
   ProfilePaymentComplementCreationAttributes,
   PaymentComplementItemAttributes,
   PaymentComplementItemCreationAttributes,
+  PaymentComplementProfileSummary,
+  PaymentComplementListItemResponse,
+  PaymentComplementItemResponse,
+  PaymentComplementDetailResponse,
+  ListPaymentComplementsParams,
+  ListPaymentComplementsResult,
   EstadoPago,
   EstadoPagoDetalle,
 } from './payment.types.js';

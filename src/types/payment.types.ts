@@ -66,6 +66,72 @@ export interface PaymentComplementItemAttributes {
 export interface PaymentComplementItemCreationAttributes
   extends Omit<PaymentComplementItemAttributes, "id" | "created_at" | "updated_at"> {}
 
+export interface PaymentComplementProfileSummary {
+  id: string;
+  nombre: string;
+  rfc: string;
+}
+
+export interface PaymentComplementListItemResponse {
+  link_id: string;
+  profile_id: string;
+  profile: PaymentComplementProfileSummary;
+  role: ComplementRole;
+  id: string;
+  uuid: string;
+  fecha_emision: string;
+  rfc_emisor: string;
+  rfc_receptor: string;
+  total_pagado: number;
+  cantidad_facturas_relacionadas: number;
+  cantidad_items_conciliados: number;
+  cantidad_items_sin_conciliar: number;
+  fechas_pago: string[];
+}
+
+export interface PaymentComplementItemResponse {
+  id: string;
+  factura_uuid: string;
+  fecha_pago: string;
+  forma_pago: string;
+  moneda_pago: string;
+  tipo_cambio_pago: number;
+  monto_pago: number;
+  num_operacion: string | null;
+  num_parcialidad: number;
+  imp_pagado: number;
+  imp_saldo_ant: number;
+  imp_saldo_insoluto: number;
+  conciliado: boolean;
+  documento_relacionado_tipo: "invoice" | "expense" | null;
+  documento_relacionado_id: string | null;
+}
+
+export interface PaymentComplementDetailResponse extends PaymentComplementListItemResponse {
+  complemento_data: ComplementoPago;
+  items: PaymentComplementItemResponse[];
+}
+
+export interface ListPaymentComplementsParams {
+  userId: string;
+  profileId?: string;
+  role?: ComplementRole;
+  mes?: number;
+  año?: number;
+  page: number;
+  limit: number;
+}
+
+export interface ListPaymentComplementsResult {
+  data: PaymentComplementListItemResponse[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 // Tipos para estado de pago
 export type EstadoPago = "PAGADO" | "PAGO_PARCIAL" | "NO_PAGADO";
 
