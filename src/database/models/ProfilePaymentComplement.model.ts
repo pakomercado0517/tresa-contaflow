@@ -19,6 +19,8 @@ class ProfilePaymentComplement
   declare role: ComplementRole;
   declare created_at: Date;
   declare updated_at: Date;
+  declare complement?: PaymentComplement;
+  declare profile?: Profile;
 }
 
 ProfilePaymentComplement.init(
