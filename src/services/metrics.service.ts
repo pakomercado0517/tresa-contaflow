@@ -14,8 +14,14 @@ import type {
   PeriodMetricsResponse,
   NominaMetrics,
   PendientesImpuestosDesglose,
+  MetricsByMonthItem,
+  MetricsRangeResponse,
 } from '../types/metrics.types.js';
 import type { PagoParcial } from '../types/payment.types.js';
+import {
+  enumerateMonthYears,
+  MAX_METRICS_RANGE_MONTHS,
+} from '../lib/metrics-range.js';
 
 /**
  * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
@@ -59,6 +65,16 @@ export interface MetricsFilters {
   mes?: number;
   año?: number;
   userId: string; // Requerido para verificar ownership
+}
+
+export class MetricsRangeError extends Error {
+  constructor(
+    message: string,
+    readonly code: string
+  ) {
+    super(message);
+    this.name = 'MetricsRangeError';
+  }
 }
 
 /**
@@ -1511,6 +1527,61 @@ export class MetricsService {
     );
 
     return aggregated;
+  }
+
+  /**
+   * Métricas para un rango de meses (inclusive). Una petición, un ítem por mes.
+   * Reutiliza getMetricsForMonthYear por cada mes (agregación multi-perfil y régimen).
+   */
+  async getMetricsForMonthYearRange(
+    userId: string,
+    mesDesde: number,
+    añoDesde: number,
+    mesHasta: number,
+    añoHasta: number,
+    profileId?: string,
+    regimenFiscal?: string
+  ): Promise<MetricsRangeResponse | null> {
+    const months = enumerateMonthYears(mesDesde, añoDesde, mesHasta, añoHasta);
+    if (months.length === 0) {
+      return null;
+    }
+    if (months.length > MAX_METRICS_RANGE_MONTHS) {
+      throw new MetricsRangeError(
+        `El rango no puede exceder ${MAX_METRICS_RANGE_MONTHS} meses`,
+        'RANGE_TOO_LARGE'
+      );
+    }
+
+    const results = await Promise.all(
+      months.map(({ mes, año }) =>
+        this.getMetricsForMonthYear(userId, mes, año, profileId, regimenFiscal)
+      )
+    );
+
+    const firstNullIndex = results.findIndex((r) => r === null);
+    if (firstNullIndex !== -1) {
+      const { mes, año } = months[firstNullIndex]!;
+      throw new MetricsRangeError(
+        `No se pudieron calcular métricas para ${mes}/${año}`,
+        'MONTH_METRICS_FAILED'
+      );
+    }
+
+    const items: MetricsByMonthItem[] = months.map(({ mes, año }, index) => {
+      const metrics = results[index] as PeriodMetricsResponse;
+      return { ...metrics, mes, año };
+    });
+
+    return {
+      range: {
+        mes_desde: mesDesde,
+        año_desde: añoDesde,
+        mes_hasta: mesHasta,
+        año_hasta: añoHasta,
+      },
+      items,
+    };
   }
 
   private async getUnmatchedComplementTotalsForPeriod(
