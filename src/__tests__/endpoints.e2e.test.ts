@@ -441,6 +441,61 @@ describe("E2E Endpoints", () => {
       expect(res.body.flujo.egresos_pagados).toBe(0);
       expect(res.body.devengado.ingresos_devengados).toBe(0);
       expect(res.body.devengado.egresos_devengados).toBe(0);
+      expect(res.body).not.toHaveProperty("items");
+    });
+  });
+
+  describe("métricas por rango de meses", () => {
+    it("GET /api/metrics con rango devuelve items por mes", async () => {
+      const res = await request(app)
+        .get(
+          `/api/metrics?mes_desde=1&año_desde=2026&mes_hasta=3&año_hasta=2026&profile_id=${userAProfileId}`
+        )
+        .set("Authorization", `Bearer ${userAToken}`);
+
+      expectSuccess(res, 200);
+      expect(res.body).toHaveProperty("range");
+      expect(res.body.range).toMatchObject({
+        mes_desde: 1,
+        año_desde: 2026,
+        mes_hasta: 3,
+        año_hasta: 2026,
+      });
+      expect(res.body.items).toHaveLength(3);
+      expect(res.body.items[0]).toMatchObject({ mes: 1, año: 2026 });
+      expect(res.body.items[2]).toMatchObject({ mes: 3, año: 2026 });
+      expect(res.body.items[0]).toHaveProperty("flujo");
+      expect(res.body.items[0]).toHaveProperty("devengado");
+    });
+
+    it("rechaza mezclar mes/año con parámetros de rango", async () => {
+      const res = await request(app)
+        .get(
+          `/api/metrics?mes=1&año=2026&mes_desde=1&año_desde=2026&mes_hasta=2&año_hasta=2026&profile_id=${userAProfileId}`
+        )
+        .set("Authorization", `Bearer ${userAToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("rechaza rango invertido", async () => {
+      const res = await request(app)
+        .get(
+          `/api/metrics?mes_desde=6&año_desde=2026&mes_hasta=1&año_hasta=2026&profile_id=${userAProfileId}`
+        )
+        .set("Authorization", `Bearer ${userAToken}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it("rechaza rango mayor a 24 meses", async () => {
+      const res = await request(app)
+        .get(
+          `/api/metrics?mes_desde=1&año_desde=2020&mes_hasta=12&año_hasta=2022&profile_id=${userAProfileId}`
+        )
+        .set("Authorization", `Bearer ${userAToken}`);
+
+      expect(res.status).toBe(400);
     });
   });
 

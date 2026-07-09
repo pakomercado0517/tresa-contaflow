@@ -61,3 +61,18 @@ export interface PeriodMetricsResponse {
   pendientes: PendientesMetrics;
   nomina: NominaMetrics;
 }
+
+export interface MetricsByMonthItem extends PeriodMetricsResponse {
+  mes: number;
+  año: number;
+}
+
+export interface MetricsRangeResponse {
+  range: {
+    mes_desde: number;
+    año_desde: number;
+    mes_hasta: number;
+    año_hasta: number;
+  };
+  items: MetricsByMonthItem[];
+}

@@ -722,4 +722,33 @@ describe("MetricsService", () => {
       expect(result!.nomina.cantidad_empleados).toBe(2);
     });
   });
+
+  describe("getMetricsForMonthYearRange", () => {
+    it("devuelve un ítem por mes en orden cronológico", async () => {
+      const result = await metricsService.getMetricsForMonthYearRange(
+        userId,
+        1,
+        2026,
+        3,
+        2026,
+        profileId
+      );
+      expect(result).not.toBeNull();
+      expect(result!.range).toEqual({
+        mes_desde: 1,
+        año_desde: 2026,
+        mes_hasta: 3,
+        año_hasta: 2026,
+      });
+      expect(result!.items).toHaveLength(3);
+      expect(result!.items[0]).toMatchObject({ mes: 1, año: 2026 });
+      expect(result!.items[1]).toMatchObject({ mes: 2, año: 2026 });
+      expect(result!.items[2]).toMatchObject({ mes: 3, año: 2026 });
+      for (const item of result!.items) {
+        expect(item).toHaveProperty("flujo");
+        expect(item).toHaveProperty("devengado");
+        expect(item).toHaveProperty("period");
+      }
+    });
+  });
 });
