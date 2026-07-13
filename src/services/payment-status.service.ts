@@ -273,6 +273,72 @@ export class PaymentStatusService {
   }
 
   /**
+   * Calcula el estado de pago para múltiples gastos de forma eficiente.
+   * Nota: Asume que todos los gastos pertenecen al mismo profileId.
+   */
+  async calcularEstadoPagoGastos(
+    gastos: AccruedExpense[],
+    profileId: string
+  ): Promise<Map<string, EstadoPagoDetalle>> {
+    const resultados = new Map<string, EstadoPagoDetalle>();
+
+    if (gastos.length === 0 || !profileId) {
+      return resultados;
+    }
+
+    const gastosPPD = gastos.filter((g) => g.tipo === "PPD" && g.uuid);
+    const uuidsPPD = gastosPPD.map((g) => g.uuid as string);
+
+    let todosComplementos: typeof PaymentComplementItem.prototype[] = [];
+    if (uuidsPPD.length > 0) {
+      todosComplementos = await PaymentComplementItem.findAll({
+        where: {
+          profile_id: profileId,
+          factura_uuid: {
+            [Op.in]: uuidsPPD,
+          },
+        },
+        order: [["factura_uuid", "ASC"], ["fecha_pago", "ASC"], ["num_parcialidad", "ASC"]],
+      });
+    }
+
+    const complementosPorUuid = new Map<string, typeof todosComplementos>();
+    for (const item of todosComplementos) {
+      const items = complementosPorUuid.get(item.factura_uuid) || [];
+      items.push(item);
+      complementosPorUuid.set(item.factura_uuid, items);
+    }
+
+    for (const gasto of gastos) {
+      if (gasto.tipo === "PUE") {
+        const totalGasto = Number(gasto.total);
+        resultados.set(gasto.id, {
+          estado: "PAGADO",
+          totalFactura: totalGasto,
+          totalPagado: totalGasto,
+          saldoPendiente: 0,
+          porcentajePagado: 100,
+          completamentePagado: true,
+          ultimoSaldoInsoluto: null,
+          tieneComplementos: false,
+          tienePagosManuales: false,
+        });
+      } else if (gasto.tipo === "PPD" && gasto.uuid) {
+        const complementos = complementosPorUuid.get(gasto.uuid) || [];
+        const estado = await this.calcularEstadoPPDConComplementos(
+          gasto.uuid,
+          gasto.pagos,
+          Number(gasto.total),
+          complementos
+        );
+        resultados.set(gasto.id, estado);
+      }
+    }
+
+    return resultados;
+  }
+
+  /**
    * Versión optimizada que recibe los complementos ya cargados
    */
   private async calcularEstadoPPDConComplementos(

@@ -3,6 +3,7 @@ import { Op } from 'sequelize';
 import { Profile, Subscription } from '../database/models/index.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { ProfileService } from '../services/profile.service.js';
+import { invalidateProfileCache } from '../services/cache.service.js';
 import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
 import { SUPPORT_EMAIL, ERROR_CODE_RFC_IN_USE } from '../constants/support.constants.js';
 import { normalizeRFC } from '../utils/rfc.util.js';
@@ -223,6 +224,8 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
           : profile.validaciones_habilitadas,
     });
 
+    await invalidateProfileCache(profile.id);
+
     res.json({
       message: 'Perfil actualizado exitosamente',
       data: profile,
@@ -268,7 +271,9 @@ export async function deleteProfile(req: AuthRequest, res: Response): Promise<vo
     }
 
     // Eliminar el perfil
+    const profileId = profile.id;
     await profile.destroy();
+    await invalidateProfileCache(profileId);
 
     res.json({
       message: 'Perfil eliminado exitosamente',

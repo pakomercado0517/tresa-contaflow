@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 
 if (!process.env.JWT_SECRET) {
@@ -34,5 +35,32 @@ export function verifyAccessToken(token: string): TokenPayload {
 
 export function verifyRefreshToken(token: string): TokenPayload {
   return jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload;
+}
+
+/** Hash estable del token para claves de deny-list (no guardar el JWT en Redis). */
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Segundos restantes hasta `exp` del JWT.
+ * Retorna null si el token no tiene exp o ya expiró.
+ */
+export function getTokenTtlSeconds(token: string): number | null {
+  const decoded = jwt.decode(token);
+  if (
+    decoded === null ||
+    typeof decoded === "string" ||
+    typeof decoded.exp !== "number"
+  ) {
+    return null;
+  }
+
+  const remaining = decoded.exp - Math.floor(Date.now() / 1000);
+  if (remaining <= 0) {
+    return null;
+  }
+
+  return remaining;
 }
 

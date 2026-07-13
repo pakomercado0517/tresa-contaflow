@@ -1,5 +1,6 @@
 import app from "./server.js";
 import { logger } from "./utils/logger.util.js";
+import { connectRedis, disconnectRedis } from "./lib/redis.client.js";
 
 const port = parseInt(process.env.PORT || "3001");
 
@@ -25,16 +26,20 @@ process.on("uncaughtException", (error: Error) => {
 });
 
 // Graceful shutdown
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = (signal: string): void => {
   logger.info({ signal }, "Recibida señal de cierre. Cerrando servidor de forma controlada...");
-  process.exit(0);
+  void (async () => {
+    await disconnectRedis();
+    process.exit(0);
+  })();
 };
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-const startServer = async () => {
+const startServer = async (): Promise<void> => {
   try {
+    await connectRedis();
     app.listen(port, () => {
       logger.info(
         { port, environment: process.env.NODE_ENV || "development" },

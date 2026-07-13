@@ -1,12 +1,18 @@
-import { type Request, type Response, type NextFunction } from 'express';
+import { type Response, type NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.util.js';
+import { isAccessTokenRevoked } from '../services/token-revoke.service.js';
+import type { Request } from 'express';
 
 export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
 }
 
-export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticateToken(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -17,6 +23,12 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
     }
 
     const payload = verifyAccessToken(token);
+
+    if (await isAccessTokenRevoked(token)) {
+      res.status(403).json({ error: 'Token inválido o expirado' });
+      return;
+    }
+
     req.userId = payload.userId;
     req.userEmail = payload.email;
 
@@ -31,9 +43,12 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
  * Verifica que el email del usuario esté en la variable de entorno ADMIN_EMAILS
  * Formato: ADMIN_EMAILS=email1@example.com,email2@example.com
  */
-export function authenticateAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticateAdmin(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
-    // Primero verificar que el usuario esté autenticado
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
 
@@ -43,6 +58,12 @@ export function authenticateAdmin(req: AuthRequest, res: Response, next: NextFun
     }
 
     const payload = verifyAccessToken(token);
+
+    if (await isAccessTokenRevoked(token)) {
+      res.status(403).json({ error: 'Token inválido o expirado' });
+      return;
+    }
+
     const userEmail = payload.email;
 
     if (!userEmail) {
@@ -50,7 +71,6 @@ export function authenticateAdmin(req: AuthRequest, res: Response, next: NextFun
       return;
     }
 
-    // Obtener emails de admin desde variable de entorno
     const adminEmailsEnv = process.env.ADMIN_EMAILS;
 
     if (!adminEmailsEnv) {
@@ -58,16 +78,13 @@ export function authenticateAdmin(req: AuthRequest, res: Response, next: NextFun
       return;
     }
 
-    // Convertir a array y limpiar espacios
     const adminEmails = adminEmailsEnv.split(',').map((email) => email.trim().toLowerCase());
 
-    // Verificar si el email del usuario está en la lista de admins
     if (!adminEmails.includes(userEmail.toLowerCase())) {
       res.status(403).json({ error: 'Acceso denegado: se requieren permisos de administrador' });
       return;
     }
 
-    // Si es admin, continuar
     req.userId = payload.userId;
     req.userEmail = payload.email;
 

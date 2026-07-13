@@ -22,6 +22,14 @@ import {
   enumerateMonthYears,
   MAX_METRICS_RANGE_MONTHS,
 } from '../lib/metrics-range.js';
+import {
+  getJson,
+  setJsonForProfile,
+  getMetricsTtlSeconds,
+  metricsDateRangeKey,
+  metricsMonthKey,
+  metricsPeriodKey,
+} from './cache.service.js';
 
 /**
  * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
@@ -1196,32 +1204,57 @@ export class MetricsService {
     periodId: string,
     regimenFiscal?: string
   ): Promise<PeriodMetricsResponse | null> {
+    if (!regimenFiscal) {
+      return this.getMetrics(profileId, periodId);
+    }
+
+    const cacheKey = metricsPeriodKey(profileId, periodId, regimenFiscal);
+    const cached = await getJson<PeriodMetricsResponse>(cacheKey, {
+      profileId,
+      domain: 'metrics',
+    });
+    if (cached) {
+      return {
+        ...cached,
+        period: {
+          ...cached.period,
+          start: new Date(cached.period.start),
+          end: new Date(cached.period.end),
+        },
+      };
+    }
+
     const period = await Period.findOne({
       where: { id: periodId, profile_id: profileId },
       attributes: ['id', 'start_date', 'end_date'],
     });
     if (!period) return null;
 
-    if (regimenFiscal) {
-      const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
-      if (!dateRange) return null;
-      const result = await this.getMetricsByDateRange(
-        profileId,
-        dateRange.start,
-        dateRange.end,
-        regimenFiscal
-      );
-      return {
-        ...result,
-        period: {
-          id: period.id,
-          start: period.start_date,
-          end: period.end_date,
-        },
-      };
-    }
+    const dateRange = await this.getDateRangeFromPeriod(profileId, periodId);
+    if (!dateRange) return null;
+    const result = await this.getMetricsByDateRange(
+      profileId,
+      dateRange.start,
+      dateRange.end,
+      regimenFiscal
+    );
+    const response: PeriodMetricsResponse = {
+      ...result,
+      period: {
+        id: period.id,
+        start: period.start_date,
+        end: period.end_date,
+      },
+    };
 
-    return this.getMetrics(profileId, periodId);
+    await setJsonForProfile(
+      cacheKey,
+      response,
+      profileId,
+      getMetricsTtlSeconds(),
+      'metrics'
+    );
+    return response;
   }
 
   /**
@@ -1229,6 +1262,22 @@ export class MetricsService {
    * Retorna null si el período no existe o no pertenece al perfil.
    */
   async getMetrics(profileId: string, periodId: string): Promise<PeriodMetricsResponse | null> {
+    const cacheKey = metricsPeriodKey(profileId, periodId);
+    const cached = await getJson<PeriodMetricsResponse>(cacheKey, {
+      profileId,
+      domain: 'metrics',
+    });
+    if (cached) {
+      return {
+        ...cached,
+        period: {
+          ...cached.period,
+          start: new Date(cached.period.start),
+          end: new Date(cached.period.end),
+        },
+      };
+    }
+
     const period = await Period.findOne({
       where: { id: periodId, profile_id: profileId },
       attributes: ['id', 'start_date', 'end_date'],
@@ -1308,6 +1357,13 @@ export class MetricsService {
       nomina,
     };
 
+    await setJsonForProfile(
+      cacheKey,
+      response,
+      profileId,
+      getMetricsTtlSeconds(),
+      'metrics'
+    );
     return response;
   }
 
@@ -1322,6 +1378,24 @@ export class MetricsService {
     end: Date,
     regimenFiscal?: string
   ): Promise<PeriodMetricsResponse> {
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
+    const cacheKey = metricsDateRangeKey(profileId, startIso, endIso, regimenFiscal);
+    const cached = await getJson<PeriodMetricsResponse>(cacheKey, {
+      profileId,
+      domain: 'metrics',
+    });
+    if (cached) {
+      return {
+        ...cached,
+        period: {
+          ...cached.period,
+          start: new Date(cached.period.start),
+          end: new Date(cached.period.end),
+        },
+      };
+    }
+
     const dateRange = { start, end };
     const regimenFilter = regimenFiscal ?? undefined;
     const [
@@ -1353,7 +1427,7 @@ export class MetricsService {
     const flujoNeto = ingresosCobrados - egresosPagados;
     const resultadoDevengado = ingresosDevengados - egresosDevengados;
 
-    return {
+    const response: PeriodMetricsResponse = {
       period: { id: '', start, end },
       flujo: {
         ingresos_cobrados: ingresosCobrados,
@@ -1387,6 +1461,15 @@ export class MetricsService {
       },
       nomina,
     };
+
+    await setJsonForProfile(
+      cacheKey,
+      response,
+      profileId,
+      getMetricsTtlSeconds(),
+      'metrics'
+    );
+    return response;
   }
 
   /**
@@ -1401,6 +1484,25 @@ export class MetricsService {
     profileId?: string,
     regimenFiscal?: string
   ): Promise<PeriodMetricsResponse | null> {
+    if (profileId) {
+      const cacheKey = metricsMonthKey(profileId, año, mes, regimenFiscal);
+      const cached = await getJson<PeriodMetricsResponse>(cacheKey, {
+        profileId,
+        domain: 'metrics',
+      });
+      if (cached) {
+        const period = await this.findOrCreatePeriodForMonth(profileId, mes, año);
+        return {
+          ...cached,
+          period: {
+            id: period.id,
+            start: new Date(cached.period.start),
+            end: new Date(cached.period.end),
+          },
+        };
+      }
+    }
+
     let profileIds: string[];
     if (profileId) {
       profileIds = [profileId];
@@ -1428,7 +1530,7 @@ export class MetricsService {
       if (!single) return null;
       // Obtener period_id real para habilitar "Agregar ingreso manual" en el frontend
       const period = await this.findOrCreatePeriodForMonth(profileIds[0]!, mes, año);
-      return {
+      const response: PeriodMetricsResponse = {
         period: { id: period.id, start, end },
         flujo: single.flujo,
         devengado: single.devengado,
@@ -1436,6 +1538,16 @@ export class MetricsService {
         pendientes: single.pendientes,
         nomina: single.nomina,
       };
+      if (profileId) {
+        await setJsonForProfile(
+          metricsMonthKey(profileId, año, mes, regimenFiscal),
+          response,
+          profileId,
+          getMetricsTtlSeconds(),
+          'metrics'
+        );
+      }
+      return response;
     }
 
     const aggregated: PeriodMetricsResponse = {

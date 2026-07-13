@@ -1,5 +1,6 @@
 import { Profile } from '../database/models/index.js';
 import { encrypt } from '../utils/fiel-crypto.util.js';
+import { invalidateProfileCache } from './cache.service.js';
 import type { RegisterFielDto, SatDescargaSyncResult, SatDescargaSyncStatus } from '../types/sat-descarga.types.js';
 
 /**
@@ -103,5 +104,6 @@ export async function syncInvoicesForProfile(profileId: string): Promise<SatDesc
     { where: { id: profileId } }
   );
 
+  await invalidateProfileCache(profileId);
   return { profile_id: profileId, synced: 0, errors: [] };
 }

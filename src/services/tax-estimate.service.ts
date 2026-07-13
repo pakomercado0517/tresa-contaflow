@@ -7,6 +7,13 @@ import {
 } from '../lib/tax-estimate/alerts.js';
 import { loadFiscalSettingsSnapshot } from './profile-fiscal.service.js';
 import {
+  getJson,
+  setJsonForProfile,
+  getTaxEstimatesTtlSeconds,
+  taxMonthKey,
+  taxPeriodKey,
+} from './cache.service.js';
+import {
   REGIMEN_ACTIVIDAD_EMPRESARIAL,
   REGIMEN_GENERAL_PM,
   REGIMEN_RESICO,
@@ -109,6 +116,28 @@ export class TaxEstimateService {
     año: number,
     regimenFiscal?: string
   ): Promise<TaxEstimateListResponse> {
+    const cacheKey = taxMonthKey(profileId, año, mes, regimenFiscal);
+    const cached = await getJson<TaxEstimateListResponse>(cacheKey, {
+      profileId,
+      domain: 'tax',
+    });
+    if (cached) {
+      const period = cached.meta.period;
+      return {
+        ...cached,
+        meta: {
+          ...cached.meta,
+          period: period
+            ? {
+                id: period.id,
+                start: new Date(period.start),
+                end: new Date(period.end),
+              }
+            : null,
+        },
+      };
+    }
+
     const profile = await Profile.findByPk(profileId, {
       attributes: ['id', 'tipo_persona', 'regimenes_fiscales'],
     });
@@ -146,7 +175,7 @@ export class TaxEstimateService {
       )
     );
 
-    return {
+    const response: TaxEstimateListResponse = {
       success: true,
       meta: {
         profile_id: profileId,
@@ -156,6 +185,15 @@ export class TaxEstimateService {
       },
       estimates,
     };
+
+    await setJsonForProfile(
+      cacheKey,
+      response,
+      profileId,
+      getTaxEstimatesTtlSeconds(),
+      'tax'
+    );
+    return response;
   }
 
   async estimateForPeriod(
@@ -163,6 +201,28 @@ export class TaxEstimateService {
     periodId: string,
     regimenFiscal?: string
   ): Promise<TaxEstimateListResponse> {
+    const cacheKey = taxPeriodKey(profileId, periodId, regimenFiscal);
+    const cached = await getJson<TaxEstimateListResponse>(cacheKey, {
+      profileId,
+      domain: 'tax',
+    });
+    if (cached) {
+      const period = cached.meta.period;
+      return {
+        ...cached,
+        meta: {
+          ...cached.meta,
+          period: period
+            ? {
+                id: period.id,
+                start: new Date(period.start),
+                end: new Date(period.end),
+              }
+            : null,
+        },
+      };
+    }
+
     const period = await Period.findOne({
       where: { id: periodId, profile_id: profileId },
       attributes: ['id', 'start_date', 'end_date'],
@@ -216,7 +276,7 @@ export class TaxEstimateService {
       })
     );
 
-    return {
+    const response: TaxEstimateListResponse = {
       success: true,
       meta: {
         profile_id: profileId,
@@ -226,6 +286,15 @@ export class TaxEstimateService {
       },
       estimates,
     };
+
+    await setJsonForProfile(
+      cacheKey,
+      response,
+      profileId,
+      getTaxEstimatesTtlSeconds(),
+      'tax'
+    );
+    return response;
   }
 
   /**

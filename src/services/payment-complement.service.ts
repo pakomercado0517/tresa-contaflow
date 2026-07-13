@@ -21,6 +21,7 @@ import type {
   PagoParcial,
   PaymentComplementItemCreationAttributes,
 } from "../types/payment.types.js";
+import { invalidateProfileCache } from "./cache.service.js";
 
 interface ConciliationMatch {
   conciliado: boolean;
@@ -119,6 +120,7 @@ export class PaymentComplementService {
       }
     }
 
+    await invalidateProfileCache(profileId);
     return complemento;
   }
 

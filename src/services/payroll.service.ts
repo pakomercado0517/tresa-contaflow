@@ -1,6 +1,7 @@
 import { Payroll, Profile, Period } from "../database/models/index.js";
 import { parsePayroll } from "../parsers/payroll.parser.js";
 import { SubscriptionService } from "./subscription.service.js";
+import { invalidateProfileCache } from "./cache.service.js";
 
 /**
  * Sube un XML de nómina: valida plugin (vía suscripción), parsea y guarda en payrolls.
@@ -54,5 +55,6 @@ export async function uploadPayrollXML(
     xml_path: null,
   });
 
+  await invalidateProfileCache(profile_id);
   return payroll;
 }

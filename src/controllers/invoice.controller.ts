@@ -11,6 +11,8 @@ import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } 
 import type { CFDI } from "../types/cfdi.types.js";
 import { Op, UniqueConstraintError } from "sequelize";
 import { MetricsService } from "../services/metrics.service.js";
+import { invalidateProfileCache } from "../services/cache.service.js";
+import { listInvoices, parseInvoiceListQuery } from "../services/invoice-list.service.js";
 
 /**
  * Endpoint de prueba para parsear XML CFDI
@@ -439,103 +441,9 @@ export async function getInvoices(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Obtener parámetros de query
-    const { profileId, mes, año, tipo, regimen_fiscal, search, page = "1", limit = "50" } = req.query;
-
-    // Construir filtros
-    const whereClause: any = {};
-    const profileWhereClause: any = { user_id: userId };
-
-    if (profileId && typeof profileId === "string") {
-      profileWhereClause.id = profileId;
-    }
-
-    if (mes && typeof mes === "string") {
-      const mesNum = parseInt(mes, 10);
-      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
-        whereClause.mes = mesNum;
-      }
-    }
-
-    if (año && typeof año === "string") {
-      const añoNum = parseInt(año, 10);
-      if (!isNaN(añoNum)) {
-        whereClause.año = añoNum;
-      }
-    }
-
-    if (tipo && typeof tipo === "string" && ["PUE", "PPD", "COMPLEMENTO_PAGO"].includes(tipo)) {
-      whereClause.tipo = tipo;
-    }
-
-    // Filtro por régimen fiscal del emisor (clave SAT 3 dígitos)
-    if (regimen_fiscal && typeof regimen_fiscal === "string" && /^\d{3}$/.test(regimen_fiscal)) {
-      whereClause.regimen_fiscal_emisor = regimen_fiscal;
-    }
-
-    // Búsqueda por texto (RFC, razón social, concepto)
-    if (search && typeof search === "string" && search.trim().length > 0) {
-      const searchTerm = `%${search.trim()}%`;
-      whereClause[Op.or] = [
-        { rfc_emisor: { [Op.iLike]: searchTerm } },
-        { nombre_emisor: { [Op.iLike]: searchTerm } },
-        { rfc_receptor: { [Op.iLike]: searchTerm } },
-        { nombre_receptor: { [Op.iLike]: searchTerm } },
-        { concepto: { [Op.iLike]: searchTerm } },
-      ];
-    }
-
-    // Paginación
-    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 50));
-    const offset = (pageNum - 1) * limitNum;
-
-    // Obtener facturas con perfil
-    const { count, rows: invoices } = await Invoice.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: Profile,
-          as: "profile",
-          where: profileWhereClause,
-          attributes: ["id", "nombre", "rfc"],
-        },
-      ],
-      order: [["fecha", "DESC"]],
-      limit: limitNum,
-      offset: offset,
-    });
-
-    // Calcular estado de pago para todas las facturas
-    const paymentStatusService = new PaymentStatusService();
-    const profileIdParaCalculo = invoices.length > 0 && invoices[0] ? invoices[0].profile_id : "";
-    const estadosPago = await paymentStatusService.calcularEstadoPagoFacturas(
-      invoices,
-      profileIdParaCalculo
-    );
-
-    // Agregar estado de pago a cada factura
-    const invoicesConEstado = await Promise.all(
-      invoices.map(async (invoice) => {
-        const estado = estadosPago.get(invoice.id);
-        // Si no se calculó en el batch (por ejemplo, si no hay facturas), calcular individualmente
-        const estadoFinal = estado || await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id);
-        return {
-          ...invoice.toJSON(),
-          estadoPago: estadoFinal,
-        };
-      })
-    );
-
-    res.json({
-      data: invoicesConEstado,
-      pagination: {
-        total: count,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(count / limitNum),
-      },
-    });
+    const params = parseInvoiceListQuery(req.query as Record<string, unknown>);
+    const result = await listInvoices(userId, params);
+    res.json(result);
   } catch (error) {
     console.error("Error al obtener facturas:", error);
     
@@ -731,8 +639,9 @@ export async function deleteInvoice(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Eliminar factura
+    const profileId = invoice.profile_id;
     await invoice.destroy();
+    await invalidateProfileCache(profileId);
 
     res.json({ message: "Factura eliminada exitosamente" });
   } catch (error) {
@@ -783,7 +692,9 @@ async function saveInvoice(
     validacion: estadoValidacion,
   };
 
-  return await Invoice.create(invoiceData);
+  const invoice = await Invoice.create(invoiceData);
+  await invalidateProfileCache(profileId);
+  return invoice;
 }
 
 /**
@@ -825,5 +736,7 @@ async function saveExpense(
     validacion: estadoValidacion,
   };
 
-  return await AccruedExpense.create(expenseData);
+  const expense = await AccruedExpense.create(expenseData);
+  await invalidateProfileCache(profileId);
+  return expense;
 }

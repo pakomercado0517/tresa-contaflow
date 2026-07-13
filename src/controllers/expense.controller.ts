@@ -5,6 +5,8 @@ import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
 import { uploadInvoice } from "./invoice.controller.js";
 import { PaymentStatusService } from "../services/payment-status.service.js";
 import { MetricsService } from "../services/metrics.service.js";
+import { invalidateProfileCache } from "../services/cache.service.js";
+import { listExpenses, parseExpenseListQuery } from "../services/expense-list.service.js";
 import { Op } from "sequelize";
 
 /**
@@ -19,102 +21,9 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Obtener parámetros de query
-    const { profileId, mes, año, tipo, categoria, regimen_fiscal, search, page = "1", limit = "50" } = req.query;
-
-    // Construir filtros
-    const whereClause: any = {};
-    const profileWhereClause: any = { user_id: userId };
-
-    if (profileId && typeof profileId === "string") {
-      profileWhereClause.id = profileId;
-    }
-
-    if (mes && typeof mes === "string") {
-      const mesNum = parseInt(mes, 10);
-      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
-        whereClause.mes = mesNum;
-      }
-    }
-
-    if (año && typeof año === "string") {
-      const añoNum = parseInt(año, 10);
-      if (!isNaN(añoNum)) {
-        whereClause.año = añoNum;
-      }
-    }
-
-    if (tipo && typeof tipo === "string" && ["PUE", "PPD", "COMPLEMENTO_PAGO"].includes(tipo)) {
-      whereClause.tipo = tipo;
-    }
-
-    if (categoria && typeof categoria === "string") {
-      whereClause.categoria = categoria;
-    }
-
-    // Filtro por régimen fiscal del receptor (clave SAT 3 dígitos)
-    if (regimen_fiscal && typeof regimen_fiscal === "string" && /^\d{3}$/.test(regimen_fiscal)) {
-      whereClause.regimen_fiscal_receptor = regimen_fiscal;
-    }
-
-    // Búsqueda por texto (RFC, razón social, concepto)
-    if (search && typeof search === "string" && search.trim().length > 0) {
-      const searchTerm = `%${search.trim()}%`;
-      whereClause[Op.or] = [
-        { rfc_emisor: { [Op.iLike]: searchTerm } },
-        { nombre_emisor: { [Op.iLike]: searchTerm } },
-        { rfc_receptor: { [Op.iLike]: searchTerm } },
-        { nombre_receptor: { [Op.iLike]: searchTerm } },
-        { concepto: { [Op.iLike]: searchTerm } },
-      ];
-    }
-
-    // Paginación
-    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 50));
-    const offset = (pageNum - 1) * limitNum;
-
-    // Obtener gastos con perfil
-    const { count, rows: expenses } = await AccruedExpense.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: Profile,
-          as: "profile",
-          where: profileWhereClause,
-          attributes: ["id", "nombre", "rfc"],
-        },
-      ],
-      order: [["fecha", "DESC"]],
-      limit: limitNum,
-      offset: offset,
-    });
-
-    // Calcular estado de pago para todos los gastos
-    const paymentStatusService = new PaymentStatusService();
-    const expensesConEstado = await Promise.all(
-      expenses.map(async (expense) => {
-        // Solo calcular estado de pago si tiene tipo PUE/PPD (gastos de XML)
-        let estadoPago = null;
-        if (expense.tipo && expense.uuid) {
-          estadoPago = await paymentStatusService.calcularEstadoPagoGasto(expense, expense.profile_id);
-        }
-        return {
-          ...expense.toJSON(),
-          estadoPago,
-        };
-      })
-    );
-
-    res.json({
-      data: expensesConEstado,
-      pagination: {
-        total: count,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(count / limitNum),
-      },
-    });
+    const params = parseExpenseListQuery(req.query as Record<string, unknown>);
+    const result = await listExpenses(userId, params);
+    res.json(result);
   } catch (error) {
     console.error("Error al obtener gastos:", error);
     
@@ -264,6 +173,7 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
       },
     });
 
+    await invalidateProfileCache(profileId);
     res.status(201).json({
       message: "Gasto creado exitosamente",
       data: expense,
@@ -345,6 +255,7 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
 
     // Actualizar gasto
     await expense.update(updateData);
+    await invalidateProfileCache(expense.profile_id);
 
     res.json({
       message: "Gasto actualizado exitosamente",
@@ -396,7 +307,9 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
     }
 
     // Eliminar gasto
+    const profileId = expense.profile_id;
     await expense.destroy();
+    await invalidateProfileCache(profileId);
 
     res.json({ message: "Gasto eliminado exitosamente" });
   } catch (error) {
