@@ -130,3 +130,9 @@ export type {
   ListExpensesResult,
 } from './expense-list.types.js';
 export type { CurrentUserDto, GetCurrentUserResponse } from './auth.types.js';
+export type {
+  TokenRevokeEvent,
+  TokenRevokeKind,
+  TokenRevokeLogContext,
+  LogoutBody,
+} from './token-revoke.types.js';

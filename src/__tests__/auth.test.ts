@@ -3,6 +3,21 @@ import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";
 import { User } from "../database/models/index";
+import { resetRedisClientForTests, setRedisClientForTests } from "../lib/redis.client.js";
+
+function createInMemoryRedis(): {
+  get: (key: string) => Promise<string | null>;
+  setex: (key: string, ttl: number, value: string) => Promise<string>;
+} {
+  const store = new Map<string, string>();
+  return {
+    get: async (key: string) => store.get(key) ?? null,
+    setex: async (key: string, _ttl: number, value: string) => {
+      store.set(key, value);
+      return "OK";
+    },
+  };
+}
 
 describe("Auth API", () => {
   beforeAll(async () => {
@@ -12,6 +27,7 @@ describe("Auth API", () => {
   afterAll(async () => {
     await cleanDatabase();
     await closeDatabase();
+    resetRedisClientForTests();
   });
 
   describe("POST /api/auth/register", () => {
@@ -146,30 +162,73 @@ describe("Auth API", () => {
 
   describe("POST /api/auth/logout", () => {
     let accessToken: string;
+    let refreshToken: string;
 
     beforeEach(async () => {
       await cleanDatabase();
+      resetRedisClientForTests();
+      setRedisClientForTests(createInMemoryRedis() as never);
       const user = await createTestUser("logout@example.com");
       const tokens = generateTestTokens(user.id, "logout@example.com");
       accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
     });
 
-    it("debe hacer logout exitosamente con token válido", async () => {
+    afterEach(() => {
+      resetRedisClientForTests();
+    });
+
+    it("debe hacer logout exitosamente con access y refresh token", async () => {
       const response = await request(app)
         .post("/api/auth/logout")
         .set("Authorization", `Bearer ${accessToken}`)
-        .send();
+        .send({ refreshToken });
 
       expectSuccess(response, 200);
       expect(response.body).toHaveProperty("message");
     });
 
-    it("debe rechazar logout sin token", async () => {
+    it("debe rechazar logout sin access token", async () => {
       const response = await request(app)
         .post("/api/auth/logout")
-        .send();
+        .send({ refreshToken });
 
       expectError(response, 401);
+    });
+
+    it("debe rechazar logout sin refreshToken en body", async () => {
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send();
+
+      expectError(response, 400);
+    });
+
+    it("debe rechazar refresh tras logout", async () => {
+      await request(app)
+        .post("/api/auth/logout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      const response = await request(app)
+        .post("/api/auth/refresh")
+        .send({ refreshToken });
+
+      expectError(response, 401);
+    });
+
+    it("debe rechazar rutas autenticadas con access revocado", async () => {
+      await request(app)
+        .post("/api/auth/logout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ refreshToken });
+
+      const response = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expectError(response, 403);
     });
   });
 });

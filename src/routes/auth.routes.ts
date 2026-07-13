@@ -51,6 +51,10 @@ const refreshValidation = [
   body("refreshToken").notEmpty().withMessage("Refresh token requerido"),
 ];
 
+const logoutValidation = [
+  body("refreshToken").notEmpty().withMessage("Refresh token requerido"),
+];
+
 const verifyEmailValidation = [
   body("token").notEmpty().withMessage("Token de verificación requerido"),
 ];
@@ -114,7 +118,7 @@ const googleLoginValidation = [
 router.post("/register", registerValidation, validateRequest, register);
 router.post("/login", loginValidation, validateRequest, login);
 router.post("/google", googleLoginValidation, validateRequest, loginGoogle);
-router.post("/logout", authenticateToken, logout); // Agregado middleware de auth
+router.post("/logout", authenticateToken, logoutValidation, validateRequest, logout);
 router.post("/refresh", refreshValidation, validateRequest, refresh);
 router.post("/verify-email", verifyEmailValidation, validateRequest, verifyEmail);
 router.post("/resend-verification-email", resendVerificationEmailValidation, validateRequest, resendVerificationEmail);

@@ -12,6 +12,11 @@ import { verifyFirebaseIdToken } from "../utils/firebase.util.js";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { getCurrentUserCached } from "../services/auth-user.service.js";
 import { invalidateUserAuthCache } from "../services/cache.service.js";
+import {
+  isRefreshTokenRevoked,
+  revokeAccessToken,
+  revokeRefreshToken,
+} from "../services/token-revoke.service.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
@@ -478,10 +483,69 @@ export async function loginGoogle(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function logout(req: Request, res: Response): Promise<void> {
-  // En una implementación completa, aquí se invalidaría el refresh token
-  // Por ahora simplemente respondemos éxito
-  res.json({ message: "Logout exitoso" });
+export async function logout(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({
+        error: "Unauthorized",
+        message: "Token inválido o expirado",
+      });
+      return;
+    }
+
+    const { refreshToken } = req.body as { refreshToken?: unknown };
+    if (!refreshToken || typeof refreshToken !== "string") {
+      res.status(400).json({
+        error: "Refresh token requerido",
+        message: "El refresh token es obligatorio",
+      });
+      return;
+    }
+
+    let refreshPayload;
+    try {
+      refreshPayload = verifyRefreshToken(refreshToken);
+    } catch (tokenError: unknown) {
+      const err = tokenError as { name?: string };
+      if (err.name === "TokenExpiredError") {
+        res.status(401).json({
+          error: "Refresh token expirado",
+          message: "Tu sesión ha expirado. Por favor inicia sesión nuevamente.",
+        });
+        return;
+      }
+      res.status(401).json({
+        error: "Refresh token inválido",
+        message: "El token de renovación no es válido.",
+      });
+      return;
+    }
+
+    if (refreshPayload.userId !== userId) {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "El refresh token no corresponde a la sesión actual",
+      });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.split(" ")[1];
+
+    if (accessToken) {
+      await revokeAccessToken(accessToken, userId);
+    }
+    await revokeRefreshToken(refreshToken, userId);
+
+    res.json({ message: "Logout exitoso" });
+  } catch (error) {
+    console.error("Error inesperado en logout:", error);
+    res.status(500).json({
+      error: "Error al cerrar sesión",
+      message: "Ocurrió un error inesperado. Por favor intenta nuevamente.",
+    });
+  }
 }
 
 export async function refresh(req: Request, res: Response): Promise<void> {
@@ -523,6 +587,14 @@ export async function refresh(req: Request, res: Response): Promise<void> {
       res.status(401).json({ 
         error: "Error al verificar token",
         message: "No se pudo verificar el token. Por favor inicia sesión nuevamente."
+      });
+      return;
+    }
+
+    if (await isRefreshTokenRevoked(refreshToken)) {
+      res.status(401).json({
+        error: "Refresh token inválido",
+        message: "La sesión fue cerrada. Por favor inicia sesión nuevamente.",
       });
       return;
     }
