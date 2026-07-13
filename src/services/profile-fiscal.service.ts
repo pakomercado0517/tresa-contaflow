@@ -5,6 +5,7 @@ import type {
   UpsertProfileFiscalSettingsBody,
 } from '../types/profile-fiscal.types.js';
 import { EMPTY_FISCAL_SETTINGS_SNAPSHOT as EMPTY_SNAPSHOT } from '../types/profile-fiscal.types.js';
+import { invalidateProfileCache } from './cache.service.js';
 
 function toNumber(value: string | number | null | undefined): number {
   if (value == null) return 0;
@@ -118,6 +119,7 @@ export async function upsertFiscalSettings(
 
   if (existing) {
     await existing.update(payload);
+    await invalidateProfileCache(profileId);
     return toResponse(existing);
   }
 
@@ -126,5 +128,6 @@ export async function upsertFiscalSettings(
     ejercicio: body.ejercicio,
     ...payload,
   });
+  await invalidateProfileCache(profileId);
   return toResponse(created);
 }

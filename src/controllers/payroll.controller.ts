@@ -2,6 +2,7 @@ import type { Response } from "express";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { Payroll, Profile, Period } from "../database/models/index.js";
 import { uploadPayrollXML } from "../services/payroll.service.js";
+import { invalidateProfileCache } from "../services/cache.service.js";
 import type { UploadedFile } from "express-fileupload";
 import { Op } from "sequelize";
 
@@ -207,7 +208,9 @@ export async function deletePayroll(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    const profileId = payroll.profile_id;
     await payroll.destroy();
+    await invalidateProfileCache(profileId);
     res.json({ message: "Nómina eliminada" });
   } catch (error) {
     console.error("Error al eliminar nómina:", error);

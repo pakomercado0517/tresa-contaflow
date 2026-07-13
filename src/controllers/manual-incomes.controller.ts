@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { ManualIncome, Profile, Period } from "../database/models/index.js";
+import { invalidateProfileCache } from "../services/cache.service.js";
 
 /**
  * Lista ingresos manuales. Filtro por period_id (obligatorio para listar por período).
@@ -129,6 +130,7 @@ export async function createManualIncome(req: AuthRequest, res: Response): Promi
       notes: notes != null ? String(notes).trim() || null : null,
     });
 
+    await invalidateProfileCache(profile_id);
     res.status(201).json({ message: "Ingreso creado", data: income });
   } catch (error) {
     console.error("Error al crear ingreso manual:", error);
@@ -182,6 +184,7 @@ export async function updateManualIncome(req: AuthRequest, res: Response): Promi
     if (notes !== undefined) updateData.notes = notes == null ? null : String(notes).trim() || null;
 
     await income.update(updateData);
+    await invalidateProfileCache(income.profile_id);
 
     res.json({ message: "Ingreso actualizado", data: income });
   } catch (error) {
@@ -215,7 +218,9 @@ export async function deleteManualIncome(req: AuthRequest, res: Response): Promi
       return;
     }
 
+    const profileId = income.profile_id;
     await income.destroy();
+    await invalidateProfileCache(profileId);
     res.json({ message: "Ingreso eliminado" });
   } catch (error) {
     console.error("Error al eliminar ingreso manual:", error);

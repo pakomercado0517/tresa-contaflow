@@ -10,6 +10,8 @@ import { generateVerificationToken, hashVerificationToken } from "../utils/verif
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/email.service.js";
 import { verifyFirebaseIdToken } from "../utils/firebase.util.js";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
+import { getCurrentUserCached } from "../services/auth-user.service.js";
+import { invalidateUserAuthCache } from "../services/cache.service.js";
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
@@ -637,6 +639,8 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    await invalidateUserAuthCache(user.id);
+
     res.json({
       message: "Email verificado correctamente",
     });
@@ -894,6 +898,8 @@ export async function updateProfile(req: AuthRequest, res: Response): Promise<vo
     // Recargar usuario actualizado
     await user.reload();
 
+    await invalidateUserAuthCache(userId);
+
     res.json({
       message: "Perfil actualizado correctamente",
       user: {
@@ -940,9 +946,9 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
     }
 
     // Buscar usuario
-    let user;
+    let result;
     try {
-      user = await User.findByPk(userId);
+      result = await getCurrentUserCached(userId);
     } catch (dbError) {
       console.error("Error al buscar usuario:", dbError);
       res.status(500).json({ 
@@ -952,7 +958,7 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (!user) {
+    if (!result) {
       res.status(401).json({ 
         error: "Unauthorized",
         message: "Token inválido o expirado"
@@ -960,20 +966,7 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        telefono: user.telefono,
-        email_verified: user.email_verified,
-        tour_version: user.tour_version,
-        tour_completed_at: user.tour_completed_at,
-        logo_url: user.logo_url,
-        nombre_comercial: user.nombre_comercial,
-      },
-    });
+    res.json(result);
   } catch (error) {
     console.error("Error inesperado al obtener usuario:", error);
     
@@ -1276,6 +1269,8 @@ export async function completeTour(req: AuthRequest, res: Response): Promise<voi
       });
       return;
     }
+
+    await invalidateUserAuthCache(userId);
 
     res.json({
       message: "Tour marcado como completado exitosamente",

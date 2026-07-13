@@ -4,6 +4,13 @@ import { PublicReportToken, Profile, User } from '../database/models/index.js';
 import { MetricsService } from './metrics.service.js';
 import { taxEstimateService } from './tax-estimate.service.js';
 import { loadFiscalSettingsSnapshot } from './profile-fiscal.service.js';
+import {
+  getJson,
+  setJsonForPublicReport,
+  getPublicReportsTtlSeconds,
+  publicReportKey,
+  invalidateProfileCache,
+} from './cache.service.js';
 import type { PeriodMetricsResponse } from '../types/metrics.types.js';
 import type {
   PublicReportResponse,
@@ -62,6 +69,16 @@ export async function getPublicData(
   mes?: number,
   año?: number
 ): Promise<PublicReportResponse | null> {
+  const now = new Date();
+  const resolvedMes = mes ?? now.getMonth() + 1;
+  const resolvedAño = año ?? now.getFullYear();
+  const cacheKey = publicReportKey(tokenValue, resolvedAño, resolvedMes);
+
+  const cached = await getJson<PublicReportResponse>(cacheKey, { domain: 'public' });
+  if (cached) {
+    return cached;
+  }
+
   const record = await PublicReportToken.findOne({
     where: {
       token: tokenValue,
@@ -80,9 +97,6 @@ export async function getPublicData(
     return null;
   }
 
-  const now = new Date();
-  const resolvedMes = mes ?? now.getMonth() + 1;
-  const resolvedAño = año ?? now.getFullYear();
   const start = new Date(resolvedAño, resolvedMes - 1, 1, 0, 0, 0);
   const end = new Date(resolvedAño, resolvedMes, 1, 0, 0, 0);
 
@@ -122,7 +136,7 @@ export async function getPublicData(
     // Si falla el cálculo de métricas, devolver null en metrics
   }
 
-  return {
+  const response: PublicReportResponse = {
     branding: {
       logo_url: user.logo_url ?? null,
       nombre_comercial: user.nombre_comercial ?? null,
@@ -136,6 +150,15 @@ export async function getPublicData(
     metrics,
     metrics_by_regimen,
   };
+
+  await setJsonForPublicReport(
+    cacheKey,
+    response,
+    profile.id,
+    getPublicReportsTtlSeconds()
+  );
+
+  return response;
 }
 
 /**
@@ -149,5 +172,6 @@ export async function revokeToken(tokenValue: string, userId: string): Promise<b
     return false;
   }
   await record.update({ is_active: false });
+  await invalidateProfileCache(record.profile_id);
   return true;
 }

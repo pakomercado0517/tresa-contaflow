@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import type { AuthRequest } from "../middlewares/auth.middleware.js";
 import { AccruedExpense, Profile, Period } from "../database/models/index.js";
+import { invalidateProfileCache } from "../services/cache.service.js";
 import { Op } from "sequelize";
 
 /**
@@ -181,6 +182,7 @@ export async function createAccruedExpense(req: AuthRequest, res: Response): Pro
       },
     });
 
+    await invalidateProfileCache(profile_id);
     res.status(201).json({ message: "Gasto devengado creado", data: expense });
   } catch (error) {
     console.error("Error al crear gasto devengado:", error);
@@ -249,6 +251,7 @@ export async function updateAccruedExpense(req: AuthRequest, res: Response): Pro
     if (categoria !== undefined) updateData.categoria = categoria == null ? null : String(categoria).trim() || null;
 
     await expense.update(updateData);
+    await invalidateProfileCache(expense.profile_id);
 
     res.json({ message: "Gasto devengado actualizado", data: expense });
   } catch (error) {
@@ -289,7 +292,9 @@ export async function deleteAccruedExpense(req: AuthRequest, res: Response): Pro
       return;
     }
 
+    const profileId = expense.profile_id;
     await expense.destroy();
+    await invalidateProfileCache(profileId);
     res.json({ message: "Gasto devengado eliminado" });
   } catch (error) {
     console.error("Error al eliminar gasto devengado:", error);

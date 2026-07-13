@@ -111,3 +111,22 @@ export type {
   PersistTaxEstimateOptions,
   TaxEstimateHistoryResponse,
 } from './tax-estimate-persistence.types.js';
+export type {
+  CacheEvent,
+  CacheDomain,
+  CacheLogContext,
+  CacheSetOptions,
+} from './cache.types.js';
+export type {
+  InvoiceListQueryParams,
+  InvoiceListPagination,
+  InvoiceListItem,
+  ListInvoicesResult,
+} from './invoice-list.types.js';
+export type {
+  ExpenseListQueryParams,
+  ExpenseListPagination,
+  ExpenseListItem,
+  ListExpensesResult,
+} from './expense-list.types.js';
+export type { CurrentUserDto, GetCurrentUserResponse } from './auth.types.js';
