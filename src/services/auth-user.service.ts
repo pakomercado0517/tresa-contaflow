@@ -5,12 +5,19 @@ import type {
   GetCurrentUserResponse,
   LoginUserResponse,
   RegisterUserResponse,
+  LoginUserWithGoogleResponse,
 } from '../types/auth.types.js';
 import { sequelize } from '../database/config.js';
 import bcrypt from 'bcrypt';
 import { generateVerificationToken } from '../utils/verification.util.js';
 import { AppError } from '../utils/AppError.js';
-import { generateAccessToken, generateRefreshToken } from '../utils/jwt.util.js';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+} from '../utils/jwt.util.js';
+import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
+import { revokeAccessToken, revokeRefreshToken } from './token-revoke.service.js';
 
 function mapUserToDto(user: User): CurrentUserDto {
   return {
@@ -146,4 +153,86 @@ export async function loginUser(userDto: User): Promise<LoginUserResponse> {
     refreshToken,
     user: findUser.get({ plain: true }),
   };
+}
+
+export async function loginUserWithGoogle(idToken: string): Promise<LoginUserResponse> {
+  const decoded = await verifyFirebaseIdToken(idToken);
+  const email = decoded.email?.trim().toLowerCase();
+  if (!email) throw new AppError('No se pudo obtener el email de Google', 400);
+
+  let googleUser = await User.findOne({ where: { email } });
+  if (googleUser) {
+    const updateData: Partial<User> = { firebase_uid: decoded.uid, email_verified: true };
+    if (!googleUser.nombre) updateData.nombre = decoded.name ? decoded.name.trim() : null;
+    await googleUser.update(updateData);
+  } else {
+    const transaction = await sequelize.transaction();
+    try {
+      googleUser = await User.create(
+        {
+          email,
+          password_hash: null,
+          firebase_uid: decoded.uid,
+          nombre: decoded.name?.trim() || null,
+          email_verified: true,
+        },
+        { transaction }
+      );
+
+      await Subscription.create(
+        {
+          user_id: googleUser.id,
+          plan: 'FREE',
+          status: 'ACTIVE',
+        },
+        { transaction }
+      );
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+  const tokenPayload = { userId: googleUser?.id, email: googleUser?.email };
+  return {
+    message: 'Login exitoso',
+    accessToken: generateAccessToken(tokenPayload),
+    refreshToken: generateRefreshToken(tokenPayload),
+    user: googleUser.get({ plain: true }),
+  };
+}
+
+export async function logoutUser(userId: string, refreshToken: string, accessToken: string) {
+  let refreshPayload;
+
+  try {
+    refreshPayload = verifyRefreshToken(refreshToken);
+  } catch (error: any) {
+    throw new AppError(
+      error.name === 'Token ExpiredError'
+        ? 'Tu sesión ha expirado'
+        : 'El token de renovación no es válido',
+      401
+    );
+  }
+
+  if (refreshPayload.userId !== userId)
+    throw new AppError('El refresh token no corresponde a este usuario', 403);
+
+  if (accessToken) await revokeAccessToken(accessToken, userId);
+
+  await revokeRefreshToken(refreshToken, userId);
+
+  return { message: 'Logout exitoso' };
+}
+
+export async function refreshAccessToken(refreshToken: string) {
+  const payload = verifyRefreshToken(refreshToken);
+  if (!payload) throw new AppError('El token de renovación no es válido', 401);
+
+  const accessToken = generateAccessToken({
+    userId: payload.userId,
+    email: payload.email,
+  });
+  return { message: 'Token actualizado', accessToken };
 }

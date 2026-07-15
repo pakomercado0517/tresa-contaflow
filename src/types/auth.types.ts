@@ -29,3 +29,7 @@ export interface LoginUserResponse {
   refreshToken: string;
   user: UserAttributes;
 }
+
+export interface LoginUserWithGoogleResponse extends LoginUserResponse {
+  idToken: string;
+}

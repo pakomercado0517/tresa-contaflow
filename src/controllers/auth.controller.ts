@@ -10,7 +10,14 @@ import { generateVerificationToken, hashVerificationToken } from '../utils/verif
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { getCurrentUserCached, registerUser, loginUser } from '../services/auth-user.service.js';
+import {
+  getCurrentUserCached,
+  registerUser,
+  loginUser,
+  loginUserWithGoogle,
+  logoutUser,
+  refreshAccessToken,
+} from '../services/auth-user.service.js';
 import { invalidateUserAuthCache } from '../services/cache.service.js';
 import {
   isRefreshTokenRevoked,
@@ -18,6 +25,7 @@ import {
   revokeRefreshToken,
 } from '../services/token-revoke.service.js';
 import { validationResult } from 'express-validator';
+import { AppError } from '../utils/AppError.js';
 
 export const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -50,7 +58,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
   }
 }
 
-export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const loginData = await loginUser(req.body);
     res.status(200).json(loginData);
@@ -63,318 +71,45 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
  * Login con Google: verifica el ID token de Firebase, busca o crea usuario por email,
  * emite JWT propios (mismo contrato que POST /login).
  */
-export async function loginGoogle(req: Request, res: Response): Promise<void> {
+export async function loginGoogle(req: Request, res: Response, next: NextFunction) {
   try {
     const { idToken } = req.body;
 
-    if (!idToken || typeof idToken !== 'string') {
-      res.status(400).json({
-        error: 'Token requerido',
-        message: 'El idToken de Firebase es obligatorio',
-      });
-      return;
-    }
+    if (!idToken) throw new AppError('Token requerido', 400);
 
-    let decoded;
-    try {
-      decoded = await verifyFirebaseIdToken(idToken);
-    } catch (firebaseError) {
-      console.error('Error al verificar token de Firebase:', firebaseError);
-      res.status(401).json({
-        error: 'Token inválido',
-        message: 'El token de Google no es válido o ha expirado. Intenta iniciar sesión de nuevo.',
-      });
-      return;
-    }
+    const loginData = await loginUserWithGoogle(idToken);
 
-    const email = decoded.email?.trim().toLowerCase();
-    if (!email) {
-      res.status(400).json({
-        error: 'Email no disponible',
-        message: 'No se pudo obtener el email de la cuenta de Google.',
-      });
-      return;
-    }
-
-    let user;
-    try {
-      user = await User.findOne({ where: { email } });
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Error de base de datos',
-        message: 'No se pudo verificar la cuenta. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    if (user) {
-      const updateData: {
-        firebase_uid: string;
-        email_verified: boolean;
-        nombre?: string | null;
-      } = {
-        firebase_uid: decoded.uid,
-        email_verified: true,
-      };
-      if (user.nombre == null || user.nombre.trim() === '') {
-        updateData.nombre = decoded.name?.trim() || null;
-      }
-      try {
-        await user.update(updateData);
-      } catch (updateError) {
-        console.error('Error al actualizar usuario:', updateError);
-        res.status(500).json({
-          error: 'Error al actualizar cuenta',
-          message: 'No se pudo completar el inicio de sesión. Por favor intenta nuevamente.',
-        });
-        return;
-      }
-    } else {
-      try {
-        user = await User.create({
-          email,
-          password_hash: null,
-          firebase_uid: decoded.uid,
-          nombre: decoded.name?.trim() || null,
-          apellido: null,
-          telefono: null,
-          email_verified: true,
-        });
-      } catch (createError: unknown) {
-        console.error('Error al crear usuario:', createError);
-        const err = createError as { name?: string };
-        if (err.name === 'SequelizeUniqueConstraintError') {
-          res.status(409).json({
-            error: 'El email ya está registrado',
-            message: 'Este correo ya está en uso.',
-          });
-          return;
-        }
-        res.status(500).json({
-          error: 'Error al crear cuenta',
-          message: 'No se pudo completar el registro. Por favor intenta nuevamente.',
-        });
-        return;
-      }
-
-      try {
-        await Subscription.create({
-          user_id: user.id,
-          plan: 'FREE',
-          plan_price: 0,
-          status: 'ACTIVE',
-        });
-      } catch (subError: unknown) {
-        console.error('Error al crear suscripción:', subError);
-        try {
-          await user.destroy();
-        } catch (deleteError) {
-          console.error('Error al eliminar usuario huérfano:', deleteError);
-        }
-        res.status(500).json({
-          error: 'Error al completar registro',
-          message: 'No se pudo completar el registro. Por favor intenta nuevamente.',
-        });
-        return;
-      }
-    }
-
-    const tokenPayload = { userId: user.id, email: user.email };
-    let accessToken: string;
-    let refreshToken: string;
-    try {
-      accessToken = generateAccessToken(tokenPayload);
-      refreshToken = generateRefreshToken(tokenPayload);
-    } catch (tokenError) {
-      console.error('Error al generar tokens:', tokenError);
-      res.status(500).json({
-        error: 'Error al generar tokens',
-        message: 'No se pudieron generar los tokens de acceso. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.json({
-      message: 'Login exitoso',
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        telefono: user.telefono,
-        email_verified: user.email_verified,
-      },
-    });
+    res.status(200).json({ ...loginData });
   } catch (error) {
-    console.error('Error inesperado en login Google:', error);
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al iniciar sesión',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
-export async function logout(req: AuthRequest, res: Response): Promise<void> {
+export async function logout(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token inválido o expirado',
-      });
-      return;
-    }
+    const { refreshToken } = req.body;
+    const accessToken = req.headers.authorization?.split(' ')[1];
 
-    const { refreshToken } = req.body as { refreshToken?: unknown };
-    if (!refreshToken || typeof refreshToken !== 'string') {
-      res.status(400).json({
-        error: 'Refresh token requerido',
-        message: 'El refresh token es obligatorio',
-      });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    if (!refreshToken || typeof refreshToken !== 'string')
+      throw new AppError('Refresh token requerido', 400);
 
-    let refreshPayload;
-    try {
-      refreshPayload = verifyRefreshToken(refreshToken);
-    } catch (tokenError: unknown) {
-      const err = tokenError as { name?: string };
-      if (err.name === 'TokenExpiredError') {
-        res.status(401).json({
-          error: 'Refresh token expirado',
-          message: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-        });
-        return;
-      }
-      res.status(401).json({
-        error: 'Refresh token inválido',
-        message: 'El token de renovación no es válido.',
-      });
-      return;
-    }
-
-    if (refreshPayload.userId !== userId) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'El refresh token no corresponde a la sesión actual',
-      });
-      return;
-    }
-
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.split(' ')[1];
-
-    if (accessToken) {
-      await revokeAccessToken(accessToken, userId);
-    }
-    await revokeRefreshToken(refreshToken, userId);
-
-    res.json({ message: 'Logout exitoso' });
+    const result = await logoutUser(userId, refreshToken, accessToken || '');
+    res.status(200).json({ result });
   } catch (error) {
-    console.error('Error inesperado en logout:', error);
-    res.status(500).json({
-      error: 'Error al cerrar sesión',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
-export async function refresh(req: Request, res: Response): Promise<void> {
+export async function refresh(req: Request, res: Response, next: NextFunction) {
   try {
     const { refreshToken } = req.body;
-
-    if (!refreshToken || typeof refreshToken !== 'string') {
-      res.status(400).json({
-        error: 'Refresh token requerido',
-        message: 'El refresh token es obligatorio',
-      });
-      return;
-    }
-
-    // Verificar refresh token
-    let payload;
-    try {
-      payload = verifyRefreshToken(refreshToken);
-    } catch (tokenError: any) {
-      console.error('Error al verificar refresh token:', tokenError);
-
-      // Manejar errores específicos de JWT
-      if (tokenError.name === 'TokenExpiredError') {
-        res.status(401).json({
-          error: 'Refresh token expirado',
-          message: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-        });
-        return;
-      }
-
-      if (tokenError.name === 'JsonWebTokenError' || tokenError.name === 'NotBeforeError') {
-        res.status(401).json({
-          error: 'Refresh token inválido',
-          message: 'El token de renovación no es válido. Por favor inicia sesión nuevamente.',
-        });
-        return;
-      }
-
-      res.status(401).json({
-        error: 'Error al verificar token',
-        message: 'No se pudo verificar el token. Por favor inicia sesión nuevamente.',
-      });
-      return;
-    }
-
-    if (await isRefreshTokenRevoked(refreshToken)) {
-      res.status(401).json({
-        error: 'Refresh token inválido',
-        message: 'La sesión fue cerrada. Por favor inicia sesión nuevamente.',
-      });
-      return;
-    }
-
-    // Generar nuevo access token
-    let accessToken: string;
-    try {
-      accessToken = generateAccessToken({
-        userId: payload.userId,
-        email: payload.email,
-      });
-    } catch (tokenError) {
-      console.error('Error al generar access token:', tokenError);
-      res.status(500).json({
-        error: 'Error al generar token',
-        message: 'No se pudo generar el nuevo token de acceso. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.json({
-      accessToken,
-    });
+    if (!refreshToken) throw new AppError('Refresh token es requerido', 400);
+    const result = await refreshAccessToken(refreshToken);
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado en refresh:', error);
-
-    // Error no manejado previamente
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al renovar token',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
