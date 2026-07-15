@@ -25,6 +25,7 @@ import taxEstimateRoutes from './routes/tax-estimate.routes.js';
 import internalRoutes from './routes/internal.routes.js';
 import satDescargaRoutes from './routes/sat-descarga.routes.js';
 import { logger } from './utils/logger.util.js';
+import { errorHandler } from './middlewares/error.middleware.js';
 
 dotenv.config();
 
@@ -143,6 +144,7 @@ app.use('/api/public-reports', publicReportsRoutes);
 app.use('/api/internal', internalRoutes);
 app.use('/api/sat-descarga', satDescargaRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use(errorHandler);
 
 // Middleware de manejo de errores centralizado (debe ir al final, después de todas las rutas)
 app.use((err: Error, req: Request, res: Response, next: NextFunction): void => {
