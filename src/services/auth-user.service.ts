@@ -1,5 +1,11 @@
 import { Subscription, User } from '../database/models/index.js';
-import { authMeKey, getAuthMeTtlSeconds, getJson, setJsonForAuthUser } from './cache.service.js';
+import {
+  authMeKey,
+  getAuthMeTtlSeconds,
+  getJson,
+  invalidateUserAuthCache,
+  setJsonForAuthUser,
+} from './cache.service.js';
 import type {
   CurrentUserDto,
   GetCurrentUserResponse,
@@ -9,7 +15,7 @@ import type {
 } from '../types/auth.types.js';
 import { sequelize } from '../database/config.js';
 import bcrypt from 'bcrypt';
-import { generateVerificationToken } from '../utils/verification.util.js';
+import { generateVerificationToken, hashVerificationToken } from '../utils/verification.util.js';
 import { AppError } from '../utils/AppError.js';
 import {
   generateAccessToken,
@@ -235,4 +241,25 @@ export async function refreshAccessToken(refreshToken: string) {
     email: payload.email,
   });
   return { message: 'Token actualizado', accessToken };
+}
+
+export async function verifyEmail(token: string) {
+  const hashedToken = hashVerificationToken(token);
+  const user = await User.findOne({ where: { email_verification_token: hashedToken } });
+  if (!user)
+    throw new AppError(
+      'Token de verificación no válido, puedes solicitar un nuevo email de verificación',
+      400
+    );
+  if (user.email_verified) throw new AppError('El email ya está verificado', 400);
+  if (user.email_verification_expires && user.email_verification_expires < new Date())
+    throw new AppError('El token de verificación ha expirado', 400);
+  await user.update({
+    email_verified: true,
+    email_verification_token: null,
+    email_verification_expires: null,
+  });
+
+  await invalidateUserAuthCache(user.id);
+  return { message: 'Email verificado correctamente' };
 }

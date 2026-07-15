@@ -17,6 +17,7 @@ import {
   loginUserWithGoogle,
   logoutUser,
   refreshAccessToken,
+  verifyEmail,
 } from '../services/auth-user.service.js';
 import { invalidateUserAuthCache } from '../services/cache.service.js';
 import {
@@ -113,101 +114,15 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-export async function verifyEmail(req: Request, res: Response): Promise<void> {
+export async function verifyEmailController(req: Request, res: Response, next: NextFunction) {
   try {
     const { token } = req.body;
+    if (!token) throw new AppError('Token de verificación es requerido', 400);
 
-    if (!token || typeof token !== 'string') {
-      res.status(400).json({
-        error: 'Token de verificación requerido',
-        message: 'El token de verificación es obligatorio',
-      });
-      return;
-    }
-
-    // Hashear el token recibido para comparar
-    const hashedToken = hashVerificationToken(token);
-
-    // Buscar usuario con este token
-    let user;
-    try {
-      user = await User.findOne({
-        where: {
-          email_verification_token: hashedToken,
-        },
-      });
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Error de base de datos',
-        message: 'No se pudo verificar el token. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    if (!user) {
-      res.status(400).json({
-        error: 'Token de verificación inválido',
-        message:
-          'El token proporcionado no es válido. Puedes solicitar un nuevo email de verificación.',
-      });
-      return;
-    }
-
-    // Verificar si el token expiró
-    if (!user.email_verification_expires || user.email_verification_expires < new Date()) {
-      res.status(400).json({
-        error: 'El token de verificación ha expirado',
-        message: 'El token ha expirado. Puedes solicitar un nuevo email de verificación.',
-      });
-      return;
-    }
-
-    // Verificar si ya está verificado
-    if (user.email_verified) {
-      res.status(400).json({
-        error: 'El email ya está verificado',
-        message: 'Este email ya fue verificado anteriormente.',
-      });
-      return;
-    }
-
-    // Marcar como verificado y limpiar token
-    try {
-      await user.update({
-        email_verified: true,
-        email_verification_token: null,
-        email_verification_expires: null,
-      });
-    } catch (updateError) {
-      console.error('Error al actualizar usuario:', updateError);
-      res.status(500).json({
-        error: 'Error al verificar email',
-        message: 'No se pudo completar la verificación. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    await invalidateUserAuthCache(user.id);
-
-    res.json({
-      message: 'Email verificado correctamente',
-    });
+    const result = await verifyEmail(token);
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado en verificación de email:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al verificar email',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
