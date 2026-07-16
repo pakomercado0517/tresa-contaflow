@@ -18,12 +18,9 @@ export const createDiscountCodeService = async (
   const hasAmount = typeof amountOff === 'number';
 
   if ((hasPercent && hasAmount) || (!hasPercent && !hasAmount))
-    throw new AppError(
-      'Debes proporcionar el monto y porcentaje de descuento, solo uno de los dos',
-      400
-    );
+    throw new AppError('Debes proporcionar percentOff o amountOff, solo uno de los dos', 400);
   if (hasAmount && !currency)
-    throw new AppError('la moneda es requerida cuando el monto es proporcionado', 400);
+    throw new AppError('currency es requerido cuando ammoutnOff está presente', 400);
 
   const couponParams: Stripe.CouponCreateParams = {
     duration: input.duration,
@@ -57,7 +54,7 @@ export const createDiscountCodeService = async (
     active: promotionCode.active,
     expires_at: input.expiresAt ?? null,
     max_redemptions: input.maxRedemptions ?? null,
-    times_redeemed: promotionCode.times_redeemed ?? null,
+    times_redeemed: promotionCode.times_redeemed ?? 0,
     created_by: createdBy,
     metadata: input.metadata ?? null,
     trial_days: typeof input.trialDays === 'number' ? input.trialDays : null,
@@ -71,7 +68,7 @@ export const setDiscountActiveService = async (
   active: boolean
 ): Promise<DiscountCode> => {
   const record = await DiscountCode.findByPk(id);
-  if (!record) throw new AppError('Código de descuento no encontrado', 400);
+  if (!record) throw new AppError('Código de descuento no encontrado', 404);
 
   await stripeService.promotionCodes.update(record.stripe_promotion_code_id, { active });
   await record.update({ active });
@@ -106,13 +103,13 @@ export const getPromotionCodeForCheckoutService = async (
   if (typeof record.max_redemptions === 'number' && record.times_redeemed >= record.max_redemptions)
     return null;
 
-  const stripePromotion = stripeService.promotionCodes.list({
+  const stripePromotion = await stripeService.promotionCodes.list({
     code,
     active: true,
     limit: 1,
   });
 
-  const promotion = (await stripePromotion).data[0];
+  const promotion = stripePromotion.data[0];
   if (!promotion) return null;
 
   return {
@@ -122,7 +119,9 @@ export const getPromotionCodeForCheckoutService = async (
   };
 };
 
-export const recordRedemptionByPromotionCodeIdService = async (promotionCodeId: string) => {
+export const recordRedemptionByPromotionCodeIdService = async (
+  promotionCodeId: string
+): Promise<void> => {
   const record = await DiscountCode.findOne({
     where: { stripe_promotion_code_id: promotionCodeId },
   });
