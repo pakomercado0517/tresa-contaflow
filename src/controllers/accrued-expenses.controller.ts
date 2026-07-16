@@ -1,8 +1,5 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { AccruedExpense, Profile, Period } from '../database/models/index.js';
-import { invalidateProfileCache } from '../services/cache.service.js';
-import { Op } from 'sequelize';
 import {
   createAccruedExpenseService,
   deleteAccruedExpenseService,

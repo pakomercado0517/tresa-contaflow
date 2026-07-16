@@ -1,4 +1,3 @@
-import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { AccruedExpense, Period, Profile } from '../database/models/index.js';
 import { AppError } from '../utils/AppError.js';
 import { Op } from 'sequelize';
