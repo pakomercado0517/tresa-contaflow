@@ -25,7 +25,7 @@ export async function getAccruedExpenses(req: AuthRequest, res: Response, next: 
       throw new AppError('periodId es requerido y debe ser una cadena de texto', 400);
 
     const result = await getAccruedExpensesService(userId!, periodId, (type as string) || 'MANUAL');
-    res.status(200).json({ ...result });
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -40,7 +40,7 @@ export async function getAccruedExpenseById(req: AuthRequest, res: Response, nex
     const { id } = req.params;
     if (!id) throw new AppError('El ID del gasto es requerido', 400);
     const result = await getAccruedExpenseByIdService(userId, id as string);
-    res.status(200).json({ ...result });
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -63,7 +63,7 @@ export async function createAccruedExpense(req: AuthRequest, res: Response, next
       iva_amount,
       categoria,
     });
-    res.status(201).json({ ...result });
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }
@@ -78,7 +78,7 @@ export async function updateAccruedExpense(req: AuthRequest, res: Response, next
     const { id } = req.params;
 
     const result = await updateAccruedExpenseService(userId, id as string, req.body);
-    res.status(200).json({ ...result });
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
@@ -93,7 +93,7 @@ export async function deleteAccruedExpense(req: AuthRequest, res: Response, next
     const { id } = req.params;
 
     const result = await deleteAccruedExpenseService(userId, id as string);
-    res.status(200).json({ ...result });
+    res.status(200).json(result);
   } catch (error) {
     next(error);
   }
