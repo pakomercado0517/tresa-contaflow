@@ -1,5 +1,5 @@
-import { DataTypes, Model } from "sequelize";
-import sequelize from "../config.js";
+import { DataTypes, Model } from 'sequelize';
+import sequelize from '../config.js';
 
 interface UserAttributes {
   id: string;
@@ -26,7 +26,17 @@ interface UserAttributes {
 interface UserCreationAttributes
   extends Omit<
     UserAttributes,
-    "id" | "created_at" | "updated_at" | "email_verified" | "trial_used" | "tour_version" | "tour_completed_at" | "password_hash" | "firebase_uid" | "logo_url" | "nombre_comercial"
+    | 'id'
+    | 'created_at'
+    | 'updated_at'
+    | 'email_verified'
+    | 'trial_used'
+    | 'tour_version'
+    | 'tour_completed_at'
+    | 'password_hash'
+    | 'firebase_uid'
+    | 'logo_url'
+    | 'nombre_comercial'
   > {
   password_hash?: string | null;
   firebase_uid?: string | null;
@@ -39,6 +49,7 @@ interface UserCreationAttributes
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
   declare id: string;
   declare email: string;
+  declare password: string | null;
   declare password_hash: string | null;
   declare firebase_uid: string | null;
   declare nombre: string | null;
@@ -148,13 +159,12 @@ User.init(
   },
   {
     sequelize,
-    tableName: "users",
+    tableName: 'users',
     timestamps: true,
-    createdAt: "created_at",
-    updatedAt: "updated_at",
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
   }
 );
 
 export default User;
 export type { UserAttributes, UserCreationAttributes };
-
