@@ -19,8 +19,8 @@ export interface GetCurrentUserResponse {
 }
 
 export interface RegisterUserResponse {
+  message: string;
   user: UserAttributes; //Usamos la interfaz del modelo User
-  verificationToken: string;
 }
 
 export interface LoginUserResponse {

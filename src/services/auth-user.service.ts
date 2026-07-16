@@ -24,8 +24,7 @@ import {
 } from '../utils/jwt.util.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
 import { revokeAccessToken, revokeRefreshToken } from './token-revoke.service.js';
-import type { UserAttributes } from '../database/models/User.model.js';
-import { sendPasswordResetEmail } from './email.service.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from './email.service.js';
 
 function mapUserToDto(user: User): CurrentUserDto {
   return {
@@ -89,17 +88,20 @@ export async function getCurrentUserCached(userId: string): Promise<GetCurrentUs
 export async function registerUser(user: User): Promise<RegisterUserResponse> {
   const { email, password, nombre, apellido, telefono } = user;
 
-  const transaction = await sequelize.transaction();
   const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
   if (existingUser)
     throw new AppError('El email ya está registrado, por favor intenta con otro email.', 409);
 
   //Preparación de datos
-  const passwordHash = await bcrypt.hash(password ? password.trim() : '', 10);
-  const verificationToken = generateVerificationToken();
+  const transaction = await sequelize.transaction();
+  let newUser: User;
+  let verificationToken: string;
 
   try {
-    const newUser = await User.create(
+    const passwordHash = await bcrypt.hash(password ? password.trim() : '', 10);
+    verificationToken = generateVerificationToken();
+    const hashedToken = hashVerificationToken(verificationToken);
+    newUser = await User.create(
       {
         email: email.toLowerCase().trim(),
         password_hash: passwordHash,
@@ -107,7 +109,7 @@ export async function registerUser(user: User): Promise<RegisterUserResponse> {
         apellido: apellido ? apellido.trim() : null,
         telefono: telefono ? telefono.trim() : null,
         email_verified: false,
-        email_verification_token: verificationToken,
+        email_verification_token: hashedToken,
         email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
       { transaction }
@@ -121,14 +123,22 @@ export async function registerUser(user: User): Promise<RegisterUserResponse> {
       { transaction }
     );
     await transaction.commit();
-    return {
-      user: newUser.get({ plain: true }),
-      verificationToken,
-    };
   } catch (error) {
     await transaction.rollback();
     throw error;
   }
+  await sendVerificationEmail(newUser.email, verificationToken, newUser.nombre).catch((err) => {
+    throw new AppError(
+      `Error al enviar el email de verificación, por favor intenta nuevamente: ${err.message}`,
+      500
+    );
+  });
+
+  return {
+    message:
+      'Usuario registrado correctamente. Se ha enviado un email de verificación, revisa tu bandeja de entrada.',
+    user: newUser.get({ plain: true }),
+  };
 }
 
 export async function loginUser(userDto: User): Promise<LoginUserResponse> {
@@ -266,6 +276,29 @@ export async function verifyEmail(token: string) {
   return { message: 'Email verificado correctamente' };
 }
 
+export async function resendVerificationEmailService(email: string) {
+  const user = await User.findOne({ where: { email: email.toLowerCase().trim() } });
+  if (!user) throw new AppError('El email no está registrado', 404);
+  if (user.email_verified) throw new AppError('El email ya está verificado', 400);
+
+  const verificationToken = generateVerificationToken();
+  const hashedToken = hashVerificationToken(verificationToken);
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 24); //Expira en 24 horas
+
+  await user.update({
+    email_verification_token: hashedToken,
+    email_verification_expires: expiresAt,
+  });
+
+  await sendVerificationEmail(user.email, verificationToken, user.nombre);
+
+  return {
+    message:
+      'Email de verificación reenviado correctamente. Por favor revisa tu bandeja de entrada.',
+  };
+}
+
 export async function updateProfileService(userId: string, profile: UpdateProfileDto) {
   const user = await User.findByPk(userId);
   if (!user) throw new AppError('Usuario no encontrado', 404);
@@ -281,7 +314,7 @@ export async function updateProfileService(userId: string, profile: UpdateProfil
   };
 }
 
-export async function getCurrentUserSevice(userId: string): Promise<GetCurrentUserResponse> {
+export async function getCurrentUserService(userId: string): Promise<GetCurrentUserResponse> {
   const user = await getCurrentUserCached(userId);
 
   if (!user) throw new AppError('Usuario no encontrado', 404);
