@@ -11,7 +11,7 @@ import type {
   GetCurrentUserResponse,
   LoginUserResponse,
   RegisterUserResponse,
-  LoginUserWithGoogleResponse,
+  UpdateProfileDto,
 } from '../types/auth.types.js';
 import { sequelize } from '../database/config.js';
 import bcrypt from 'bcrypt';
@@ -24,6 +24,8 @@ import {
 } from '../utils/jwt.util.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
 import { revokeAccessToken, revokeRefreshToken } from './token-revoke.service.js';
+import type { UserAttributes } from '../database/models/User.model.js';
+import { sendPasswordResetEmail } from './email.service.js';
 
 function mapUserToDto(user: User): CurrentUserDto {
   return {
@@ -262,4 +264,91 @@ export async function verifyEmail(token: string) {
 
   await invalidateUserAuthCache(user.id);
   return { message: 'Email verificado correctamente' };
+}
+
+export async function updateProfileService(userId: string, profile: UpdateProfileDto) {
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('Usuario no encontrado', 404);
+  await user.update(profile);
+
+  await user.reload();
+
+  await invalidateUserAuthCache(userId);
+
+  return {
+    message: 'Perfil actualizado correctamente',
+    user: user.get({ plain: true }),
+  };
+}
+
+export async function getCurrentUserSevice(userId: string): Promise<GetCurrentUserResponse> {
+  const user = await getCurrentUserCached(userId);
+
+  if (!user) throw new AppError('Usuario no encontrado', 404);
+  return user;
+}
+
+export async function requestPasswordResetService(email: string) {
+  const user = await User.findOne({ where: { email: email.toLowerCase().trim() } });
+  //Por seguridad, no revelamos si el email existe o no
+  if (!user)
+    return {
+      message: 'Si el email está registrado, se enviará el email de restablecimiento de contraseña',
+    };
+  const resetToken = generateVerificationToken();
+  const hashedToken = hashVerificationToken(resetToken);
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + 1); //Expira en 1 hora
+
+  await user.update({
+    password_reset_token: hashedToken,
+    password_reset_expires: expiresAt,
+  });
+
+  //Enviamos el email de restablecimiento de contraseña
+  await sendPasswordResetEmail(user.email, resetToken, user.nombre);
+
+  return {
+    message:
+      'Si el email está registrado, se enviará un correo con las instrucciones para restablecer tu contraseña',
+  };
+}
+
+export async function resetPasswordService(token: string, password: string) {
+  const hashedToken = hashVerificationToken(token);
+  const user = await User.findOne({ where: { password_reset_token: hashedToken } });
+  if (!user)
+    throw new AppError('No se pudo verificar el token, por favor solicita un nuevo token.', 400);
+
+  if (!user.password_reset_expires || user.password_reset_expires < new Date())
+    throw new AppError('El token ha expirado, por favor solicita un nuevo token.', 400);
+
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  await user.update({
+    password_hash: passwordHash,
+    password_reset_token: null,
+    password_reset_expires: null,
+  });
+
+  await invalidateUserAuthCache(user.id);
+  return {
+    message: 'Contraseña restablecida correctamente',
+  };
+}
+
+export async function completeTourService(userId: string, tourVersion: string) {
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('Usuario no encontrado', 404);
+
+  await user.update({
+    tour_version: tourVersion,
+    tour_completed_at: new Date(),
+  });
+
+  await invalidateUserAuthCache(userId);
+
+  return {
+    message: 'Tour marcado completado exitosamente',
+  };
 }

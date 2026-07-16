@@ -33,3 +33,11 @@ export interface LoginUserResponse {
 export interface LoginUserWithGoogleResponse extends LoginUserResponse {
   idToken: string;
 }
+
+export interface UpdateProfileDto {
+  nombre: string | null;
+  apellido: string | null;
+  telefono: string | null;
+  nombre_comercial: string | null;
+  logo_url: string | null;
+}

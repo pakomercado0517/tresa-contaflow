@@ -18,6 +18,11 @@ import {
   logoutUser,
   refreshAccessToken,
   verifyEmail,
+  updateProfileService,
+  getCurrentUserSevice,
+  requestPasswordResetService,
+  resetPasswordService,
+  completeTourService,
 } from '../services/auth-user.service.js';
 import { invalidateUserAuthCache } from '../services/cache.service.js';
 import {
@@ -27,6 +32,7 @@ import {
 } from '../services/token-revoke.service.js';
 import { validationResult } from 'express-validator';
 import { AppError } from '../utils/AppError.js';
+import type { UpdateProfileDto } from '../types/auth.types.js';
 
 export const validate = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
@@ -230,225 +236,30 @@ export async function resendVerificationEmail(req: Request, res: Response): Prom
   }
 }
 
-export async function updateProfile(req: AuthRequest, res: Response): Promise<void> {
+export async function updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        error: 'Usuario no autenticado',
-        message: 'Debes iniciar sesión para actualizar tu perfil',
-      });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    const result = await updateProfileService(userId, req.body as UpdateProfileDto);
 
-    const { nombre, apellido, telefono, logo_url, nombre_comercial } = req.body;
-
-    // Validar que al menos un campo esté presente
-    const hasAny =
-      nombre !== undefined ||
-      apellido !== undefined ||
-      telefono !== undefined ||
-      logo_url !== undefined ||
-      nombre_comercial !== undefined;
-    if (!hasAny) {
-      res.status(400).json({
-        error: 'Datos requeridos',
-        message:
-          'Debes proporcionar al menos un campo para actualizar (nombre, apellido, telefono, logo_url o nombre_comercial)',
-      });
-      return;
-    }
-
-    // Validar tipos de datos
-    if (nombre !== undefined && typeof nombre !== 'string') {
-      res.status(400).json({
-        error: 'Nombre inválido',
-        message: 'El nombre debe ser una cadena de texto',
-      });
-      return;
-    }
-
-    if (apellido !== undefined && typeof apellido !== 'string') {
-      res.status(400).json({
-        error: 'Apellido inválido',
-        message: 'El apellido debe ser una cadena de texto',
-      });
-      return;
-    }
-
-    if (telefono !== undefined && typeof telefono !== 'string') {
-      res.status(400).json({
-        error: 'Teléfono inválido',
-        message: 'El teléfono debe ser una cadena de texto',
-      });
-      return;
-    }
-
-    if (logo_url !== undefined && typeof logo_url !== 'string') {
-      res.status(400).json({
-        error: 'Logo URL inválido',
-        message: 'El logo_url debe ser una URL válida',
-      });
-      return;
-    }
-
-    if (nombre_comercial !== undefined && typeof nombre_comercial !== 'string') {
-      res.status(400).json({
-        error: 'Nombre comercial inválido',
-        message: 'El nombre comercial debe ser una cadena de texto',
-      });
-      return;
-    }
-
-    // Buscar usuario
-    let user;
-    try {
-      user = await User.findByPk(userId);
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Error de base de datos',
-        message: 'No se pudo encontrar el usuario. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    if (!user) {
-      res.status(404).json({
-        error: 'Usuario no encontrado',
-        message: 'El usuario no existe',
-      });
-      return;
-    }
-
-    // Preparar datos para actualizar (solo los campos que están definidos)
-    const updateData: {
-      nombre?: string | null;
-      apellido?: string | null;
-      telefono?: string | null;
-      logo_url?: string | null;
-      nombre_comercial?: string | null;
-    } = {};
-
-    if (nombre !== undefined) {
-      updateData.nombre = nombre.trim() || null;
-    }
-
-    if (apellido !== undefined) {
-      updateData.apellido = apellido.trim() || null;
-    }
-
-    if (telefono !== undefined) {
-      updateData.telefono = telefono.trim() || null;
-    }
-
-    if (logo_url !== undefined) {
-      updateData.logo_url = logo_url.trim() || null;
-    }
-
-    if (nombre_comercial !== undefined) {
-      updateData.nombre_comercial = nombre_comercial.trim() || null;
-    }
-
-    // Actualizar usuario
-    try {
-      await user.update(updateData);
-    } catch (updateError) {
-      console.error('Error al actualizar usuario:', updateError);
-      res.status(500).json({
-        error: 'Error al actualizar perfil',
-        message: 'No se pudo actualizar el perfil. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    // Recargar usuario actualizado
-    await user.reload();
-
-    await invalidateUserAuthCache(userId);
-
-    res.json({
-      message: 'Perfil actualizado correctamente',
-      user: {
-        id: user.id,
-        email: user.email,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        telefono: user.telefono,
-        email_verified: user.email_verified,
-        logo_url: user.logo_url,
-        nombre_comercial: user.nombre_comercial,
-      },
-    });
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado al actualizar perfil:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al actualizar perfil',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
 /**
  * Obtiene los datos del usuario autenticado actual
  */
-export async function getCurrentUser(req: AuthRequest, res: Response): Promise<void> {
+export async function getCurrentUser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token inválido o expirado',
-      });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    // Buscar usuario
-    let result;
-    try {
-      result = await getCurrentUserCached(userId);
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error al obtener el usuario',
-      });
-      return;
-    }
-
-    if (!result) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token inválido o expirado',
-      });
-      return;
-    }
-
-    res.json(result);
+    const result = await getCurrentUserSevice(userId);
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado al obtener usuario:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error al obtener el usuario',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Error al obtener el usuario',
-    });
+    next(error);
   }
 }
 
@@ -456,314 +267,42 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
  * Solicita el restablecimiento de contraseña
  * Envía un email con el token de reset
  */
-export async function requestPasswordReset(req: Request, res: Response): Promise<void> {
+export async function requestPasswordReset(req: Request, res: Response, next: NextFunction) {
   try {
     const { email } = req.body;
-
-    // Validación
-    if (!email || typeof email !== 'string') {
-      res.status(400).json({
-        error: 'Email requerido',
-        message: 'El email es obligatorio',
-      });
-      return;
-    }
-
-    // Buscar usuario
-    let user;
-    try {
-      user = await User.findOne({
-        where: { email: email.toLowerCase().trim() },
-      });
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Error de base de datos',
-        message: 'No se pudo buscar el usuario. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    // Por seguridad, no revelamos si el email existe o no
-    // Siempre retornamos éxito para evitar enumeración de emails
-    if (!user) {
-      res.status(200).json({
-        message:
-          'Si el email está registrado, se enviará un correo con las instrucciones para restablecer tu contraseña.',
-      });
-      return;
-    }
-
-    // Generar token de reset
-    const resetToken = generateVerificationToken();
-    const hashedToken = hashVerificationToken(resetToken);
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1); // Expira en 1 hora
-
-    // Actualizar token en la BD
-    try {
-      await user.update({
-        password_reset_token: hashedToken,
-        password_reset_expires: expiresAt,
-      });
-    } catch (updateError) {
-      console.error('Error al actualizar token de reset:', updateError);
-      res.status(500).json({
-        error: 'Error al generar token',
-        message: 'No se pudo generar el token de restablecimiento. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    // Enviar email de reset
-    try {
-      await sendPasswordResetEmail(user.email, resetToken, user.nombre);
-    } catch (emailError) {
-      console.error('Error al enviar email de reset:', emailError);
-      res.status(500).json({
-        error: 'Error al enviar email',
-        message:
-          'No se pudo enviar el email de restablecimiento. Por favor intenta nuevamente más tarde.',
-      });
-      return;
-    }
-
-    res.status(200).json({
-      message:
-        'Si el email está registrado, se enviará un correo con las instrucciones para restablecer tu contraseña.',
-    });
+    const result = await requestPasswordResetService(email);
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado al solicitar reset de contraseña:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al solicitar reset',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
 /**
  * Restablece la contraseña usando el token
  */
-export async function resetPassword(req: Request, res: Response): Promise<void> {
+export async function resetPassword(req: Request, res: Response, next: NextFunction) {
   try {
     const { token, password } = req.body;
 
-    // Validación
-    if (!token || typeof token !== 'string') {
-      res.status(400).json({
-        error: 'Token requerido',
-        message: 'El token de restablecimiento es obligatorio',
-      });
-      return;
-    }
+    const result = await resetPasswordService(token, password);
 
-    if (!password || typeof password !== 'string') {
-      res.status(400).json({
-        error: 'Contraseña requerida',
-        message: 'La nueva contraseña es obligatoria',
-      });
-      return;
-    }
-
-    // Validar longitud de contraseña
-    if (password.length < 8) {
-      res.status(400).json({
-        error: 'Contraseña inválida',
-        message: 'La contraseña debe tener al menos 8 caracteres',
-      });
-      return;
-    }
-
-    // Hashear el token recibido para comparar
-    const hashedToken = hashVerificationToken(token);
-
-    // Buscar usuario con este token
-    let user;
-    try {
-      user = await User.findOne({
-        where: {
-          password_reset_token: hashedToken,
-        },
-      });
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Error de base de datos',
-        message: 'No se pudo verificar el token. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    if (!user) {
-      res.status(400).json({
-        error: 'Token inválido',
-        message: 'El token proporcionado no es válido o ha expirado.',
-      });
-      return;
-    }
-
-    // Verificar si el token expiró
-    if (!user.password_reset_expires || user.password_reset_expires < new Date()) {
-      res.status(400).json({
-        error: 'El token ha expirado',
-        message: 'El token de restablecimiento ha expirado. Por favor solicita uno nuevo.',
-      });
-      return;
-    }
-
-    // Hashear nueva contraseña
-    let passwordHash: string;
-    try {
-      passwordHash = await bcrypt.hash(password, 10);
-    } catch (hashError) {
-      console.error('Error al hashear contraseña:', hashError);
-      res.status(500).json({
-        error: 'Error al procesar contraseña',
-        message: 'No se pudo procesar la nueva contraseña. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    // Actualizar contraseña y limpiar token
-    try {
-      await user.update({
-        password_hash: passwordHash,
-        password_reset_token: null,
-        password_reset_expires: null,
-      });
-    } catch (updateError) {
-      console.error('Error al actualizar contraseña:', updateError);
-      res.status(500).json({
-        error: 'Error al restablecer contraseña',
-        message: 'No se pudo restablecer la contraseña. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.json({
-      message:
-        'Contraseña restablecida correctamente. Ya puedes iniciar sesión con tu nueva contraseña.',
-    });
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado al restablecer contraseña:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al restablecer contraseña',
-        message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Error desconocido',
-      message: 'Ocurrió un error inesperado. Por favor intenta nuevamente.',
-    });
+    next(error);
   }
 }
 
 /**
  * Marca el tour como completado para el usuario autenticado
  */
-export async function completeTour(req: AuthRequest, res: Response): Promise<void> {
+export async function completeTour(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token inválido o expirado',
-      });
-      return;
-    }
+    const { tourVersion } = req.body;
 
-    const { tour_version } = req.body;
-
-    // Validación
-    if (!tour_version || typeof tour_version !== 'string' || tour_version.trim().length === 0) {
-      res.status(400).json({
-        error: 'Tour version requerida',
-        message: 'El campo tour_version es obligatorio y debe ser una cadena de texto válida',
-      });
-      return;
-    }
-
-    // Validar longitud máxima (50 caracteres)
-    if (tour_version.length > 50) {
-      res.status(400).json({
-        error: 'Tour version inválida',
-        message: 'El campo tour_version no puede exceder 50 caracteres',
-      });
-      return;
-    }
-
-    // Buscar usuario
-    let user;
-    try {
-      user = await User.findByPk(userId);
-    } catch (dbError) {
-      console.error('Error al buscar usuario:', dbError);
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error al obtener el usuario',
-      });
-      return;
-    }
-
-    if (!user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Usuario no encontrado',
-      });
-      return;
-    }
-
-    // Actualizar tour completado
-    try {
-      await user.update({
-        tour_version: tour_version.trim(),
-        tour_completed_at: new Date(),
-      });
-    } catch (updateError) {
-      console.error('Error al actualizar tour:', updateError);
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error al actualizar el estado del tour',
-      });
-      return;
-    }
-
-    await invalidateUserAuthCache(userId);
-
-    res.json({
-      message: 'Tour marcado como completado exitosamente',
-      data: {
-        tour_version: user.tour_version,
-        tour_completed_at: user.tour_completed_at,
-      },
-    });
+    const result = await completeTourService(userId!, tourVersion);
+    res.status(200).json({ ...result });
   } catch (error) {
-    console.error('Error inesperado al completar tour:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Error al completar el tour',
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Error al completar el tour',
-    });
+    next(error);
   }
 }
