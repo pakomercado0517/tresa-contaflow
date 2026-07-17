@@ -1,166 +1,307 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DiscountService } from "../services/discount.service";
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AppError } from '../utils/AppError.js';
 
 const {
-  mockCouponCreate,
-  mockPromotionCodesCreate,
-  mockGetClient,
-  mockDiscountCodeCreate,
-  mockDiscountCodeFindOne,
+  stripeCouponsCreate,
+  stripePromotionCreate,
+  stripePromotionList,
+  stripePromotionUpdate,
+  discountCodeCreate,
+  discountCodeFindByPk,
+  discountCodeFindAll,
+  discountCodeFindOne,
 } = vi.hoisted(() => ({
-  mockCouponCreate: vi.fn(),
-  mockPromotionCodesCreate: vi.fn(),
-  mockGetClient: vi.fn(),
-  mockDiscountCodeCreate: vi.fn(),
-  mockDiscountCodeFindOne: vi.fn(),
+  stripeCouponsCreate: vi.fn(),
+  stripePromotionCreate: vi.fn(),
+  stripePromotionList: vi.fn(),
+  stripePromotionUpdate: vi.fn(),
+  discountCodeCreate: vi.fn(),
+  discountCodeFindByPk: vi.fn(),
+  discountCodeFindAll: vi.fn(),
+  discountCodeFindOne: vi.fn(),
 }));
 
-vi.mock("../services/stripe.service.js", () => ({
+// El servicio obtiene el cliente de Stripe una sola vez al cargar el módulo,
+// por eso getClient debe devolver siempre las mismas funciones mock.
+vi.mock('../services/stripe.service.js', () => ({
   getStripeService: () => ({
-    getClient: mockGetClient,
+    getClient: () => ({
+      coupons: { create: stripeCouponsCreate },
+      promotionCodes: {
+        create: stripePromotionCreate,
+        list: stripePromotionList,
+        update: stripePromotionUpdate,
+      },
+    }),
   }),
 }));
 
-vi.mock("../database/models/index.js", () => ({
+vi.mock('../database/models/index.js', () => ({
   DiscountCode: {
-    create: mockDiscountCodeCreate,
-    findOne: mockDiscountCodeFindOne,
-    findAll: vi.fn(),
-    findByPk: vi.fn(),
+    create: discountCodeCreate,
+    findByPk: discountCodeFindByPk,
+    findAll: discountCodeFindAll,
+    findOne: discountCodeFindOne,
   },
 }));
 
-describe("DiscountService", () => {
+import {
+  createDiscountCodeService,
+  setDiscountActiveService,
+  listDiscountCodesService,
+  getPromotionCodeForCheckoutService,
+  recordRedemptionByPromotionCodeIdService,
+} from '../services/discount.service.js';
+
+async function catchError(promise: Promise<unknown>): Promise<AppError> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as AppError;
+  }
+  throw new Error('Se esperaba que la promesa fuera rechazada, pero se resolvió');
+}
+
+describe('discount.service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDiscountCodeFindOne.mockResolvedValue(null);
-    mockGetClient.mockReturnValue({
-      coupons: {
-        create: mockCouponCreate,
-      },
-      promotionCodes: {
-        create: mockPromotionCodesCreate,
-        list: vi.fn().mockResolvedValue({ data: [{ id: "promo_1", code: "TEST60" }] }),
-        update: vi.fn(),
-      },
-    });
-    mockCouponCreate.mockResolvedValue({ id: "coupon_1" });
-    mockPromotionCodesCreate.mockResolvedValue({
-      id: "promo_1",
-      code: "TEST60",
+    stripeCouponsCreate.mockResolvedValue({ id: 'coupon_1' });
+    stripePromotionCreate.mockResolvedValue({
+      id: 'promo_1',
+      code: 'TEST60',
       times_redeemed: 0,
       active: true,
     });
+    stripePromotionList.mockResolvedValue({ data: [{ id: 'promo_1', code: 'TEST60' }] });
+    stripePromotionUpdate.mockResolvedValue({});
+    discountCodeCreate.mockResolvedValue({ id: 'id-1' });
+    discountCodeFindOne.mockResolvedValue(null);
   });
 
-  describe("createDiscountCode", () => {
-    it("persiste trial_days cuando se envía trialDays en el input", async () => {
-      const fakeRecord = {
-        id: "id-1",
-        code: "TEST60",
-        trial_days: 60,
-      };
-      mockDiscountCodeCreate.mockResolvedValue(fakeRecord);
-
-      const service = new DiscountService();
-      await service.createDiscountCode(
-        {
-          code: "TEST60",
-          duration: "once",
-          percentOff: 100,
-          trialDays: 60,
-        },
-        "user-uuid"
+  describe('createDiscountCodeService', () => {
+    it('lanza AppError 400 si se envían percentOff y amountOff a la vez', async () => {
+      const error = await catchError(
+        createDiscountCodeService(
+          { code: 'X', duration: 'once', percentOff: 10, amountOff: 100, currency: 'mxn' },
+          'user-uuid'
+        )
       );
 
-      expect(mockDiscountCodeCreate).toHaveBeenCalledTimes(1);
-      const createCall = mockDiscountCodeCreate.mock.calls[0][0];
-      expect(createCall.trial_days).toBe(60);
+      expect(error).toBeInstanceOf(AppError);
+      expect(error.status).toBe(400);
+      expect(stripeCouponsCreate).not.toHaveBeenCalled();
     });
 
-    it("persiste trial_days null cuando no se envía trialDays en el input", async () => {
-      const fakeRecord = {
-        id: "id-1",
-        code: "PROMO20",
-        trial_days: null,
-      };
-      mockDiscountCodeCreate.mockResolvedValue(fakeRecord);
-
-      const service = new DiscountService();
-      await service.createDiscountCode(
-        {
-          code: "PROMO20",
-          duration: "once",
-          percentOff: 20,
-        },
-        "user-uuid"
+    it('lanza AppError 400 si no se envía ni percentOff ni amountOff', async () => {
+      const error = await catchError(
+        createDiscountCodeService({ code: 'X', duration: 'once' }, 'user-uuid')
       );
 
-      expect(mockDiscountCodeCreate).toHaveBeenCalledTimes(1);
-      const createCall = mockDiscountCodeCreate.mock.calls[0][0];
-      expect(createCall.trial_days).toBeNull();
+      expect(error.status).toBe(400);
     });
 
-    it("persiste trial_days 0 cuando se envía trialDays: 0 (sin trial con ese cupón)", async () => {
-      const fakeRecord = {
-        id: "id-1",
-        code: "NOTRIAL",
-        trial_days: 0,
-      };
-      mockDiscountCodeCreate.mockResolvedValue(fakeRecord);
-
-      const service = new DiscountService();
-      await service.createDiscountCode(
-        {
-          code: "NOTRIAL",
-          duration: "once",
-          percentOff: 10,
-          trialDays: 0,
-        },
-        "user-uuid"
+    it('lanza AppError 400 si amountOff está presente sin currency', async () => {
+      const error = await catchError(
+        createDiscountCodeService({ code: 'X', duration: 'once', amountOff: 100 }, 'user-uuid')
       );
 
-      expect(mockDiscountCodeCreate).toHaveBeenCalledTimes(1);
-      const createCall = mockDiscountCodeCreate.mock.calls[0][0];
-      expect(createCall.trial_days).toBe(0);
+      expect(error.status).toBe(400);
+    });
+
+    it('crea cupón, promotion code y persiste el registro', async () => {
+      await createDiscountCodeService(
+        { code: 'TEST60', duration: 'once', percentOff: 100 },
+        'user-uuid'
+      );
+
+      expect(stripeCouponsCreate).toHaveBeenCalledTimes(1);
+      expect(stripePromotionCreate).toHaveBeenCalledTimes(1);
+      expect(discountCodeCreate).toHaveBeenCalledTimes(1);
+      const createCall = discountCodeCreate.mock.calls[0]?.[0];
+      expect(createCall.stripe_coupon_id).toBe('coupon_1');
+      expect(createCall.stripe_promotion_code_id).toBe('promo_1');
+      expect(createCall.created_by).toBe('user-uuid');
+    });
+
+    it('persiste trial_days cuando se envía trialDays', async () => {
+      await createDiscountCodeService(
+        { code: 'TEST60', duration: 'once', percentOff: 100, trialDays: 60 },
+        'user-uuid'
+      );
+
+      expect(discountCodeCreate.mock.calls[0]?.[0].trial_days).toBe(60);
+    });
+
+    it('persiste trial_days 0 cuando se envía trialDays: 0', async () => {
+      await createDiscountCodeService(
+        { code: 'NOTRIAL', duration: 'once', percentOff: 10, trialDays: 0 },
+        'user-uuid'
+      );
+
+      expect(discountCodeCreate.mock.calls[0]?.[0].trial_days).toBe(0);
+    });
+
+    it('persiste trial_days null cuando no se envía trialDays', async () => {
+      await createDiscountCodeService(
+        { code: 'PROMO20', duration: 'once', percentOff: 20 },
+        'user-uuid'
+      );
+
+      expect(discountCodeCreate.mock.calls[0]?.[0].trial_days).toBeNull();
     });
   });
 
-  describe("getPromotionCodeForCheckout", () => {
-    it("retorna trialDays del registro cuando existe", async () => {
-      mockDiscountCodeFindOne.mockResolvedValue({
-        code: "TEST60",
+  describe('setDiscountActiveService', () => {
+    it('lanza AppError 404 si el código no existe', async () => {
+      discountCodeFindByPk.mockResolvedValue(null);
+
+      const error = await catchError(setDiscountActiveService('id-1', true));
+
+      expect(error.status).toBe(404);
+      expect(stripePromotionUpdate).not.toHaveBeenCalled();
+    });
+
+    it('actualiza estado en Stripe y en el registro cuando existe', async () => {
+      const update = vi.fn();
+      discountCodeFindByPk.mockResolvedValue({
+        id: 'id-1',
+        stripe_promotion_code_id: 'promo_1',
+        update,
+      });
+
+      await setDiscountActiveService('id-1', false);
+
+      expect(stripePromotionUpdate).toHaveBeenCalledWith('promo_1', { active: false });
+      expect(update).toHaveBeenCalledWith({ active: false });
+    });
+  });
+
+  describe('listDiscountCodesService', () => {
+    it('consulta con filtros de code y active y ordena por created_at DESC', async () => {
+      discountCodeFindAll.mockResolvedValue([]);
+
+      await listDiscountCodesService({ code: 'TEST60', active: true });
+
+      expect(discountCodeFindAll).toHaveBeenCalledWith({
+        where: { code: 'TEST60', active: true },
+        order: [['created_at', 'DESC']],
+      });
+    });
+
+    it('consulta sin filtros cuando no se proveen', async () => {
+      discountCodeFindAll.mockResolvedValue([]);
+
+      await listDiscountCodesService({});
+
+      expect(discountCodeFindAll).toHaveBeenCalledWith({
+        where: {},
+        order: [['created_at', 'DESC']],
+      });
+    });
+  });
+
+  describe('getPromotionCodeForCheckoutService', () => {
+    it('retorna null si el registro no existe', async () => {
+      discountCodeFindOne.mockResolvedValue(null);
+
+      expect(await getPromotionCodeForCheckoutService('X')).toBeNull();
+    });
+
+    it('retorna null si el código está inactivo', async () => {
+      discountCodeFindOne.mockResolvedValue({ active: false });
+
+      expect(await getPromotionCodeForCheckoutService('X')).toBeNull();
+    });
+
+    it('retorna null si el código está expirado', async () => {
+      discountCodeFindOne.mockResolvedValue({
+        active: true,
+        expires_at: new Date(Date.now() - 1000),
+      });
+
+      expect(await getPromotionCodeForCheckoutService('X')).toBeNull();
+    });
+
+    it('retorna null si se alcanzó el máximo de redenciones', async () => {
+      discountCodeFindOne.mockResolvedValue({
+        active: true,
+        expires_at: null,
+        max_redemptions: 5,
+        times_redeemed: 5,
+      });
+
+      expect(await getPromotionCodeForCheckoutService('X')).toBeNull();
+    });
+
+    it('retorna null si Stripe no encuentra el promotion code activo', async () => {
+      discountCodeFindOne.mockResolvedValue({
+        code: 'TEST60',
         active: true,
         expires_at: null,
         max_redemptions: null,
         times_redeemed: 0,
         trial_days: 60,
-        stripe_promotion_code_id: "promo_1",
       });
+      stripePromotionList.mockResolvedValue({ data: [] });
 
-      const service = new DiscountService();
-      const result = await service.getPromotionCodeForCheckout("TEST60");
-
-      expect(result).not.toBeNull();
-      expect(result?.trialDays).toBe(60);
+      expect(await getPromotionCodeForCheckoutService('TEST60')).toBeNull();
     });
 
-    it("retorna trialDays null cuando el registro no tiene trial_days", async () => {
-      mockDiscountCodeFindOne.mockResolvedValue({
-        code: "PROMO20",
+    it('retorna el lookup con trialDays cuando es válido', async () => {
+      discountCodeFindOne.mockResolvedValue({
+        code: 'TEST60',
         active: true,
         expires_at: null,
         max_redemptions: null,
         times_redeemed: 0,
-        trial_days: null,
-        stripe_promotion_code_id: "promo_1",
+        trial_days: 60,
       });
 
-      const service = new DiscountService();
-      const result = await service.getPromotionCodeForCheckout("PROMO20");
+      const result = await getPromotionCodeForCheckoutService('TEST60');
 
-      expect(result).not.toBeNull();
-      expect(result?.trialDays).toBeNull();
+      expect(result).toEqual({ promotionCodeId: 'promo_1', code: 'TEST60', trialDays: 60 });
+    });
+  });
+
+  describe('recordRedemptionByPromotionCodeIdService', () => {
+    it('no hace nada si el registro no existe', async () => {
+      discountCodeFindOne.mockResolvedValue(null);
+
+      await recordRedemptionByPromotionCodeIdService('promo_1');
+
+      expect(stripePromotionUpdate).not.toHaveBeenCalled();
+    });
+
+    it('incrementa times_redeemed sin desactivar cuando está por debajo del máximo', async () => {
+      const update = vi.fn();
+      discountCodeFindOne.mockResolvedValue({
+        stripe_promotion_code_id: 'promo_1',
+        times_redeemed: 1,
+        max_redemptions: 5,
+        active: true,
+        update,
+      });
+
+      await recordRedemptionByPromotionCodeIdService('promo_1');
+
+      expect(stripePromotionUpdate).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledWith({ times_redeemed: 2, active: true });
+    });
+
+    it('desactiva en Stripe y en el registro al alcanzar el máximo', async () => {
+      const update = vi.fn();
+      discountCodeFindOne.mockResolvedValue({
+        stripe_promotion_code_id: 'promo_1',
+        times_redeemed: 4,
+        max_redemptions: 5,
+        active: true,
+        update,
+      });
+
+      await recordRedemptionByPromotionCodeIdService('promo_1');
+
+      expect(stripePromotionUpdate).toHaveBeenCalledWith('promo_1', { active: false });
+      expect(update).toHaveBeenCalledWith({ times_redeemed: 5, active: false });
     });
   });
 });

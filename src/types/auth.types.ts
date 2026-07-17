@@ -18,16 +18,29 @@ export interface GetCurrentUserResponse {
   user: CurrentUserDto;
 }
 
+/**
+ * Usuario sin campos sensibles, apto para exponer en respuestas de la API.
+ * Omite el hash de contraseña y los tokens de verificación/reset.
+ */
+export type SafeUser = Omit<
+  UserAttributes,
+  | 'password_hash'
+  | 'email_verification_token'
+  | 'email_verification_expires'
+  | 'password_reset_token'
+  | 'password_reset_expires'
+>;
+
 export interface RegisterUserResponse {
   message: string;
-  user: UserAttributes; //Usamos la interfaz del modelo User
+  user: SafeUser;
 }
 
 export interface LoginUserResponse {
   message: string;
   accessToken: string;
   refreshToken: string;
-  user: UserAttributes;
+  user: SafeUser;
 }
 
 export interface LoginUserWithGoogleResponse extends LoginUserResponse {

@@ -1,4 +1,14 @@
 import request from "supertest";
+
+// Mockeamos el servicio de email: en tests no queremos enviar correos reales
+// (la API key de Brevo es dummy y haría fallar el flujo de registro con 500).
+vi.mock("../services/email.service.js", () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
+  sendPublicReportInvitation: vi.fn().mockResolvedValue(undefined),
+}));
+
 import app from "../server";
 import { cleanDatabase, closeDatabase } from "./helpers/test-db";
 import { createTestUser, generateTestTokens, expectSuccess, expectError } from "./helpers/test-helpers";

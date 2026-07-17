@@ -23,34 +23,34 @@ import {
  * NOTA: Solo elimina datos, no recrea las tablas (para evitar conflictos con la BD de producción)
  */
 export async function cleanDatabase(): Promise<void> {
+  // Un único TRUNCATE ... CASCADE limpia todas las tablas en un solo round-trip.
+  // Esto es mucho más rápido y confiable que ~19 DELETE/TRUNCATE secuenciales
+  // sobre la conexión lenta de la BD de test (Railway tarda ~6s solo en conectar).
+  const models = [
+    ManualIncome,
+    PaymentComplementItem,
+    ProfilePaymentComplement,
+    PaymentComplement,
+    AccruedExpense,
+    Invoice,
+    Payroll,
+    Period,
+    SubscriptionPlugin,
+    PaymentEvent,
+    Subscription,
+    DiscountCode,
+    SatSearchLog,
+    Plugin,
+    Profile,
+    User,
+  ];
+
+  const tableNames = models.map((model) => `"${model.tableName}"`).join(", ");
+
   try {
-    // Desactivar foreign keys temporalmente para poder eliminar en cualquier orden
-    await sequelize.query("SET session_replication_role = 'replica';");
-    
-    // Eliminar en orden inverso de dependencias (hijos primero, padres al final)
-    await ManualIncome.destroy({ where: {}, truncate: true, cascade: true });
-    await PaymentComplementItem.destroy({ where: {}, truncate: true, cascade: true });
-    await ProfilePaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
-    await PaymentComplement.destroy({ where: {}, truncate: true, cascade: true });
-    await AccruedExpense.destroy({ where: {}, truncate: true, cascade: true });
-    await Invoice.destroy({ where: {}, truncate: true, cascade: true });
-    await Payroll.destroy({ where: {}, truncate: true, cascade: true });
-    await Period.destroy({ where: {}, truncate: true, cascade: true });
-    await SubscriptionPlugin.destroy({ where: {}, truncate: true, cascade: true });
-    await PaymentEvent.destroy({ where: {}, truncate: true, cascade: true });
-    await Subscription.destroy({ where: {}, truncate: true, cascade: true });
-    await DiscountCode.destroy({ where: {}, truncate: true, cascade: true });
-    await SatSearchLog.destroy({ where: {}, truncate: true, cascade: true });
-    await Plugin.destroy({ where: {}, truncate: true, cascade: true });
-    await Profile.destroy({ where: {}, truncate: true, cascade: true });
-    await User.destroy({ where: {}, truncate: true, cascade: true });
-    
-    // Reactivar foreign keys
-    await sequelize.query("SET session_replication_role = 'origin';");
+    await sequelize.query(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`);
   } catch (error) {
     console.error("Error cleaning database:", error);
-    // Asegurar que foreign keys se reactiven incluso si hay error
-    await sequelize.query("SET session_replication_role = 'origin';");
     throw error;
   }
 }

@@ -11,6 +11,7 @@ import type {
   GetCurrentUserResponse,
   LoginUserResponse,
   RegisterUserResponse,
+  SafeUser,
   UpdateProfileDto,
 } from '../types/auth.types.js';
 import { sequelize } from '../database/config.js';
@@ -23,8 +24,25 @@ import {
   verifyRefreshToken,
 } from '../utils/jwt.util.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
-import { revokeAccessToken, revokeRefreshToken } from './token-revoke.service.js';
+import {
+  revokeAccessToken,
+  revokeRefreshToken,
+  isRefreshTokenRevoked,
+} from './token-revoke.service.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from './email.service.js';
+
+/**
+ * Elimina los campos sensibles del usuario antes de exponerlo en una respuesta.
+ */
+function sanitizeUser(user: User): SafeUser {
+  const plain = user.get({ plain: true }) as unknown as Record<string, unknown>;
+  delete plain.password_hash;
+  delete plain.email_verification_token;
+  delete plain.email_verification_expires;
+  delete plain.password_reset_token;
+  delete plain.password_reset_expires;
+  return plain as unknown as SafeUser;
+}
 
 function mapUserToDto(user: User): CurrentUserDto {
   return {
@@ -137,7 +155,7 @@ export async function registerUser(user: User): Promise<RegisterUserResponse> {
   return {
     message:
       'Usuario registrado correctamente. Se ha enviado un email de verificación, revisa tu bandeja de entrada.',
-    user: newUser.get({ plain: true }),
+    user: sanitizeUser(newUser),
   };
 }
 
@@ -147,7 +165,7 @@ export async function loginUser(userDto: User): Promise<LoginUserResponse> {
   const findUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
 
   if (!findUser)
-    throw new AppError('Credenciales inválidas, por favor verifica tus credenciales.', 404);
+    throw new AppError('Credenciales inválidas, por favor verifica tus credenciales.', 401);
   if (!findUser.password_hash)
     throw new AppError('Esta cuenta se registró con Google. Inicia sesión con Google.', 401);
 
@@ -169,7 +187,7 @@ export async function loginUser(userDto: User): Promise<LoginUserResponse> {
     message: 'Login exitoso',
     accessToken,
     refreshToken,
-    user: findUser.get({ plain: true }),
+    user: sanitizeUser(findUser),
   };
 }
 
@@ -216,7 +234,7 @@ export async function loginUserWithGoogle(idToken: string): Promise<LoginUserRes
     message: 'Login exitoso',
     accessToken: generateAccessToken(tokenPayload),
     refreshToken: generateRefreshToken(tokenPayload),
-    user: googleUser.get({ plain: true }),
+    user: sanitizeUser(googleUser),
   };
 }
 
@@ -245,8 +263,21 @@ export async function logoutUser(userId: string, refreshToken: string, accessTok
 }
 
 export async function refreshAccessToken(refreshToken: string) {
-  const payload = verifyRefreshToken(refreshToken);
-  if (!payload) throw new AppError('El token de renovación no es válido', 401);
+  let payload: ReturnType<typeof verifyRefreshToken>;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch (error) {
+    throw new AppError(
+      error instanceof Error && error.name === 'TokenExpiredError'
+        ? 'Tu sesión ha expirado'
+        : 'El token de renovación no es válido',
+      401
+    );
+  }
+
+  //Rechazamos tokens revocados (por ejemplo, tras un logout)
+  if (await isRefreshTokenRevoked(refreshToken))
+    throw new AppError('El token de renovación ha sido revocado', 401);
 
   const accessToken = generateAccessToken({
     userId: payload.userId,
@@ -310,7 +341,7 @@ export async function updateProfileService(userId: string, profile: UpdateProfil
 
   return {
     message: 'Perfil actualizado correctamente',
-    user: user.get({ plain: true }),
+    user: sanitizeUser(user),
   };
 }
 

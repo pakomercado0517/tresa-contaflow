@@ -43,6 +43,7 @@ vi.mock('../utils/firebase.util.js', () => ({
 vi.mock('../services/token-revoke.service.js', () => ({
   revokeAccessToken: vi.fn(),
   revokeRefreshToken: vi.fn(),
+  isRefreshTokenRevoked: vi.fn(),
 }));
 
 vi.mock('../services/email.service.js', () => ({
@@ -62,6 +63,7 @@ import bcrypt from 'bcrypt';
 import { User, Subscription } from '../database/models/index.js';
 import { sequelize } from '../database/config.js';
 import { verifyRefreshToken } from '../utils/jwt.util.js';
+import { isRefreshTokenRevoked } from '../services/token-revoke.service.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
 import { sendVerificationEmail } from '../services/email.service.js';
 import {
@@ -142,14 +144,14 @@ describe('auth-user.service (rutas de error con AppError)', () => {
   });
 
   describe('loginUser', () => {
-    it('lanza AppError 404 si el usuario no existe', async () => {
+    it('lanza AppError 401 si el usuario no existe (anti-enumeration)', async () => {
       vi.mocked(User.findOne).mockResolvedValue(null);
 
       const error = await catchError(
         loginUser({ email: 'a@b.com', password: 'password123' } as never)
       );
 
-      expect(error.status).toBe(404);
+      expect(error.status).toBe(401);
     });
 
     it('lanza AppError 401 si la cuenta se registró con Google (sin password_hash)', async () => {
@@ -229,16 +231,28 @@ describe('auth-user.service (rutas de error con AppError)', () => {
   });
 
   describe('refreshAccessToken', () => {
-    it('lanza AppError 401 si el payload es nulo', async () => {
-      vi.mocked(verifyRefreshToken).mockReturnValue(null as never);
+    it('lanza AppError 401 si el token es inválido (verifyRefreshToken lanza)', async () => {
+      vi.mocked(verifyRefreshToken).mockImplementation(() => {
+        throw new Error('invalid signature');
+      });
 
       const error = await catchError(refreshAccessToken('refresh'));
 
       expect(error.status).toBe(401);
     });
 
-    it('retorna un nuevo access token cuando el refresh es válido', async () => {
+    it('lanza AppError 401 si el token está revocado (deny-list)', async () => {
       vi.mocked(verifyRefreshToken).mockReturnValue({ userId: 'u1', email: 'x@y.com' } as never);
+      vi.mocked(isRefreshTokenRevoked).mockResolvedValue(true);
+
+      const error = await catchError(refreshAccessToken('refresh'));
+
+      expect(error.status).toBe(401);
+    });
+
+    it('retorna un nuevo access token cuando el refresh es válido y no está revocado', async () => {
+      vi.mocked(verifyRefreshToken).mockReturnValue({ userId: 'u1', email: 'x@y.com' } as never);
+      vi.mocked(isRefreshTokenRevoked).mockResolvedValue(false);
 
       const result = await refreshAccessToken('refresh');
 

@@ -18,7 +18,11 @@ export default defineConfig({
         "src/database/config.cjs",
       ],
     },
-    testTimeout: 30000,
+    testTimeout: 60000,
+    // La BD de test (Railway) es lenta para conectar (~6s), así que los hooks
+    // beforeAll/afterAll que hacen cleanDatabase() necesitan más margen que el
+    // default de 10s.
+    hookTimeout: 60000,
     pool: "forks",
     // Ejecutar tests de forma secuencial para evitar conflictos de BD
     fileParallelism: false,
