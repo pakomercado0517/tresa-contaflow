@@ -16,12 +16,16 @@ import { AppError } from '../utils/AppError.js';
 export async function getAccruedExpenses(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    const { periodId, type } = req.query;
+    const { period_id, type } = req.query;
 
-    if (!periodId || typeof periodId !== 'string')
+    if (!period_id || typeof period_id !== 'string')
       throw new AppError('periodId es requerido y debe ser una cadena de texto', 400);
 
-    const result = await getAccruedExpensesService(userId!, periodId, (type as string) || 'MANUAL');
+    const result = await getAccruedExpensesService(
+      userId!,
+      period_id,
+      (type as string) || 'MANUAL'
+    );
     res.status(200).json(result);
   } catch (error) {
     next(error);

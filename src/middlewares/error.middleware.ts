@@ -1,16 +1,38 @@
 import { type Request, type Response, type NextFunction } from 'express';
+import { AppError } from '../utils/AppError.js';
 
-export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('🔥 Error inesperado:', err);
+interface ErrorResponseBody {
+  status: 'error';
+  error: string;
+  message: string;
+  stack?: string;
+}
 
-  //manejamos errores específicos aquí...
-  const statusCode = err.status || 500;
-  const message = err.message || 'Ocurrió un error inesperado en el servidor';
+export const errorHandler = (
+  err: unknown,
+  _req: Request,
+  res: Response,
+  _next: NextFunction
+): void => {
+  const isAppError = err instanceof AppError;
+  const statusCode = isAppError ? err.status : 500;
+  const message =
+    err instanceof Error ? err.message : 'Ocurrió un error inesperado en el servidor';
 
-  res.status(statusCode).json({
+  // Solo logueamos los errores no controlados (no operacionales)
+  if (!isAppError) {
+    console.error('🔥 Error inesperado:', err);
+  }
+
+  const body: ErrorResponseBody = {
     status: 'error',
+    error: message,
     message,
-    //solo para el stack en desarrollo
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-  });
+  };
+
+  if (process.env.NODE_ENV === 'development' && err instanceof Error && err.stack) {
+    body.stack = err.stack;
+  }
+
+  res.status(statusCode).json(body);
 };

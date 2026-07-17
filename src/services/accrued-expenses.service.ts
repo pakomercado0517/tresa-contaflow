@@ -7,9 +7,9 @@ import type {
   UpdateAccruedExpenseDto,
 } from '../types/accrued-expenses.types.js';
 
-export async function getAccruedExpensesService(userId: string, periodId: string, type: string) {
+export async function getAccruedExpensesService(userId: string, period_id: string, type: string) {
   const period = await Period.findOne({
-    where: { id: periodId },
+    where: { id: period_id },
     include: [{ model: Profile, as: 'profile', where: { user_id: userId }, attributes: ['id'] }],
   });
   if (!period) throw new AppError('Periodo no encontrado o no pertenece al usuario', 404);
@@ -21,7 +21,7 @@ export async function getAccruedExpensesService(userId: string, periodId: string
   const expenses = await AccruedExpense.findAll({
     where: {
       profile_id: period.profile_id,
-      tipo_origen: type || 'MANUAL',
+      tipo_origen: type.toUpperCase().trim() || 'MANUAL',
       fecha: { [Op.gte]: start, [Op.lt]: end },
     },
     order: [['fecha', 'DESC']],

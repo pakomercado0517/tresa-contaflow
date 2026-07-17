@@ -2,11 +2,11 @@
  * Tipos para códigos de descuento
  */
 
-export type DiscountCodeStatus = "ACTIVE" | "INACTIVE" | "EXPIRED";
+export type DiscountCodeStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
 
 export interface DiscountCodeCreateInput {
   code: string;
-  duration: "once" | "repeating" | "forever";
+  duration: 'once' | 'repeating' | 'forever';
   durationInMonths?: number;
   percentOff?: number;
   amountOff?: number;
@@ -38,4 +38,10 @@ export interface DiscountCodeResponse {
 
 export interface DiscountCodeApplyInput {
   code: string;
+}
+
+export interface PromotionCodeLookup {
+  promotionCodeId: string;
+  code: string;
+  trialDays: number | null;
 }
