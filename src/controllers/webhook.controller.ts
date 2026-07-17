@@ -4,7 +4,7 @@ import { getStripeService } from '../services/stripe.service.js';
 import { Subscription, PaymentEvent, User } from '../database/models/index.js';
 import type { Plan } from '../constants/plans.constants.js';
 import { PLAN_PRICES } from '../constants/plans.constants.js';
-import { DiscountService } from '../services/discount.service.js';
+import { recordRedemptionByPromotionCodeIdService } from '../services/discount.service.js';
 
 /**
  * Endpoint para recibir webhooks de Stripe
@@ -216,8 +216,7 @@ async function handleCheckoutSessionCompleted(event: Stripe.Event): Promise<void
 
   const promotionCodeId = session.metadata?.promotionCodeId;
   if (promotionCodeId) {
-    const discountService = new DiscountService();
-    await discountService.recordRedemptionByPromotionCodeId(promotionCodeId);
+    await recordRedemptionByPromotionCodeIdService(promotionCodeId);
   }
 }
 

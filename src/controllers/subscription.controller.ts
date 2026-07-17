@@ -12,8 +12,8 @@ import {
 import { SubscriptionService } from '../services/subscription.service.js';
 import { PlanLimitsService } from '../services/plan-limits.service.js';
 import { User } from '../database/models/index.js';
-import { DiscountService } from '../services/discount.service.js';
 import { resolveTrialDaysForCheckout } from '../utils/subscription-trial.util.js';
+import { getPromotionCodeForCheckoutService } from '../services/discount.service.js';
 
 /**
  * Crea una sesión de checkout de Stripe para suscribirse a un plan
@@ -87,8 +87,7 @@ export async function createCheckoutSession(req: AuthRequest, res: Response): Pr
     let promotionTrialDays: number | null = null;
 
     if (normalizedPromotionCode) {
-      const discountService = new DiscountService();
-      const promotion = await discountService.getPromotionCodeForCheckout(normalizedPromotionCode);
+      const promotion = await getPromotionCodeForCheckoutService(normalizedPromotionCode);
 
       if (!promotion) {
         res.status(400).json({
