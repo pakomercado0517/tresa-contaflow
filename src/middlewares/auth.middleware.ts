@@ -2,10 +2,13 @@ import { type Response, type NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.util.js';
 import { isAccessTokenRevoked } from '../services/token-revoke.service.js';
 import type { Request } from 'express';
+import type { FileArray, UploadedFile } from 'express-fileupload';
 
 export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
+  files?: FileArray | null | undefined;
+  xmlFile?: UploadedFile | undefined;
 }
 
 export async function authenticateToken(

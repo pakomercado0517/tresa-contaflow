@@ -1,21 +1,21 @@
-import * as brevo from "@getbrevo/brevo";
+import * as brevo from '@getbrevo/brevo';
 
 if (!process.env.BREVO_API_KEY) {
-  throw new Error("BREVO_API_KEY no está definida en las variables de entorno");
+  throw new Error('BREVO_API_KEY no está definida en las variables de entorno');
 }
 
 // Crear instancia de la API
 const apiInstance = new brevo.TransactionalEmailsApi();
 apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || "noreply@tresacontafy.com";
-const FROM_NAME = process.env.BREVO_FROM_NAME || "Tresa Contafy";
-const REDACTED_VALUE = "[REDACTED]";
+const FROM_EMAIL = process.env.BREVO_FROM_EMAIL || 'noreply@tresacontafy.com';
+const FROM_NAME = process.env.BREVO_FROM_NAME || 'Tresa Contafy';
+const REDACTED_VALUE = '[REDACTED]';
 
 type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function getNestedRecord(source: UnknownRecord, key: string): UnknownRecord | null {
@@ -25,30 +25,30 @@ function getNestedRecord(source: UnknownRecord, key: string): UnknownRecord | nu
 
 function getStringValue(source: UnknownRecord, key: string): string | null {
   const value = source[key];
-  return typeof value === "string" ? value : null;
+  return typeof value === 'string' ? value : null;
 }
 
 function getNumberValue(source: UnknownRecord, key: string): number | null {
   const value = source[key];
-  return typeof value === "number" ? value : null;
+  return typeof value === 'number' ? value : null;
 }
 
 function serializeHeaderValue(value: unknown): string {
   if (Array.isArray(value)) {
-    return value.map((entry: unknown) => String(entry)).join(", ");
+    return value.map((entry: unknown) => String(entry)).join(', ');
   }
   return String(value);
 }
 
 function sanitizeHeaders(headers: UnknownRecord): Record<string, string> {
   const sensitiveHeaderKeys: Set<string> = new Set<string>([
-    "api-key",
-    "authorization",
-    "proxy-authorization",
-    "x-api-key",
-    "x-auth-token",
-    "cookie",
-    "set-cookie",
+    'api-key',
+    'authorization',
+    'proxy-authorization',
+    'x-api-key',
+    'x-auth-token',
+    'cookie',
+    'set-cookie',
   ]);
 
   const sanitizedHeaders: Record<string, string> = {};
@@ -63,22 +63,22 @@ function sanitizeHeaders(headers: UnknownRecord): Record<string, string> {
 
 function buildSafeEmailErrorLog(error: unknown): UnknownRecord {
   const safeLog: UnknownRecord = {
-    message: error instanceof Error ? error.message : "Error desconocido al enviar email",
+    message: error instanceof Error ? error.message : 'Error desconocido al enviar email',
   };
 
   if (!isRecord(error)) {
     return safeLog;
   }
 
-  const code = getStringValue(error, "code");
+  const code = getStringValue(error, 'code');
   if (code) {
     safeLog.code = code;
   }
 
-  const response = getNestedRecord(error, "response");
+  const response = getNestedRecord(error, 'response');
   if (response) {
-    const status = getNumberValue(response, "status");
-    const statusText = getStringValue(response, "statusText");
+    const status = getNumberValue(response, 'status');
+    const statusText = getStringValue(response, 'statusText');
 
     if (status !== null) {
       safeLog.status = status;
@@ -87,10 +87,10 @@ function buildSafeEmailErrorLog(error: unknown): UnknownRecord {
       safeLog.statusText = statusText;
     }
 
-    const responseData = getNestedRecord(response, "data");
+    const responseData = getNestedRecord(response, 'data');
     if (responseData) {
-      const providerMessage = getStringValue(responseData, "message");
-      const providerCode = getStringValue(responseData, "code");
+      const providerMessage = getStringValue(responseData, 'message');
+      const providerCode = getStringValue(responseData, 'code');
 
       if (providerMessage) {
         safeLog.providerMessage = providerMessage;
@@ -101,10 +101,10 @@ function buildSafeEmailErrorLog(error: unknown): UnknownRecord {
     }
   }
 
-  const config = getNestedRecord(error, "config");
+  const config = getNestedRecord(error, 'config');
   if (config) {
-    const method = getStringValue(config, "method");
-    const url = getStringValue(config, "url");
+    const method = getStringValue(config, 'method');
+    const url = getStringValue(config, 'url');
 
     if (method) {
       safeLog.method = method;
@@ -113,7 +113,7 @@ function buildSafeEmailErrorLog(error: unknown): UnknownRecord {
       safeLog.url = url;
     }
 
-    const headers = getNestedRecord(config, "headers");
+    const headers = getNestedRecord(config, 'headers');
     if (headers) {
       safeLog.headers = sanitizeHeaders(headers);
     }
@@ -128,6 +128,8 @@ interface SendEmailOptions {
   htmlContent: string;
   textContent?: string;
 }
+
+const currentYear = new Date().getFullYear();
 
 export async function sendEmail(options: SendEmailOptions): Promise<void> {
   try {
@@ -147,8 +149,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
 
     await apiInstance.sendTransacEmail(sendSmtpEmail);
   } catch (error) {
-    console.error("Error al enviar email:", buildSafeEmailErrorLog(error));
-    throw new Error("Error al enviar email");
+    console.error('Error al enviar email:', buildSafeEmailErrorLog(error));
+    throw new Error('Error al enviar email');
   }
 }
 
@@ -157,9 +159,11 @@ export async function sendVerificationEmail(
   verificationToken: string,
   nombre?: string | null
 ): Promise<void> {
-  const verificationUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/auth/verify-email?token=${verificationToken}`;
-  const nombreUsuario = nombre ? nombre : "Usuario";
-  const saludo = nombre ? `¡Hola, ${nombre}!` : "¡Hola!";
+  const verificationUrl = `${
+    process.env.FRONTEND_URL || 'http://localhost:3000'
+  }/auth/verify-email?token=${verificationToken}`;
+  const nombreUsuario = nombre ? nombre : 'Usuario';
+  const saludo = nombre ? `¡Hola, ${nombre}!` : '¡Hola!';
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="es">
@@ -307,7 +311,7 @@ export async function sendVerificationEmail(
                 <tr>
                   <td align="center" style="padding-bottom: 16px;">
                     <p style="margin: 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-                      © 2023 Tresa Contafy Solutions México.
+                      © ${currentYear} Tresa Contafy Solutions México.
                     </p>
                     <p style="margin: 8px 0 0 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                       Av. de la Reforma 222, Cuauhtémoc, 06600 Ciudad de México, CDMX.
@@ -381,7 +385,7 @@ ${verificationUrl}
 Este enlace expirará en 24 horas. Si no solicitaste esta cuenta, puedes ignorar este correo.
 
 ---
-© 2023 Tresa Contafy Solutions México.
+© ${currentYear} Tresa Contafy Solutions México.
 Av. de la Reforma 222, Cuauhtémoc, 06600 Ciudad de México, CDMX.
 
 Has recibido este correo porque te registraste en nuestra plataforma.
@@ -390,7 +394,7 @@ Privacidad | Términos | Soporte`;
 
   await sendEmail({
     to: email,
-    subject: "¡Bienvenido a bordo! - Tresa Contafy",
+    subject: '¡Bienvenido a bordo! - Tresa Contafy',
     htmlContent,
     textContent,
   });
@@ -401,7 +405,9 @@ export async function sendPasswordResetEmail(
   resetToken: string,
   nombre?: string | null
 ): Promise<void> {
-  const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/auth/reset-password?token=${resetToken}`;
+  const resetUrl = `${
+    process.env.FRONTEND_URL || 'http://localhost:3000'
+  }/auth/reset-password?token=${resetToken}`;
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="es">
@@ -553,7 +559,7 @@ export async function sendPasswordResetEmail(
                 <tr>
                   <td align="center" style="padding-bottom: 16px;">
                     <p style="margin: 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-                      © 2023 Tresa Contafy Solutions México.
+                      © ${currentYear} Tresa Contafy Solutions México.
                     </p>
                     <p style="margin: 8px 0 0 0; color: #1a1a1a; font-size: 12px; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
                       Av. de la Reforma 222, Colonia Juárez, 06600 Ciudad de México, CDMX.
@@ -623,7 +629,7 @@ ${resetUrl}
 Si tú no realizaste esta solicitud, puedes ignorar este correo de forma segura. Tu contraseña actual no cambiará a menos que accedas al enlace superior.
 
 ---
-© 2023 Tresa Contafy Solutions México.
+© ${currentYear} Tresa Contafy Solutions México.
 Av. de la Reforma 222, Colonia Juárez, 06600 Ciudad de México, CDMX.
 
 Estás recibiendo este correo electrónico por una solicitud de seguridad relacionada con tu cuenta.
@@ -632,7 +638,7 @@ Privacidad | Términos y Condiciones | Soporte Técnico`;
 
   await sendEmail({
     to: email,
-    subject: "Restablecer contraseña - Tresa Contafy",
+    subject: 'Restablecer contraseña - Tresa Contafy',
     htmlContent,
     textContent,
   });
@@ -648,10 +654,10 @@ export async function sendPublicReportInvitation(
   nombreDespacho: string,
   logoUrl?: string | null
 ): Promise<void> {
-  const nombre = nombreDespacho.trim() || "Tu despacho";
+  const nombre = nombreDespacho.trim() || 'Tu despacho';
   const logoBlock = logoUrl
     ? `<tr><td style="padding-bottom: 16px;"><img src="${logoUrl}" alt="${nombre}" style="max-width: 180px; max-height: 60px; height: auto;" /></td></tr>`
-    : "";
+    : '';
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="es">
@@ -695,7 +701,7 @@ export async function sendPublicReportInvitation(
           </tr>
           <tr>
             <td style="padding: 24px 40px; border-top: 1px solid #e5e7eb;">
-              <p style="margin: 0; color: #6b7280; font-size: 12px;">© ${new Date().getFullYear()} Tresa Contafy.</p>
+              <p style="margin: 0; color: #6b7280; font-size: 12px;">© ${currentYear} Tresa Contafy Solutions México.</p>
             </td>
           </tr>
         </table>
@@ -714,4 +720,3 @@ export async function sendPublicReportInvitation(
     textContent,
   });
 }
-

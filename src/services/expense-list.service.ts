@@ -1,6 +1,5 @@
 import { Op, type WhereOptions } from 'sequelize';
 import { AccruedExpense, Profile } from '../database/models/index.js';
-import { PaymentStatusService } from './payment-status.service.js';
 import {
   getJson,
   setJson,
@@ -18,14 +17,11 @@ import type {
   ExpenseListQueryParams,
   ListExpensesResult,
 } from '../types/expense-list.types.js';
-
-const paymentStatusService = new PaymentStatusService();
+import { calcularEstadoPagoGastos, type EstadoPagoDetalle } from './payment-status.service.js';
 
 function rehydrateExpenseListItem(item: ExpenseListItem): ExpenseListItem {
   const fecha =
-    item.fecha != null && typeof item.fecha === 'string'
-      ? new Date(item.fecha)
-      : item.fecha;
+    item.fecha != null && typeof item.fecha === 'string' ? new Date(item.fecha) : item.fecha;
   const payment_date =
     item.payment_date != null && typeof item.payment_date === 'string'
       ? new Date(item.payment_date)
@@ -111,7 +107,7 @@ async function fetchExpensesFromDb(
     offset,
   });
 
-  const estadosPago = new Map<string, Awaited<ReturnType<PaymentStatusService['calcularEstadoPagoGasto']>>>();
+  const estadosPago = new Map<string, EstadoPagoDetalle>();
   const byProfile = new Map<string, typeof expenses>();
   for (const expense of expenses) {
     const group = byProfile.get(expense.profile_id) ?? [];
@@ -119,7 +115,7 @@ async function fetchExpensesFromDb(
     byProfile.set(expense.profile_id, group);
   }
   for (const [profileId, group] of byProfile) {
-    const batch = await paymentStatusService.calcularEstadoPagoGastos(group, profileId);
+    const batch = await calcularEstadoPagoGastos(group, profileId);
     for (const [id, estado] of batch) {
       estadosPago.set(id, estado);
     }
@@ -128,9 +124,7 @@ async function fetchExpensesFromDb(
   const expensesConEstado: ExpenseListItem[] = expenses.map((expense) => {
     let estadoPago = null;
     if (expense.tipo && expense.uuid) {
-      estadoPago =
-        estadosPago.get(expense.id) ??
-        null;
+      estadoPago = estadosPago.get(expense.id) ?? null;
     }
     return {
       ...expense.toJSON(),
@@ -179,9 +173,7 @@ export async function listExpenses(
 
   const result = await fetchExpensesFromDb(userId, params);
   const ttl = getExpensesListTtlSeconds();
-  const indexKey = params.profileId
-    ? profileIndexKey(params.profileId)
-    : userListsIndexKey(userId);
+  const indexKey = params.profileId ? profileIndexKey(params.profileId) : userListsIndexKey(userId);
 
   await setJson(cacheKey, result, { ttlSeconds: ttl, indexKey }, cacheMeta);
 
@@ -190,9 +182,7 @@ export async function listExpenses(
 
 export function parseExpenseListQuery(query: Record<string, unknown>): ExpenseListQueryParams {
   const profileId =
-    typeof query.profileId === 'string' && query.profileId.length > 0
-      ? query.profileId
-      : undefined;
+    typeof query.profileId === 'string' && query.profileId.length > 0 ? query.profileId : undefined;
 
   let mes: number | undefined;
   if (typeof query.mes === 'string') {
@@ -211,10 +201,7 @@ export function parseExpenseListQuery(query: Record<string, unknown>): ExpenseLi
   }
 
   let tipo: string | undefined;
-  if (
-    typeof query.tipo === 'string' &&
-    ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)
-  ) {
+  if (typeof query.tipo === 'string' && ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)) {
     tipo = query.tipo;
   }
 

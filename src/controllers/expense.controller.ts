@@ -1,13 +1,11 @@
-import { type Response } from "express";
-import type { AuthRequest } from "../middlewares/auth.middleware.js";
-import { Profile, AccruedExpense } from "../database/models/index.js";
-import { validateExpenseLimit } from "../middlewares/plan-limits.middleware.js";
-import { uploadInvoice } from "./invoice.controller.js";
-import { PaymentStatusService } from "../services/payment-status.service.js";
-import { MetricsService } from "../services/metrics.service.js";
-import { invalidateProfileCache } from "../services/cache.service.js";
-import { listExpenses, parseExpenseListQuery } from "../services/expense-list.service.js";
-import { Op } from "sequelize";
+import { type NextFunction, type Response } from 'express';
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+import { Profile, AccruedExpense } from '../database/models/index.js';
+import { uploadInvoice } from './invoice.controller.js';
+import { MetricsService } from '../services/metrics.service.js';
+import { invalidateProfileCache } from '../services/cache.service.js';
+import { listExpenses, parseExpenseListQuery } from '../services/expense-list.service.js';
+import { calcularEstadoPagoGasto } from '../services/payment-status.service.js';
 
 /**
  * Lista los gastos del usuario
@@ -17,7 +15,7 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -25,17 +23,17 @@ export async function getExpenses(req: AuthRequest, res: Response): Promise<void
     const result = await listExpenses(userId, params);
     res.json(result);
   } catch (error) {
-    console.error("Error al obtener gastos:", error);
-    
+    console.error('Error al obtener gastos:', error);
+
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al obtener gastos",
+        error: 'Error al obtener gastos',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al obtener gastos" });
+    res.status(500).json({ error: 'Error desconocido al obtener gastos' });
   }
 }
 
@@ -46,7 +44,7 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -58,23 +56,22 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: { user_id: userId },
-          attributes: ["id", "nombre", "rfc"],
+          attributes: ['id', 'nombre', 'rfc'],
         },
       ],
     });
 
     if (!expense) {
-      res.status(404).json({ error: "Gasto no encontrado" });
+      res.status(404).json({ error: 'Gasto no encontrado' });
       return;
     }
 
     // Calcular estado de pago si aplica
     let estadoPago = null;
     if (expense.tipo && expense.uuid) {
-      const paymentStatusService = new PaymentStatusService();
-      estadoPago = await paymentStatusService.calcularEstadoPagoGasto(expense, expense.profile_id);
+      estadoPago = await calcularEstadoPagoGasto(expense, expense.profile_id);
     }
 
     res.json({
@@ -84,17 +81,17 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
       },
     });
   } catch (error) {
-    console.error("Error al obtener gasto:", error);
-    
+    console.error('Error al obtener gasto:', error);
+
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al obtener gasto",
+        error: 'Error al obtener gasto',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al obtener gasto" });
+    res.status(500).json({ error: 'Error desconocido al obtener gasto' });
   }
 }
 
@@ -105,17 +102,23 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
     const { profileId, fecha, total, subtotal, iva, concepto, categoria } = req.body;
 
     // Validaciones básicas
-    if (!profileId || !fecha || total === undefined || subtotal === undefined || iva === undefined) {
+    if (
+      !profileId ||
+      !fecha ||
+      total === undefined ||
+      subtotal === undefined ||
+      iva === undefined
+    ) {
       res.status(400).json({
-        error: "Datos incompletos",
-        message: "profileId, fecha, total, subtotal e iva son requeridos",
+        error: 'Datos incompletos',
+        message: 'profileId, fecha, total, subtotal e iva son requeridos',
       });
       return;
     }
@@ -126,14 +129,14 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
     });
 
     if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
+      res.status(404).json({ error: 'Perfil no encontrado' });
       return;
     }
 
     // Parsear fecha
     const fechaDate = new Date(fecha);
     if (isNaN(fechaDate.getTime())) {
-      res.status(400).json({ error: "Fecha inválida" });
+      res.status(400).json({ error: 'Fecha inválida' });
       return;
     }
 
@@ -143,7 +146,7 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
     // Crear gasto
     const expense = await AccruedExpense.create({
       profile_id: profileId,
-      tipo_origen: "MANUAL",
+      tipo_origen: 'MANUAL',
       fecha: fechaDate,
       mes,
       año,
@@ -175,21 +178,21 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
 
     await invalidateProfileCache(profileId);
     res.status(201).json({
-      message: "Gasto creado exitosamente",
+      message: 'Gasto creado exitosamente',
       data: expense,
     });
   } catch (error) {
-    console.error("Error al crear gasto:", error);
-    
+    console.error('Error al crear gasto:', error);
+
     if (error instanceof Error) {
       res.status(400).json({
-        error: "Error al crear gasto",
+        error: 'Error al crear gasto',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al crear gasto" });
+    res.status(500).json({ error: 'Error desconocido al crear gasto' });
   }
 }
 
@@ -200,7 +203,7 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -213,22 +216,22 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: { user_id: userId },
         },
       ],
     });
 
     if (!expense) {
-      res.status(404).json({ error: "Gasto no encontrado" });
+      res.status(404).json({ error: 'Gasto no encontrado' });
       return;
     }
 
     // Solo permitir actualizar gastos manuales
-    if (expense.tipo_origen !== "MANUAL") {
+    if (expense.tipo_origen !== 'MANUAL') {
       res.status(400).json({
-        error: "No se puede actualizar un gasto creado desde XML",
-        message: "Solo se pueden actualizar gastos creados manualmente",
+        error: 'No se puede actualizar un gasto creado desde XML',
+        message: 'Solo se pueden actualizar gastos creados manualmente',
       });
       return;
     }
@@ -239,7 +242,7 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
     if (fecha !== undefined) {
       const fechaDate = new Date(fecha);
       if (isNaN(fechaDate.getTime())) {
-        res.status(400).json({ error: "Fecha inválida" });
+        res.status(400).json({ error: 'Fecha inválida' });
         return;
       }
       updateData.fecha = fechaDate;
@@ -258,21 +261,21 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
     await invalidateProfileCache(expense.profile_id);
 
     res.json({
-      message: "Gasto actualizado exitosamente",
+      message: 'Gasto actualizado exitosamente',
       data: expense,
     });
   } catch (error) {
-    console.error("Error al actualizar gasto:", error);
-    
+    console.error('Error al actualizar gasto:', error);
+
     if (error instanceof Error) {
       res.status(400).json({
-        error: "Error al actualizar gasto",
+        error: 'Error al actualizar gasto',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al actualizar gasto" });
+    res.status(500).json({ error: 'Error desconocido al actualizar gasto' });
   }
 }
 
@@ -283,7 +286,7 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -295,14 +298,14 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
       include: [
         {
           model: Profile,
-          as: "profile",
+          as: 'profile',
           where: { user_id: userId },
         },
       ],
     });
 
     if (!expense) {
-      res.status(404).json({ error: "Gasto no encontrado" });
+      res.status(404).json({ error: 'Gasto no encontrado' });
       return;
     }
 
@@ -311,19 +314,19 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
     await expense.destroy();
     await invalidateProfileCache(profileId);
 
-    res.json({ message: "Gasto eliminado exitosamente" });
+    res.json({ message: 'Gasto eliminado exitosamente' });
   } catch (error) {
-    console.error("Error al eliminar gasto:", error);
-    
+    console.error('Error al eliminar gasto:', error);
+
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al eliminar gasto",
+        error: 'Error al eliminar gasto',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al eliminar gasto" });
+    res.status(500).json({ error: 'Error desconocido al eliminar gasto' });
   }
 }
 
@@ -336,7 +339,7 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
   try {
     const userId = req.userId;
     if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
+      res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
@@ -351,31 +354,31 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
       userId,
     };
 
-    if (profileId && typeof profileId === "string") {
+    if (profileId && typeof profileId === 'string') {
       filters.profileId = profileId;
     }
 
-    if (mes && typeof mes === "string") {
+    if (mes && typeof mes === 'string') {
       const mesNum = parseInt(mes, 10);
       if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
         filters.mes = mesNum;
       } else {
         res.status(400).json({
-          error: "Parámetro inválido",
-          message: "El mes debe ser un número entre 1 y 12",
+          error: 'Parámetro inválido',
+          message: 'El mes debe ser un número entre 1 y 12',
         });
         return;
       }
     }
 
-    if (año && typeof año === "string") {
+    if (año && typeof año === 'string') {
       const añoNum = parseInt(año, 10);
       if (!isNaN(añoNum) && añoNum > 2000 && añoNum < 2100) {
         filters.año = añoNum;
       } else {
         res.status(400).json({
-          error: "Parámetro inválido",
-          message: "El año debe ser un número válido",
+          error: 'Parámetro inválido',
+          message: 'El año debe ser un número válido',
         });
         return;
       }
@@ -404,17 +407,17 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
       metrics,
     });
   } catch (error) {
-    console.error("Error al obtener métricas de gastos:", error);
+    console.error('Error al obtener métricas de gastos:', error);
 
     if (error instanceof Error) {
       res.status(500).json({
-        error: "Error al obtener métricas de gastos",
+        error: 'Error al obtener métricas de gastos',
         message: error.message,
       });
       return;
     }
 
-    res.status(500).json({ error: "Error desconocido al obtener métricas de gastos" });
+    res.status(500).json({ error: 'Error desconocido al obtener métricas de gastos' });
   }
 }
 
@@ -423,9 +426,12 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
  * Este endpoint es un alias/conveniencia para /api/invoices/upload
  * pero específico para gastos
  */
-export async function uploadExpense(req: AuthRequest, res: Response): Promise<void> {
+export async function uploadExpense(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   // Reutilizar la lógica de uploadInvoice
   // El endpoint uploadInvoice ya determina si es factura o gasto basado en el RFC
-  return uploadInvoice(req, res);
+  return uploadInvoice(req, res, next);
 }
-

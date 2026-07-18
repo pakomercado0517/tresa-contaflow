@@ -1,6 +1,5 @@
 import { Op, type WhereOptions } from 'sequelize';
 import { Invoice, Profile } from '../database/models/index.js';
-import { PaymentStatusService } from './payment-status.service.js';
 import {
   getJson,
   setJson,
@@ -18,14 +17,15 @@ import type {
   InvoiceListQueryParams,
   ListInvoicesResult,
 } from '../types/invoice-list.types.js';
-
-const paymentStatusService = new PaymentStatusService();
+import {
+  calcularEstadoPagoFactura,
+  calcularEstadoPagoFacturas,
+  type EstadoPagoDetalle,
+} from './payment-status.service.js';
 
 function rehydrateInvoiceListItem(item: InvoiceListItem): InvoiceListItem {
   const fecha =
-    item.fecha != null && typeof item.fecha === 'string'
-      ? new Date(item.fecha)
-      : item.fecha;
+    item.fecha != null && typeof item.fecha === 'string' ? new Date(item.fecha) : item.fecha;
   let estadoPago = item.estadoPago;
   if (estadoPago?.fechasComplementos) {
     estadoPago = {
@@ -104,7 +104,7 @@ async function fetchInvoicesFromDb(
     offset,
   });
 
-  const estadosPago = new Map<string, Awaited<ReturnType<PaymentStatusService['calcularEstadoPagoFactura']>>>();
+  const estadosPago = new Map<string, EstadoPagoDetalle>();
   const byProfile = new Map<string, typeof invoices>();
   for (const invoice of invoices) {
     const group = byProfile.get(invoice.profile_id) ?? [];
@@ -112,7 +112,7 @@ async function fetchInvoicesFromDb(
     byProfile.set(invoice.profile_id, group);
   }
   for (const [profileId, group] of byProfile) {
-    const batch = await paymentStatusService.calcularEstadoPagoFacturas(group, profileId);
+    const batch = await calcularEstadoPagoFacturas(group, profileId);
     for (const [id, estado] of batch) {
       estadosPago.set(id, estado);
     }
@@ -122,7 +122,7 @@ async function fetchInvoicesFromDb(
     invoices.map(async (invoice) => {
       const estado =
         estadosPago.get(invoice.id) ??
-        (await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id));
+        (await calcularEstadoPagoFactura(invoice, invoice.profile_id));
       return {
         ...invoice.toJSON(),
         estadoPago: estado,
@@ -170,20 +170,16 @@ export async function listInvoices(
 
   const result = await fetchInvoicesFromDb(userId, params);
   const ttl = getInvoicesListTtlSeconds();
-  const indexKey = params.profileId
-    ? profileIndexKey(params.profileId)
-    : userListsIndexKey(userId);
+  const indexKey = params.profileId ? profileIndexKey(params.profileId) : userListsIndexKey(userId);
 
   await setJson(cacheKey, result, { ttlSeconds: ttl, indexKey }, cacheMeta);
 
   return result;
 }
 
-export function parseInvoiceListQuery(query: Record<string, unknown>): InvoiceListQueryParams {
+export function normalizeInvoiceListQuery(query: Record<string, unknown>): InvoiceListQueryParams {
   const profileId =
-    typeof query.profileId === 'string' && query.profileId.length > 0
-      ? query.profileId
-      : undefined;
+    typeof query.profileId === 'string' && query.profileId.length > 0 ? query.profileId : undefined;
 
   let mes: number | undefined;
   if (typeof query.mes === 'string') {
@@ -202,10 +198,7 @@ export function parseInvoiceListQuery(query: Record<string, unknown>): InvoiceLi
   }
 
   let tipo: string | undefined;
-  if (
-    typeof query.tipo === 'string' &&
-    ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)
-  ) {
+  if (typeof query.tipo === 'string' && ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)) {
     tipo = query.tipo;
   }
 

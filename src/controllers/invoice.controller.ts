@@ -1,174 +1,34 @@
-import { type Response } from "express";
-import type { AuthRequest } from "../middlewares/auth.middleware.js";
-import { parseInvoice } from "../parsers/index.js";
-import { FiscalValidationService } from "../services/fiscal-validation.service.js";
-import { PaymentMatchingService } from "../services/payment-matching.service.js";
-import { PaymentComplementService } from "../services/payment-complement.service.js";
-import { PaymentStatusService } from "../services/payment-status.service.js";
-import { Profile, Invoice, AccruedExpense } from "../database/models/index.js";
-import type { UploadedFile } from "express-fileupload";
-import type { EstadoValidacionCFDI, EstadoValidacionGasto, ValidacionesConfig } from "../types/validation.types.js";
-import type { CFDI } from "../types/cfdi.types.js";
-import { Op, UniqueConstraintError } from "sequelize";
-import { MetricsService } from "../services/metrics.service.js";
-import { invalidateProfileCache } from "../services/cache.service.js";
-import { listInvoices, parseInvoiceListQuery } from "../services/invoice-list.service.js";
+import { type NextFunction, type Response } from 'express';
+import type { AuthRequest } from '../middlewares/auth.middleware.js';
+import { listInvoices, normalizeInvoiceListQuery } from '../services/invoice-list.service.js';
+import { AppError } from '../utils/AppError.js';
+import {
+  invoiceParseXmlForProfile,
+  uploadInvoiceService,
+} from '../services/invoice-parse.service.js';
+import {
+  deleteInvoiceService,
+  getInvoiceByIdService,
+  getMetricsService,
+} from '../services/invoice-crud.service.js';
+import { optionalQueryInt, optionalQueryString } from '../utils/query.util.js';
+import type { GetMetricsFilters } from '../types/invoice-crud.types.js';
 
 /**
  * Endpoint de prueba para parsear XML CFDI
  * Este endpoint permite subir un archivo XML y ver los datos extraídos con validaciones fiscales
  */
-export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
+export async function parseXML(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    // Obtener profileId del body o query
-    const profileId = req.body.profileId || req.query.profileId;
-    if (!profileId || typeof profileId !== "string") {
-      res.status(400).json({ error: "profileId es requerido" });
-      return;
-    }
+    const { profileId } = req.body;
 
-    // Verificar que el perfil pertenece al usuario
-    const profile = await Profile.findOne({
-      where: { id: profileId, user_id: userId },
-    });
-
-    if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
-      return;
-    }
-
-    // Verificar que se subió un archivo
-    if (!req.files || !req.files.xml) {
-      res.status(400).json({ error: "No se proporcionó archivo XML" });
-      return;
-    }
-
-    const file = req.files.xml as UploadedFile;
-
-    // Verificar que es un archivo XML
-    if (!file.name.toLowerCase().endsWith(".xml")) {
-      res.status(400).json({ error: "El archivo debe ser un XML" });
-      return;
-    }
-
-    const xmlBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer);
-    const cfdi = parseInvoice(xmlBuffer);
-
-    // Realizar validaciones fiscales y matching
-    const validationService = new FiscalValidationService();
-    const matchingService = new PaymentMatchingService();
-    const paymentComplementService = new PaymentComplementService();
-    const validacionesConfig = (profile.validaciones_habilitadas || {}) as ValidacionesConfig;
-
-    let estadoValidacion;
-    let matchingResult = null;
-
-    if (cfdi.tipo === "COMPLEMENTO_PAGO") {
-      // Para complementos de pago: validar UUID duplicado y RFC según tipo de factura relacionada
-      let estadoValidacionComplemento;
-      try {
-        estadoValidacionComplemento = await validationService.validateComplementoPago(
-          cfdi,
-          profileId,
-          profile.rfc
-        );
-      } catch (error) {
-        console.error("Error al validar complemento de pago:", error);
-        estadoValidacionComplemento = {
-          rfcVerificado: false,
-          uuidDuplicado: false,
-          advertencias: [],
-          errores: [error instanceof Error ? error.message : "Error desconocido al validar complemento"],
-          valido: false,
-        };
-      }
-
-      // Convertir EstadoValidacionComplemento a formato compatible
-      estadoValidacion = {
-        rfcVerificado: estadoValidacionComplemento.rfcVerificado,
-        regimenFiscalVerificado: true, // N/A para complemento
-        uuidDuplicado: estadoValidacionComplemento.uuidDuplicado,
-        advertencias: estadoValidacionComplemento.advertencias,
-        errores: estadoValidacionComplemento.errores,
-        valido: estadoValidacionComplemento.valido,
-      };
-
-      // Si no hay errores de validación, proceder con el matching
-      if (estadoValidacion.valido) {
-        try {
-          matchingResult = await matchingService.buscarMatchesComplemento(cfdi, profileId);
-        } catch (error) {
-          console.error("Error en matching:", error);
-          estadoValidacion.errores?.push(
-            error instanceof Error ? error.message : "Error al buscar matches"
-          );
-        }
-      }
-    } else {
-      // Para facturas normales: validaciones fiscales completas
-      // Determinar si es factura (ingreso) o gasto basado en RFC
-      if (cfdi.rfcEmisor === profile.rfc) {
-        // Si el RFC del perfil es el emisor, es una factura de ingreso
-        estadoValidacion = await validationService.validateFacturaIngreso(
-          cfdi,
-          profileId,
-          profile.rfc,
-          profile.regimenes_fiscales,
-          validacionesConfig
-        );
-      } else if (cfdi.rfcReceptor === profile.rfc) {
-        // Si el RFC del perfil es el receptor, es un gasto
-        estadoValidacion = await validationService.validateGasto(
-          cfdi,
-          profileId,
-          profile.rfc,
-          profile.regimenes_fiscales,
-          validacionesConfig
-        );
-      } else {
-        // El CFDI no corresponde al perfil ni como emisor ni como receptor
-        estadoValidacion = {
-          rfcVerificado: false,
-          regimenFiscalVerificado: false,
-          uuidDuplicado: false,
-          advertencias: [],
-          errores: [`El CFDI no corresponde al perfil ${profile.rfc} ni como emisor ni como receptor.`],
-          valido: false,
-        };
-      }
-    }
-
-    // Retornar los datos parseados junto con el estado de validación y matching
-    res.json({
-      message: "XML parseado exitosamente",
-      data: cfdi,
-      validacion: estadoValidacion,
-      matching: matchingResult,
-      profile: {
-        id: profile.id,
-        nombre: profile.nombre,
-        rfc: profile.rfc,
-        regimenes_fiscales: profile.regimenes_fiscales,
-      },
-    });
+    const result = await invoiceParseXmlForProfile(userId, profileId, req.xmlFile!.data);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Error al parsear XML:", error);
-    
-    if (error instanceof Error) {
-      res.status(400).json({ 
-        error: "Error al parsear XML",
-        message: error.message 
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al parsear XML" });
+    next(error);
   }
 }
 
@@ -176,256 +36,18 @@ export async function parseXML(req: AuthRequest, res: Response): Promise<void> {
  * Endpoint para subir y guardar facturas/gastos en BD
  * Este endpoint parsea, valida y guarda el CFDI en la base de datos
  */
-export async function uploadInvoice(req: AuthRequest, res: Response): Promise<void> {
+export async function uploadInvoice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    // Obtener profileId del body o query
-    const profileId = req.body.profileId || req.query.profileId;
-    if (!profileId || typeof profileId !== "string") {
-      res.status(400).json({ error: "profileId es requerido" });
-      return;
-    }
+    const { profileId } = req.body;
+    const result = await uploadInvoiceService(userId, profileId, req.xmlFile!.data);
+    const status = 'saved' in result && result.saved ? 200 : 201;
 
-    // Verificar que el perfil pertenece al usuario
-    const profile = await Profile.findOne({
-      where: { id: profileId, user_id: userId },
-    });
-
-    if (!profile) {
-      res.status(404).json({ error: "Perfil no encontrado" });
-      return;
-    }
-
-    // Verificar que se subió un archivo
-    if (!req.files || !req.files.xml) {
-      res.status(400).json({ error: "No se proporcionó archivo XML" });
-      return;
-    }
-
-    const file = req.files.xml as UploadedFile;
-
-    // Verificar que es un archivo XML
-    if (!file.name.toLowerCase().endsWith(".xml")) {
-      res.status(400).json({ error: "El archivo debe ser un XML" });
-      return;
-    }
-
-    const xmlBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data as ArrayBuffer);
-    const cfdi = parseInvoice(xmlBuffer);
-
-    // Realizar validaciones fiscales y matching
-    const validationService = new FiscalValidationService();
-    const matchingService = new PaymentMatchingService();
-    const paymentComplementService = new PaymentComplementService();
-    const validacionesConfig = (profile.validaciones_habilitadas || {}) as ValidacionesConfig;
-
-    let estadoValidacion;
-    let matchingResult = null;
-    let esFacturaIngreso = false;
-    let esGasto = false;
-
-    if (cfdi.tipo === "COMPLEMENTO_PAGO") {
-      // Para complementos de pago: validar UUID duplicado y RFC según tipo de factura relacionada
-      let estadoValidacionComplemento;
-      try {
-        estadoValidacionComplemento = await validationService.validateComplementoPago(
-          cfdi,
-          profileId,
-          profile.rfc
-        );
-      } catch (error) {
-        // Si hay un error al validar, tratarlo como error de validación
-        console.error("Error al validar complemento de pago:", error);
-        res.status(500).json({
-          error: "Error al validar el complemento de pago",
-          message: error instanceof Error ? error.message : "Error desconocido al validar complemento",
-        });
-        return;
-      }
-
-      // Convertir EstadoValidacionComplemento a formato compatible
-      estadoValidacion = {
-        rfcVerificado: estadoValidacionComplemento.rfcVerificado,
-        regimenFiscalVerificado: true, // N/A para complemento
-        uuidDuplicado: estadoValidacionComplemento.uuidDuplicado,
-        advertencias: estadoValidacionComplemento.advertencias,
-        errores: estadoValidacionComplemento.errores,
-        valido: estadoValidacionComplemento.valido,
-      };
-
-      // Si no hay errores de validación, proceder con el matching
-      if (estadoValidacion.valido) {
-        try {
-          matchingResult = await matchingService.buscarMatchesComplemento(cfdi, profileId);
-        } catch (error) {
-          console.error("Error en matching:", error);
-          estadoValidacion.errores?.push(
-            error instanceof Error ? error.message : "Error al buscar matches"
-          );
-          // El matching falla no debería bloquear el guardado, solo advertir
-          estadoValidacion.advertencias?.push(
-            "No se pudo realizar el matching con las facturas relacionadas"
-          );
-        }
-      }
-
-      // Los complementos de pago NO se guardan como facturas/gastos
-      // Solo se procesan para matching
-      if (!estadoValidacion.valido) {
-        // Determinar mensaje de error principal basado en los errores de validación
-        const mensajeError = estadoValidacion.errores && estadoValidacion.errores.length > 0
-          ? estadoValidacion.errores[0] // Usar el primer error como mensaje principal
-          : "El complemento de pago no es válido";
-        
-        res.status(400).json({
-          error: mensajeError,
-          validacion: estadoValidacion,
-        });
-        return;
-      }
-
-      // Guardar complemento usando findOrCreate (maneja duplicados automáticamente)
-      // Esto previene race conditions donde dos requests simultáneos pasan la validación
-      try {
-        const savedComplement = await paymentComplementService.saveComplemento(cfdi, profileId, profile.rfc);
-
-        res.json({
-          message: "Complemento de pago procesado exitosamente",
-          data: cfdi,
-          validacion: estadoValidacion,
-          matching: matchingResult,
-          saved: true,
-          complementId: savedComplement.id,
-        });
-        return;
-      } catch (error) {
-        // Si aún así hay un error (muy raro con findOrCreate), manejarlo
-        console.error("Error al guardar complemento:", error);
-        if (error instanceof UniqueConstraintError) {
-          res.status(409).json({
-            error: "El complemento de pago ya existe en la base de datos",
-            message: `El UUID ${cfdi.uuid} ya fue procesado anteriormente`,
-            uuid: cfdi.uuid,
-          });
-          return;
-        }
-        throw error; // Re-lanzar para que se maneje en el catch general
-      }
-    } else {
-      // Para facturas normales: validaciones fiscales completas
-      // Determinar si es factura (ingreso) o gasto basado en RFC
-      if (cfdi.rfcEmisor === profile.rfc) {
-        // Si el RFC del perfil es el emisor, es una factura de ingreso
-        esFacturaIngreso = true;
-        estadoValidacion = await validationService.validateFacturaIngreso(
-          cfdi,
-          profileId,
-          profile.rfc,
-          profile.regimenes_fiscales,
-          validacionesConfig
-        );
-      } else if (cfdi.rfcReceptor === profile.rfc) {
-        // Si el RFC del perfil es el receptor, es un gasto
-        esGasto = true;
-        estadoValidacion = await validationService.validateGasto(
-          cfdi,
-          profileId,
-          profile.rfc,
-          profile.regimenes_fiscales,
-          validacionesConfig
-        );
-      } else {
-        // El CFDI no corresponde al perfil ni como emisor ni como receptor
-        res.status(400).json({
-          error: "El CFDI no corresponde al perfil",
-          message: `El CFDI no corresponde al perfil ${profile.rfc} ni como emisor ni como receptor.`,
-        });
-        return;
-      }
-    }
-
-    // Si las validaciones fallaron, no guardar
-    if (!estadoValidacion.valido) {
-      res.status(400).json({
-        error: "El CFDI no pasó las validaciones fiscales",
-        validacion: estadoValidacion,
-        data: cfdi,
-      });
-      return;
-    }
-
-    // Guardar en BD según el tipo
-    let savedRecord;
-    if (esFacturaIngreso) {
-      savedRecord = await saveInvoice(cfdi, profileId, estadoValidacion);
-    } else if (esGasto) {
-      savedRecord = await saveExpense(cfdi, profileId, estadoValidacion);
-    } else {
-      res.status(400).json({ error: "No se pudo determinar el tipo de CFDI" });
-      return;
-    }
-
-    if (savedRecord instanceof Invoice && savedRecord.tipo === "PPD") {
-      await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
-    } else if (savedRecord instanceof AccruedExpense && savedRecord.tipo === "PPD") {
-      await paymentComplementService.applyPaymentsToExpense(savedRecord, profileId);
-    }
-
-    // Calcular estado de pago
-    const paymentStatusService = new PaymentStatusService();
-    let estadoPago = null;
-    if (savedRecord instanceof Invoice) {
-      estadoPago = await paymentStatusService.calcularEstadoPagoFactura(savedRecord, profileId);
-    } else if (savedRecord instanceof AccruedExpense) {
-      estadoPago = await paymentStatusService.calcularEstadoPagoGasto(savedRecord, profileId);
-    }
-
-    res.status(201).json({
-      message: esFacturaIngreso ? "Factura guardada exitosamente" : "Gasto guardado exitosamente",
-      data: savedRecord,
-      estadoPago,
-      validacion: estadoValidacion,
-      tipo: esFacturaIngreso ? "factura" : "gasto",
-    });
+    res.status(status).json(result);
   } catch (error) {
-    console.error("Error al subir factura:", error);
-    
-    // Manejar error de constraint único (UUID duplicado)
-    if (error instanceof UniqueConstraintError) {
-      const field = error.errors[0]?.path || "campo";
-      const value = error.errors[0]?.value || "valor";
-      res.status(409).json({ 
-        error: "El CFDI ya existe en la base de datos",
-        message: `El ${field} (${value}) ya fue procesado anteriormente`,
-        field,
-        value,
-      });
-      return;
-    }
-    
-    if (error instanceof Error) {
-      // Manejar otros errores de UUID duplicado (por si acaso)
-      if (error.message.includes("duplicate key") || error.message.includes("unique constraint")) {
-        res.status(409).json({ 
-          error: "El CFDI ya existe en la base de datos",
-          message: "Este UUID ya fue procesado anteriormente"
-        });
-        return;
-      }
-
-      res.status(400).json({ 
-        error: "Error al procesar XML",
-        message: error.message 
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al procesar XML" });
+    next(error);
   }
 }
 
@@ -433,85 +55,33 @@ export async function uploadInvoice(req: AuthRequest, res: Response): Promise<vo
  * Lista las facturas del usuario
  * Soporta filtros: profileId, mes, año, tipo, regimen_fiscal, search (búsqueda por texto), y paginación
  */
-export async function getInvoices(req: AuthRequest, res: Response): Promise<void> {
+export async function getInvoices(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const params = parseInvoiceListQuery(req.query as Record<string, unknown>);
+    const params = normalizeInvoiceListQuery(req.query as Record<string, unknown>);
     const result = await listInvoices(userId, params);
-    res.json(result);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Error al obtener facturas:", error);
-    
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: "Error al obtener facturas",
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al obtener facturas" });
+    next(error);
   }
 }
 
 /**
  * Obtiene una factura por ID
  */
-export async function getInvoiceById(req: AuthRequest, res: Response): Promise<void> {
+export async function getInvoiceById(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const { id } = req.params;
+    const result = await getInvoiceByIdService(userId, id as string);
 
-    // Buscar factura con verificación de ownership
-    const invoice = await Invoice.findOne({
-      where: { id },
-      include: [
-        {
-          model: Profile,
-          as: "profile",
-          where: { user_id: userId },
-          attributes: ["id", "nombre", "rfc"],
-        },
-      ],
-    });
-
-    if (!invoice) {
-      res.status(404).json({ error: "Factura no encontrada" });
-      return;
-    }
-
-    // Calcular estado de pago
-    const paymentStatusService = new PaymentStatusService();
-    const estadoPago = await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id);
-
-    res.json({
-      data: {
-        ...invoice.toJSON(),
-        estadoPago,
-      },
-    });
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Error al obtener factura:", error);
-    
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: "Error al obtener factura",
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al obtener factura" });
+    next(error);
   }
 }
 
@@ -519,224 +89,38 @@ export async function getInvoiceById(req: AuthRequest, res: Response): Promise<v
  * Obtiene métricas del dashboard
  * Soporta filtros: profileId, mes, año
  */
-export async function getMetrics(req: AuthRequest, res: Response): Promise<void> {
+export async function getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    const profileId = optionalQueryString(req.query.profileId);
+    const mes = optionalQueryInt(req.query.mes);
+    const año = optionalQueryInt(req.query.año);
 
-    // Obtener parámetros de query
-    const { profileId, mes, año } = req.query;
+    const filters: GetMetricsFilters = {};
+    profileId !== undefined && (filters.profileId = profileId);
+    mes !== undefined && (filters.mes = mes);
+    año !== undefined && (filters.año = año);
 
-    // Validar y parsear parámetros
-    const filters: {
-      profileId?: string;
-      mes?: number;
-      año?: number;
-      userId: string;
-    } = {
-      userId,
-    };
-
-    if (profileId && typeof profileId === "string") {
-      filters.profileId = profileId;
-    }
-
-    if (mes && typeof mes === "string") {
-      const mesNum = parseInt(mes, 10);
-      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
-        filters.mes = mesNum;
-      } else {
-        res.status(400).json({
-          error: "Parámetro inválido",
-          message: "El mes debe ser un número entre 1 y 12",
-        });
-        return;
-      }
-    }
-
-    if (año && typeof año === "string") {
-      const añoNum = parseInt(año, 10);
-      if (!isNaN(añoNum) && añoNum > 2000 && añoNum < 2100) {
-        filters.año = añoNum;
-      } else {
-        res.status(400).json({
-          error: "Parámetro inválido",
-          message: "El año debe ser un número válido",
-        });
-        return;
-      }
-    }
-
-    // Calcular métricas
-    const metricsService = new MetricsService();
-    const metrics = await metricsService.calculatePeriodMetrics(filters);
-
-    // Obtener period_id cuando hay perfil + mes + año para habilitar "Agregar ingreso manual" en el frontend
-    let periodId: string | null = null;
-    if (filters.profileId && filters.mes && filters.año) {
-      const period = await metricsService.findOrCreatePeriodForMonth(
-        filters.profileId,
-        filters.mes,
-        filters.año
-      );
-      periodId = period.id;
-    }
-
-    res.json({
-      filters: {
-        profileId: filters.profileId || null,
-        mes: filters.mes || null,
-        año: filters.año || null,
-      },
-      period_id: periodId,
-      metrics,
-    });
+    const result = await getMetricsService(userId, filters);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Error al obtener métricas:", error);
-    
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: "Error al obtener métricas",
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al obtener métricas" });
+    next(error);
   }
 }
 
 /**
  * Elimina una factura por ID
  */
-export async function deleteInvoice(req: AuthRequest, res: Response): Promise<void> {
+export async function deleteInvoice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: "Usuario no autenticado" });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const { id } = req.params;
-
-    // Buscar factura y verificar ownership
-    const invoice = await Invoice.findOne({
-      where: { id },
-      include: [
-        {
-          model: Profile,
-          as: "profile",
-          where: { user_id: userId },
-        },
-      ],
-    });
-
-    if (!invoice) {
-      res.status(404).json({ error: "Factura no encontrada" });
-      return;
-    }
-
-    const profileId = invoice.profile_id;
-    await invoice.destroy();
-    await invalidateProfileCache(profileId);
-
-    res.json({ message: "Factura eliminada exitosamente" });
+    const invoiceId = req.params.id as string;
+    const result = await deleteInvoiceService(userId, invoiceId);
+    res.status(200).json(result);
   } catch (error) {
-    console.error("Error al eliminar factura:", error);
-    
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: "Error al eliminar factura",
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: "Error desconocido al eliminar factura" });
+    next(error);
   }
-}
-
-/**
- * Guarda una factura (ingreso) en la BD
- */
-async function saveInvoice(
-  cfdi: CFDI,
-  profileId: string,
-  estadoValidacion: EstadoValidacionCFDI
-): Promise<Invoice> {
-  const invoiceData = {
-    profile_id: profileId,
-    uuid: cfdi.uuid,
-    fecha: cfdi.fecha,
-    mes: cfdi.mes,
-    año: cfdi.año,
-    total: cfdi.total,
-    subtotal: cfdi.subtotal,
-    iva: cfdi.iva,
-    iva_amount: cfdi.iva_amount ?? cfdi.iva,
-    retencion_iva_amount: cfdi.retencion_iva_amount ?? 0,
-    retencion_isr_amount: cfdi.retencion_isr_amount ?? 0,
-    tipo: cfdi.tipo,
-    rfc_emisor: cfdi.rfcEmisor,
-    nombre_emisor: cfdi.nombreEmisor,
-    regimen_fiscal_emisor: cfdi.regimenFiscalEmisor || null,
-    rfc_receptor: cfdi.rfcReceptor,
-    nombre_receptor: cfdi.nombreReceptor,
-    regimen_fiscal_receptor: cfdi.regimenFiscalReceptor || null,
-    concepto: cfdi.concepto || null,
-    pagos: cfdi.pagos || [],
-    complemento_pago: cfdi.complementoPago || null,
-    validacion: estadoValidacion,
-  };
-
-  const invoice = await Invoice.create(invoiceData);
-  await invalidateProfileCache(profileId);
-  return invoice;
-}
-
-/**
- * Guarda un gasto en la BD
- */
-async function saveExpense(
-  cfdi: CFDI,
-  profileId: string,
-  estadoValidacion: EstadoValidacionGasto
-): Promise<AccruedExpense> {
-  const isPUE = cfdi.tipo === "PUE";
-
-  const expenseData = {
-    profile_id: profileId,
-    tipo_origen: "XML" as const,
-    fecha: cfdi.fecha,
-    mes: cfdi.mes,
-    año: cfdi.año,
-    total: cfdi.total,
-    subtotal: cfdi.subtotal,
-    iva: cfdi.iva,
-    iva_amount: cfdi.iva_amount ?? cfdi.iva,
-    retencion_iva_amount: cfdi.retencion_iva_amount ?? 0,
-    retencion_isr_amount: cfdi.retencion_isr_amount ?? 0,
-    is_paid: isPUE,
-    payment_date: isPUE ? cfdi.fecha : null,
-    concepto: cfdi.concepto || null,
-    categoria: null, // Se puede agregar categorización automática en el futuro
-    uuid: cfdi.uuid,
-    tipo: cfdi.tipo,
-    rfc_emisor: cfdi.rfcEmisor,
-    nombre_emisor: cfdi.nombreEmisor,
-    regimen_fiscal_emisor: cfdi.regimenFiscalEmisor || null,
-    rfc_receptor: cfdi.rfcReceptor,
-    nombre_receptor: cfdi.nombreReceptor,
-    regimen_fiscal_receptor: cfdi.regimenFiscalReceptor || null,
-    pagos: cfdi.pagos || [],
-    complemento_pago: cfdi.complementoPago || null,
-    validacion: estadoValidacion,
-  };
-
-  const expense = await AccruedExpense.create(expenseData);
-  await invalidateProfileCache(profileId);
-  return expense;
 }
