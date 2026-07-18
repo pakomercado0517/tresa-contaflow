@@ -8,7 +8,6 @@ import {
   ManualIncome,
   Payroll,
 } from '../database/models/index.js';
-import { PaymentStatusService } from './payment-status.service.js';
 import { Op } from 'sequelize';
 import type {
   PeriodMetricsResponse,
@@ -18,10 +17,7 @@ import type {
   MetricsRangeResponse,
 } from '../types/metrics.types.js';
 import type { PagoParcial } from '../types/payment.types.js';
-import {
-  enumerateMonthYears,
-  MAX_METRICS_RANGE_MONTHS,
-} from '../lib/metrics-range.js';
+import { enumerateMonthYears, MAX_METRICS_RANGE_MONTHS } from '../lib/metrics-range.js';
 import {
   getJson,
   setJsonForProfile,
@@ -30,6 +26,7 @@ import {
   metricsMonthKey,
   metricsPeriodKey,
 } from './cache.service.js';
+import { calcularEstadoPagoGasto } from './payment-status.service.js';
 
 /**
  * Métricas del período. Los importes (totalFacturado, totalPagado, totalCompras, etc.)
@@ -76,10 +73,7 @@ export interface MetricsFilters {
 }
 
 export class MetricsRangeError extends Error {
-  constructor(
-    message: string,
-    readonly code: string
-  ) {
+  constructor(message: string, readonly code: string) {
     super(message);
     this.name = 'MetricsRangeError';
   }
@@ -142,22 +136,15 @@ export class MetricsService {
     // Separar complementos de invoices y expenses
     // Para Opción B: contar complementos por fecha_pago, no por fecha de factura
     // Esto permite que un complemento de diciembre aparezca en diciembre aunque la factura sea de enero
-    const {
-      totalInvoices,
-      totalExpenses,
-      totalInvoicesSinConciliar,
-      totalExpensesSinConciliar,
-    } = await this.sumComplementosPeriodoSeparado(
-      profileIds,
-      dateRange
-    );
+    const { totalInvoices, totalExpenses, totalInvoicesSinConciliar, totalExpensesSinConciliar } =
+      await this.sumComplementosPeriodoSeparado(profileIds, dateRange);
 
     const invoicesForManualPagos =
       dateRange && !profileId
         ? await this.getInvoicesForManualPagos(profileWhereClause)
         : dateRange && profileId
-          ? await this.getInvoicesForManualPagos(profileWhereClause)
-          : facturas;
+        ? await this.getInvoicesForManualPagos(profileWhereClause)
+        : facturas;
 
     const manualPagosPeriodo = this.sumManualPagos(invoicesForManualPagos, dateRange);
     const pagosComplementoPorFactura = await this.sumComplementosPorFactura(
@@ -255,7 +242,6 @@ export class MetricsService {
     });
 
     // Procesar gastos
-    const paymentStatusService = new PaymentStatusService();
     const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : '';
 
     for (const gasto of gastos) {
@@ -272,10 +258,7 @@ export class MetricsService {
           gastosPPD++;
           // Para gastos PPD, el complemento ya fue sumado en totalPagadoComplementosExpensesPeriodo
           // Solo necesitamos verificar el estado para contar gastos pagados/parciales
-          const estadoPago = await paymentStatusService.calcularEstadoPagoGasto(
-            gasto,
-            gasto.profile_id
-          );
+          const estadoPago = await calcularEstadoPagoGasto(gasto, gasto.profile_id);
 
           // El complemento ya fue sumado en totalComprasPagadas (línea 135),
           // solo verificar estado para contadores
@@ -559,11 +542,7 @@ export class MetricsService {
    * Busca o crea un período para el perfil que cubra el mes/año indicado.
    * Retorna el Period para que el frontend tenga period_id y pueda habilitar "Agregar ingreso manual".
    */
-  async findOrCreatePeriodForMonth(
-    profileId: string,
-    mes: number,
-    año: number
-  ): Promise<Period> {
+  async findOrCreatePeriodForMonth(profileId: string, mes: number, año: number): Promise<Period> {
     const pad = (n: number) => String(n).padStart(2, '0');
     const lastDay = new Date(año, mes, 0).getDate();
     const startDate = new Date(año, mes - 1, 1, 0, 0, 0);
@@ -611,7 +590,8 @@ export class MetricsService {
     const porFactura: Record<string, number> = {};
     items.forEach((item) => {
       if (setPPD.has(item.factura_uuid)) {
-        porFactura[item.factura_uuid] = (porFactura[item.factura_uuid] || 0) + Number(item.imp_pagado || 0);
+        porFactura[item.factura_uuid] =
+          (porFactura[item.factura_uuid] || 0) + Number(item.imp_pagado || 0);
       }
     });
     return porFactura;
@@ -633,13 +613,12 @@ export class MetricsService {
       where: { profile_id: profileId, uuid: { [Op.in]: uuids }, tipo: 'PPD' },
       attributes: ['uuid'],
     });
-    const setPPD = new Set(
-      expensesPPD.map((e) => e.uuid || '').filter((u) => u !== '')
-    );
+    const setPPD = new Set(expensesPPD.map((e) => e.uuid || '').filter((u) => u !== ''));
     const porGasto: Record<string, number> = {};
     items.forEach((item) => {
       if (setPPD.has(item.factura_uuid)) {
-        porGasto[item.factura_uuid] = (porGasto[item.factura_uuid] || 0) + Number(item.imp_pagado || 0);
+        porGasto[item.factura_uuid] =
+          (porGasto[item.factura_uuid] || 0) + Number(item.imp_pagado || 0);
       }
     });
     return porGasto;
@@ -1247,13 +1226,7 @@ export class MetricsService {
       },
     };
 
-    await setJsonForProfile(
-      cacheKey,
-      response,
-      profileId,
-      getMetricsTtlSeconds(),
-      'metrics'
-    );
+    await setJsonForProfile(cacheKey, response, profileId, getMetricsTtlSeconds(), 'metrics');
     return response;
   }
 
@@ -1357,13 +1330,7 @@ export class MetricsService {
       nomina,
     };
 
-    await setJsonForProfile(
-      cacheKey,
-      response,
-      profileId,
-      getMetricsTtlSeconds(),
-      'metrics'
-    );
+    await setJsonForProfile(cacheKey, response, profileId, getMetricsTtlSeconds(), 'metrics');
     return response;
   }
 
@@ -1462,13 +1429,7 @@ export class MetricsService {
       nomina,
     };
 
-    await setJsonForProfile(
-      cacheKey,
-      response,
-      profileId,
-      getMetricsTtlSeconds(),
-      'metrics'
-    );
+    await setJsonForProfile(cacheKey, response, profileId, getMetricsTtlSeconds(), 'metrics');
     return response;
   }
 
@@ -1837,10 +1798,7 @@ export class MetricsService {
       },
       attributes: ['subtotal'],
     });
-    const sumManualPaid = manualIncomesPaid.reduce(
-      (acc, m) => acc + Number(m.subtotal || 0),
-      0
-    );
+    const sumManualPaid = manualIncomesPaid.reduce((acc, m) => acc + Number(m.subtotal || 0), 0);
     const complementosSinConciliar = await this.getUnmatchedComplementTotalsForRange(
       profileId,
       dateRange,
@@ -1891,9 +1849,7 @@ export class MetricsService {
           attributes: ['uuid'],
         })
       : [];
-    const uuidPPDSet = new Set(
-      expensesPPD.map((e) => e.uuid || '').filter((u) => u !== '')
-    );
+    const uuidPPDSet = new Set(expensesPPD.map((e) => e.uuid || '').filter((u) => u !== ''));
     const sumComplementos = complementosPPD
       .filter((c) => uuidPPDSet.has(c.factura_uuid))
       .reduce((acc, c) => acc + Number(c.imp_pagado || 0), 0);
@@ -1918,8 +1874,9 @@ export class MetricsService {
     const sumManualPaid = manualPaidExpenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
 
     return (
-      Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100) /
-      100
+      Math.round(
+        (sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100
+      ) / 100
     );
   }
 
@@ -2114,19 +2071,18 @@ export class MetricsService {
       return w;
     };
 
-    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] =
-      await Promise.all([
-        Invoice.findAll({
-          where: baseInvoiceWhere('PUE'),
-          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        Invoice.findAll({
-          where: baseInvoiceWhere(['PUE', 'PPD']),
-          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
-        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
-      ]);
+    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] = await Promise.all([
+      Invoice.findAll({
+        where: baseInvoiceWhere('PUE'),
+        attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+      }),
+      Invoice.findAll({
+        where: baseInvoiceWhere(['PUE', 'PPD']),
+        attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+      }),
+      this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+      this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+    ]);
 
     const complementUUIDs = Object.keys(complementosPorFactura);
     const ppdWhere: Record<string, unknown> = {
@@ -2142,8 +2098,14 @@ export class MetricsService {
         })
       : [];
 
-    let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
-    let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
+    let iva_cobrado = invoicesPUE.reduce(
+      (acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0),
+      0
+    );
+    let isr_cobrado = invoicesPUE.reduce(
+      (acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0),
+      0
+    );
     for (const inv of invoicesPPD) {
       const totalDocumento = this.getDocumentTotalBase(inv);
       if (totalDocumento <= 0) continue;
@@ -2225,10 +2187,7 @@ export class MetricsService {
       },
       attributes: ['subtotal'],
     });
-    const sumManualPaid = manualIncomesPaid.reduce(
-      (acc, m) => acc + Number(m.subtotal || 0),
-      0
-    );
+    const sumManualPaid = manualIncomesPaid.reduce((acc, m) => acc + Number(m.subtotal || 0), 0);
     const complementosSinConciliar = await this.getUnmatchedComplementTotalsForPeriod(
       profileId,
       periodId
@@ -2283,8 +2242,9 @@ export class MetricsService {
     const sumManualPaid = manualPaidExpenses.reduce((acc, e) => acc + Number(e.subtotal || 0), 0);
 
     return (
-      Math.round((sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100) /
-      100
+      Math.round(
+        (sumPUE + sumComplementos + complementosSinConciliar.egresos + sumManualPaid) * 100
+      ) / 100
     );
   }
 
@@ -2506,27 +2466,26 @@ export class MetricsService {
       return { iva_cobrado: 0, iva_devengado: 0, isr_cobrado: 0, isr_devengado: 0 };
     }
 
-    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] =
-      await Promise.all([
-        Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: 'PUE',
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
-          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        Invoice.findAll({
-          where: {
-            profile_id: profileId,
-            tipo: { [Op.in]: ['PUE', 'PPD'] },
-            fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
-          },
-          attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
-        }),
-        this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
-        this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
-      ]);
+    const [invoicesPUE, allInvoices, complementosPorFactura, manualPorFactura] = await Promise.all([
+      Invoice.findAll({
+        where: {
+          profile_id: profileId,
+          tipo: 'PUE',
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+      }),
+      Invoice.findAll({
+        where: {
+          profile_id: profileId,
+          tipo: { [Op.in]: ['PUE', 'PPD'] },
+          fecha: { [Op.gte]: dateRange.start, [Op.lt]: dateRange.end },
+        },
+        attributes: ['retencion_iva_amount', 'retencion_isr_amount'],
+      }),
+      this.getComplementosPorFacturaEnPeriodo(profileId, dateRange),
+      this.getManualPagosPorFacturaEnPeriodo(profileId, dateRange),
+    ]);
 
     const complementUUIDs = Object.keys(complementosPorFactura);
     const invoicesPPD = complementUUIDs.length
@@ -2540,8 +2499,14 @@ export class MetricsService {
         })
       : [];
 
-    let iva_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0), 0);
-    let isr_cobrado = invoicesPUE.reduce((acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0), 0);
+    let iva_cobrado = invoicesPUE.reduce(
+      (acc, inv) => acc + Number(inv.retencion_iva_amount ?? 0),
+      0
+    );
+    let isr_cobrado = invoicesPUE.reduce(
+      (acc, inv) => acc + Number(inv.retencion_isr_amount ?? 0),
+      0
+    );
     for (const inv of invoicesPPD) {
       const totalDocumento = this.getDocumentTotalBase(inv);
       if (totalDocumento <= 0) continue;

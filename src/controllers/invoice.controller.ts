@@ -1,15 +1,18 @@
 import { type NextFunction, type Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { PaymentStatusService } from '../services/payment-status.service.js';
-import { Profile, Invoice } from '../database/models/index.js';
-import { MetricsService } from '../services/metrics.service.js';
-import { invalidateProfileCache } from '../services/cache.service.js';
 import { listInvoices, normalizeInvoiceListQuery } from '../services/invoice-list.service.js';
 import { AppError } from '../utils/AppError.js';
 import {
   invoiceParseXmlForProfile,
   uploadInvoiceService,
 } from '../services/invoice-parse.service.js';
+import {
+  deleteInvoiceService,
+  getInvoiceByIdService,
+  getMetricsService,
+} from '../services/invoice-crud.service.js';
+import { optionalQueryInt, optionalQueryString } from '../utils/query.util.js';
+import type { GetMetricsFilters } from '../types/invoice-crud.types.js';
 
 /**
  * Endpoint de prueba para parsear XML CFDI
@@ -68,59 +71,17 @@ export async function getInvoices(req: AuthRequest, res: Response, next: NextFun
 /**
  * Obtiene una factura por ID
  */
-export async function getInvoiceById(req: AuthRequest, res: Response): Promise<void> {
+export async function getInvoiceById(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const { id } = req.params;
+    const result = await getInvoiceByIdService(userId, id as string);
 
-    // Buscar factura con verificación de ownership
-    const invoice = await Invoice.findOne({
-      where: { id },
-      include: [
-        {
-          model: Profile,
-          as: 'profile',
-          where: { user_id: userId },
-          attributes: ['id', 'nombre', 'rfc'],
-        },
-      ],
-    });
-
-    if (!invoice) {
-      res.status(404).json({ error: 'Factura no encontrada' });
-      return;
-    }
-
-    // Calcular estado de pago
-    const paymentStatusService = new PaymentStatusService();
-    const estadoPago = await paymentStatusService.calcularEstadoPagoFactura(
-      invoice,
-      invoice.profile_id
-    );
-
-    res.json({
-      data: {
-        ...invoice.toJSON(),
-        estadoPago,
-      },
-    });
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al obtener factura:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al obtener factura',
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error desconocido al obtener factura' });
+    next(error);
   }
 }
 
@@ -128,142 +89,38 @@ export async function getInvoiceById(req: AuthRequest, res: Response): Promise<v
  * Obtiene métricas del dashboard
  * Soporta filtros: profileId, mes, año
  */
-export async function getMetrics(req: AuthRequest, res: Response): Promise<void> {
+export async function getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    const profileId = optionalQueryString(req.query.profileId);
+    const mes = optionalQueryInt(req.query.mes);
+    const año = optionalQueryInt(req.query.año);
 
-    // Obtener parámetros de query
-    const { profileId, mes, año } = req.query;
+    const filters: GetMetricsFilters = {};
+    profileId !== undefined && (filters.profileId = profileId);
+    mes !== undefined && (filters.mes = mes);
+    año !== undefined && (filters.año = año);
 
-    // Validar y parsear parámetros
-    const filters: {
-      profileId?: string;
-      mes?: number;
-      año?: number;
-      userId: string;
-    } = {
-      userId,
-    };
-
-    if (profileId && typeof profileId === 'string') {
-      filters.profileId = profileId;
-    }
-
-    if (mes && typeof mes === 'string') {
-      const mesNum = parseInt(mes, 10);
-      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
-        filters.mes = mesNum;
-      } else {
-        res.status(400).json({
-          error: 'Parámetro inválido',
-          message: 'El mes debe ser un número entre 1 y 12',
-        });
-        return;
-      }
-    }
-
-    if (año && typeof año === 'string') {
-      const añoNum = parseInt(año, 10);
-      if (!isNaN(añoNum) && añoNum > 2000 && añoNum < 2100) {
-        filters.año = añoNum;
-      } else {
-        res.status(400).json({
-          error: 'Parámetro inválido',
-          message: 'El año debe ser un número válido',
-        });
-        return;
-      }
-    }
-
-    // Calcular métricas
-    const metricsService = new MetricsService();
-    const metrics = await metricsService.calculatePeriodMetrics(filters);
-
-    // Obtener period_id cuando hay perfil + mes + año para habilitar "Agregar ingreso manual" en el frontend
-    let periodId: string | null = null;
-    if (filters.profileId && filters.mes && filters.año) {
-      const period = await metricsService.findOrCreatePeriodForMonth(
-        filters.profileId,
-        filters.mes,
-        filters.año
-      );
-      periodId = period.id;
-    }
-
-    res.json({
-      filters: {
-        profileId: filters.profileId || null,
-        mes: filters.mes || null,
-        año: filters.año || null,
-      },
-      period_id: periodId,
-      metrics,
-    });
+    const result = await getMetricsService(userId, filters);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al obtener métricas:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al obtener métricas',
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error desconocido al obtener métricas' });
+    next(error);
   }
 }
 
 /**
  * Elimina una factura por ID
  */
-export async function deleteInvoice(req: AuthRequest, res: Response): Promise<void> {
+export async function deleteInvoice(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const { id } = req.params;
-
-    // Buscar factura y verificar ownership
-    const invoice = await Invoice.findOne({
-      where: { id },
-      include: [
-        {
-          model: Profile,
-          as: 'profile',
-          where: { user_id: userId },
-        },
-      ],
-    });
-
-    if (!invoice) {
-      res.status(404).json({ error: 'Factura no encontrada' });
-      return;
-    }
-
-    const profileId = invoice.profile_id;
-    await invoice.destroy();
-    await invalidateProfileCache(profileId);
-
-    res.json({ message: 'Factura eliminada exitosamente' });
+    const invoiceId = req.params.id as string;
+    const result = await deleteInvoiceService(userId, invoiceId);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al eliminar factura:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al eliminar factura',
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error desconocido al eliminar factura' });
+    next(error);
   }
 }

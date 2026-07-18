@@ -1,13 +1,11 @@
 import { type NextFunction, type Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { Profile, AccruedExpense } from '../database/models/index.js';
-import { validateExpenseLimit } from '../middlewares/plan-limits.middleware.js';
 import { uploadInvoice } from './invoice.controller.js';
-import { PaymentStatusService } from '../services/payment-status.service.js';
 import { MetricsService } from '../services/metrics.service.js';
 import { invalidateProfileCache } from '../services/cache.service.js';
 import { listExpenses, parseExpenseListQuery } from '../services/expense-list.service.js';
-import { Op } from 'sequelize';
+import { calcularEstadoPagoGasto } from '../services/payment-status.service.js';
 
 /**
  * Lista los gastos del usuario
@@ -73,8 +71,7 @@ export async function getExpenseById(req: AuthRequest, res: Response): Promise<v
     // Calcular estado de pago si aplica
     let estadoPago = null;
     if (expense.tipo && expense.uuid) {
-      const paymentStatusService = new PaymentStatusService();
-      estadoPago = await paymentStatusService.calcularEstadoPagoGasto(expense, expense.profile_id);
+      estadoPago = await calcularEstadoPagoGasto(expense, expense.profile_id);
     }
 
     res.json({

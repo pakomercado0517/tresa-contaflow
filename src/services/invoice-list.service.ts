@@ -1,6 +1,5 @@
 import { Op, type WhereOptions } from 'sequelize';
 import { Invoice, Profile } from '../database/models/index.js';
-import { PaymentStatusService } from './payment-status.service.js';
 import {
   getJson,
   setJson,
@@ -18,8 +17,11 @@ import type {
   InvoiceListQueryParams,
   ListInvoicesResult,
 } from '../types/invoice-list.types.js';
-
-const paymentStatusService = new PaymentStatusService();
+import {
+  calcularEstadoPagoFactura,
+  calcularEstadoPagoFacturas,
+  type EstadoPagoDetalle,
+} from './payment-status.service.js';
 
 function rehydrateInvoiceListItem(item: InvoiceListItem): InvoiceListItem {
   const fecha =
@@ -102,10 +104,7 @@ async function fetchInvoicesFromDb(
     offset,
   });
 
-  const estadosPago = new Map<
-    string,
-    Awaited<ReturnType<PaymentStatusService['calcularEstadoPagoFactura']>>
-  >();
+  const estadosPago = new Map<string, EstadoPagoDetalle>();
   const byProfile = new Map<string, typeof invoices>();
   for (const invoice of invoices) {
     const group = byProfile.get(invoice.profile_id) ?? [];
@@ -113,7 +112,7 @@ async function fetchInvoicesFromDb(
     byProfile.set(invoice.profile_id, group);
   }
   for (const [profileId, group] of byProfile) {
-    const batch = await paymentStatusService.calcularEstadoPagoFacturas(group, profileId);
+    const batch = await calcularEstadoPagoFacturas(group, profileId);
     for (const [id, estado] of batch) {
       estadosPago.set(id, estado);
     }
@@ -123,7 +122,7 @@ async function fetchInvoicesFromDb(
     invoices.map(async (invoice) => {
       const estado =
         estadosPago.get(invoice.id) ??
-        (await paymentStatusService.calcularEstadoPagoFactura(invoice, invoice.profile_id));
+        (await calcularEstadoPagoFactura(invoice, invoice.profile_id));
       return {
         ...invoice.toJSON(),
         estadoPago: estado,

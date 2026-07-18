@@ -5,7 +5,6 @@ import { parseInvoice } from '../parsers/invoice.parser.js';
 import { FiscalValidationService } from './fiscal-validation.service.js';
 import { PaymentMatchingService } from './payment-matching.service.js';
 import { PaymentComplementService } from './payment-complement.service.js';
-import { PaymentStatusService } from './payment-status.service.js';
 import { invalidateProfileCache } from './cache.service.js';
 import type {
   EstadoValidacionCFDI,
@@ -16,11 +15,11 @@ import type { MatchingResult } from '../types/matching.types.js';
 import type { ParsedXmlResponse } from '../types/parser.types.js';
 import type { CFDI } from '../types/cfdi.types.js';
 import { UniqueConstraintError } from 'sequelize';
+import { calcularEstadoPagoFactura, calcularEstadoPagoGasto } from './payment-status.service.js';
 
 const validationService = new FiscalValidationService();
 const matchingService = new PaymentMatchingService();
 const paymentComplementService = new PaymentComplementService();
-const paymentStatusService = new PaymentStatusService();
 
 type ParsedCfdi = ReturnType<typeof parseInvoice>;
 
@@ -229,7 +228,10 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
     matching = resultado.matching;
 
     if (!validacion.valido) {
-      throw new AppError(getPrimaryValidationError(validacion) || 'El complemento de pago no es válido', 400);
+      throw new AppError(
+        getPrimaryValidationError(validacion) || 'El complemento de pago no es válido',
+        400
+      );
     }
 
     try {
@@ -261,7 +263,10 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
   validacion = await resolveFacturaValidacion(cfdi, profile, validacionesConfig);
 
   if (!validacion.valido) {
-    throw new AppError(getPrimaryValidationError(validacion) || 'El CFDI no pasó las validaciones fiscales', 400);
+    throw new AppError(
+      getPrimaryValidationError(validacion) || 'El CFDI no pasó las validaciones fiscales',
+      400
+    );
   }
 
   try {
@@ -283,8 +288,8 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
 
     const estadoPago =
       savedRecord instanceof Invoice
-        ? await paymentStatusService.calcularEstadoPagoFactura(savedRecord, profileId)
-        : await paymentStatusService.calcularEstadoPagoGasto(savedRecord, profileId);
+        ? await calcularEstadoPagoFactura(savedRecord, profileId)
+        : await calcularEstadoPagoGasto(savedRecord, profileId);
 
     return {
       message: isInvoice ? 'Factura guardada exitosamente' : 'Gasto guardado exitosamente',
