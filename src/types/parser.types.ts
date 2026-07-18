@@ -2,7 +2,9 @@
  * Tipos para los parsers de CFDI
  */
 
-import type { CFDI } from "./cfdi.types.js";
+import type { CFDI } from './cfdi.types.js';
+import type { MatchingResult } from './matching.types.js';
+import type { EstadoValidacionCFDI, EstadoValidacionGasto } from './validation.types.js';
 
 /**
  * Resultado base del parser CFDI (compartido por invoice y expense)
@@ -19,7 +21,7 @@ export type InvoiceData = CFDI;
  */
 export interface ExpenseData extends CFDI {
   /** Origen del gasto: 'cfdi' cuando se parsea desde XML */
-  tipo_origen: "XML";
+  tipo_origen: 'XML';
   /** Indica si el gasto ya fue pagado (PUE: true, PPD: false) */
   is_paid: boolean;
   /** Fecha de pago (PUE: fecha emisión, PPD: null hasta recibir complemento) */
@@ -58,4 +60,17 @@ export interface PayrollData {
   neto_pagado: number;
   /** Datos del empleado (receptor) */
   receptor: PayrollReceptorData;
+}
+
+export interface ParsedXmlResponse {
+  message: string;
+  data: InvoiceData | ExpenseData;
+  validacion: EstadoValidacionCFDI;
+  matching: MatchingResult | null;
+  profile: {
+    id: string;
+    nombre: string;
+    rfc: string;
+    regimenes_fiscales: string[];
+  };
 }

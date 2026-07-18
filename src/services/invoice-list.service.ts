@@ -23,9 +23,7 @@ const paymentStatusService = new PaymentStatusService();
 
 function rehydrateInvoiceListItem(item: InvoiceListItem): InvoiceListItem {
   const fecha =
-    item.fecha != null && typeof item.fecha === 'string'
-      ? new Date(item.fecha)
-      : item.fecha;
+    item.fecha != null && typeof item.fecha === 'string' ? new Date(item.fecha) : item.fecha;
   let estadoPago = item.estadoPago;
   if (estadoPago?.fechasComplementos) {
     estadoPago = {
@@ -104,7 +102,10 @@ async function fetchInvoicesFromDb(
     offset,
   });
 
-  const estadosPago = new Map<string, Awaited<ReturnType<PaymentStatusService['calcularEstadoPagoFactura']>>>();
+  const estadosPago = new Map<
+    string,
+    Awaited<ReturnType<PaymentStatusService['calcularEstadoPagoFactura']>>
+  >();
   const byProfile = new Map<string, typeof invoices>();
   for (const invoice of invoices) {
     const group = byProfile.get(invoice.profile_id) ?? [];
@@ -170,20 +171,16 @@ export async function listInvoices(
 
   const result = await fetchInvoicesFromDb(userId, params);
   const ttl = getInvoicesListTtlSeconds();
-  const indexKey = params.profileId
-    ? profileIndexKey(params.profileId)
-    : userListsIndexKey(userId);
+  const indexKey = params.profileId ? profileIndexKey(params.profileId) : userListsIndexKey(userId);
 
   await setJson(cacheKey, result, { ttlSeconds: ttl, indexKey }, cacheMeta);
 
   return result;
 }
 
-export function parseInvoiceListQuery(query: Record<string, unknown>): InvoiceListQueryParams {
+export function normalizeInvoiceListQuery(query: Record<string, unknown>): InvoiceListQueryParams {
   const profileId =
-    typeof query.profileId === 'string' && query.profileId.length > 0
-      ? query.profileId
-      : undefined;
+    typeof query.profileId === 'string' && query.profileId.length > 0 ? query.profileId : undefined;
 
   let mes: number | undefined;
   if (typeof query.mes === 'string') {
@@ -202,10 +199,7 @@ export function parseInvoiceListQuery(query: Record<string, unknown>): InvoiceLi
   }
 
   let tipo: string | undefined;
-  if (
-    typeof query.tipo === 'string' &&
-    ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)
-  ) {
+  if (typeof query.tipo === 'string' && ['PUE', 'PPD', 'COMPLEMENTO_PAGO'].includes(query.tipo)) {
     tipo = query.tipo;
   }
 
