@@ -1,9 +1,8 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { ManualIncome, Profile } from '../database/models/index.js';
-import { invalidateProfileCache } from '../services/cache.service.js';
 import {
   createManualIncomeService,
+  deleteManualIncomeService,
   getManualIncomeByIdService,
   getManualIncomesService,
   updateManualIncomeService,
@@ -20,7 +19,7 @@ export async function getManualIncomes(req: AuthRequest, res: Response, next: Ne
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const periodId = req.query.period_id as string;
-    const result = await getManualIncomesService(periodId, userId);
+    const result = await getManualIncomesService(userId, periodId);
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -36,7 +35,7 @@ export async function getManualIncomeById(req: AuthRequest, res: Response, next:
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const { id } = req.params;
-    const result = await getManualIncomeByIdService(id as string, userId);
+    const result = await getManualIncomeByIdService(userId, id as string);
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -78,34 +77,16 @@ export async function updateManualIncome(req: AuthRequest, res: Response, next: 
 /**
  * Elimina un ingreso manual por ID.
  */
-export async function deleteManualIncome(req: AuthRequest, res: Response): Promise<void> {
+export async function deleteManualIncome(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const { id } = req.params;
 
-    const income = await ManualIncome.findOne({
-      where: { id },
-      include: [{ model: Profile, as: 'profile', where: { user_id: userId }, attributes: ['id'] }],
-    });
-    if (!income) {
-      res.status(404).json({ error: 'Ingreso no encontrado' });
-      return;
-    }
-
-    const profileId = income.profile_id;
-    await income.destroy();
-    await invalidateProfileCache(profileId);
-    res.json({ message: 'Ingreso eliminado' });
+    const result = await deleteManualIncomeService(userId, id as string);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al eliminar ingreso manual:', error);
-    res.status(500).json({
-      error: 'Error al eliminar ingreso',
-      message: error instanceof Error ? error.message : 'Error desconocido',
-    });
+    next(error);
   }
 }
