@@ -1,6 +1,6 @@
 import { Plugin, Profile, SubscriptionPlugin } from '../database/models/index.js';
 import { SubscriptionService } from './subscription.service.js';
-import type { PluginListItem } from '../types/plugin.types.js';
+import type { PluginListItem, PluginsResponse } from '../types/plugin.types.js';
 import { AppError } from '../utils/AppError.js';
 
 /**
@@ -11,7 +11,7 @@ import { AppError } from '../utils/AppError.js';
  * @param userId ID del usuario
  * @returns Lista de plugins con name, display_name y enabled
  */
-const getPluginsWithEnabledForUser = async (userId: string): Promise<PluginListItem[]> => {
+export const getPluginsWithEnabledForUser = async (userId: string): Promise<PluginListItem[]> => {
   const subscriptionService = new SubscriptionService();
   const subscription = await subscriptionService.getActiveSubscription(userId);
 
@@ -41,16 +41,16 @@ const getPluginsWithEnabledForUser = async (userId: string): Promise<PluginListI
   }));
 };
 
-export const getPluginsService = async (userId: string) => {
+export const getPluginsService = async (userId: string): Promise<PluginsResponse> => {
   const plugins = await getPluginsWithEnabledForUser(userId);
   return { plugins };
 };
 
-export const getProfilePluginsService = async (userId: string, profileId: string) => {
+export const getProfilePluginsService = async (userId: string, profileId?: string) => {
   const profile = await Profile.findOne({
     where: { id: profileId, user_id: userId },
   });
-  if (!profile) throw new AppError('Perfil no encontrado ', 404);
+  if (!profile) throw new AppError('Perfil no encontrado', 404);
 
   const plugins = await getPluginsWithEnabledForUser(profile.user_id);
   return { plugins };

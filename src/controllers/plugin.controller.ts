@@ -35,8 +35,7 @@ export async function getProfilePlugins(
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const profileId = optionalString(req.params.profile_id);
-    if (!profileId) throw new AppError('profile id es requerido', 400);
+    const profileId = optionalString(req.params.id);
 
     const result = await getProfilePluginsService(userId, profileId);
 
