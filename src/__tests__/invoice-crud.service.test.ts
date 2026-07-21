@@ -32,10 +32,8 @@ vi.mock('../services/payment-status.service.js', () => ({
 }));
 
 vi.mock('../services/metrics.service.js', () => ({
-  MetricsService: class {
-    calculatePeriodMetrics = calculatePeriodMetrics;
-    findOrCreatePeriodForMonth = findOrCreatePeriodForMonth;
-  },
+  calculatePeriodMetrics,
+  findOrCreatePeriodForMonth,
 }));
 
 import {
