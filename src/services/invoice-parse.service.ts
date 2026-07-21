@@ -4,7 +4,6 @@ import { AppError } from '../utils/AppError.js';
 import { parseInvoice } from '../parsers/invoice.parser.js';
 import { FiscalValidationService } from './fiscal-validation.service.js';
 import { PaymentMatchingService } from './payment-matching.service.js';
-import { PaymentComplementService } from './payment-complement.service.js';
 import { invalidateProfileCache } from './cache.service.js';
 import type {
   EstadoValidacionCFDI,
@@ -16,10 +15,14 @@ import type { ParsedXmlResponse } from '../types/parser.types.js';
 import type { CFDI } from '../types/cfdi.types.js';
 import { UniqueConstraintError } from 'sequelize';
 import { calcularEstadoPagoFactura, calcularEstadoPagoGasto } from './payment-status.service.js';
+import {
+  applyPaymentsToExpense,
+  applyPaymentsToInvoice,
+  saveComplemento,
+} from './payment-complement.service.js';
 
 const validationService = new FiscalValidationService();
 const matchingService = new PaymentMatchingService();
-const paymentComplementService = new PaymentComplementService();
 
 type ParsedCfdi = ReturnType<typeof parseInvoice>;
 
@@ -235,11 +238,7 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
     }
 
     try {
-      const savedComplement = await paymentComplementService.saveComplemento(
-        cfdi,
-        profileId,
-        profile.rfc
-      );
+      const savedComplement = await saveComplemento(cfdi, profileId, profile.rfc);
 
       return {
         message: 'Complemento de pago procesado exitosamente',
@@ -281,9 +280,9 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
     }
 
     if (savedRecord instanceof Invoice && savedRecord.tipo === 'PPD') {
-      await paymentComplementService.applyPaymentsToInvoice(savedRecord, profileId);
+      await applyPaymentsToInvoice(savedRecord, profileId);
     } else if (savedRecord instanceof AccruedExpense && savedRecord.tipo === 'PPD') {
-      await paymentComplementService.applyPaymentsToExpense(savedRecord, profileId);
+      await applyPaymentsToExpense(savedRecord, profileId);
     }
 
     const estadoPago =

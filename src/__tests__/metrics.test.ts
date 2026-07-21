@@ -12,13 +12,12 @@ import {
   PaymentComplementItem,
   Payroll,
 } from "../database/models/index";
-import { MetricsService } from "../services/metrics.service";
+import * as metricsService from "../services/metrics.service";
 
 describe("MetricsService", () => {
   let userId: string;
   let profileId: string;
   let periodId: string;
-  let metricsService: MetricsService;
 
   beforeAll(async () => {
     await cleanDatabase();
@@ -39,7 +38,6 @@ describe("MetricsService", () => {
       name: "Diciembre 2024",
     });
     periodId = period.id;
-    metricsService = new MetricsService();
   });
 
   afterAll(async () => {
