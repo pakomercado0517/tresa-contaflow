@@ -1,9 +1,10 @@
 import Invoice from '../database/models/Invoice.model.js';
 import Profile from '../database/models/Profile.model.js';
 import type { GetMetricsFilters, GetMetricsResponse } from '../types/invoice-crud.types.js';
+import type { MetricsFilters } from '../types/metrics.types.js';
 import { AppError } from '../utils/AppError.js';
 import { invalidateProfileCache } from './cache.service.js';
-import { MetricsService, type MetricsFilters } from './metrics.service.js';
+import { calculatePeriodMetrics, findOrCreatePeriodForMonth } from './metrics.service.js';
 import { calcularEstadoPagoFactura } from './payment-status.service.js';
 
 export const getInvoiceByIdService = async (userId: string, invoiceId: string) => {
@@ -41,12 +42,11 @@ export const getMetricsService = async (
   mes !== undefined && (metricsFilters.mes = mes);
   año !== undefined && (metricsFilters.año = año);
 
-  const metricsService = new MetricsService();
-  const metrics = await metricsService.calculatePeriodMetrics(metricsFilters);
+  const metrics = await calculatePeriodMetrics(metricsFilters);
 
   let periodId: string | null = null;
   if (profileId && mes && año) {
-    const period = await metricsService.findOrCreatePeriodForMonth(profileId, mes, año);
+    const period = await findOrCreatePeriodForMonth(profileId, mes, año);
     periodId = period.id;
   }
 

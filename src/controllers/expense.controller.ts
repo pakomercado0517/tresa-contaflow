@@ -2,10 +2,10 @@ import { type NextFunction, type Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import { Profile, AccruedExpense } from '../database/models/index.js';
 import { uploadInvoice } from './invoice.controller.js';
-import { MetricsService } from '../services/metrics.service.js';
 import { invalidateProfileCache } from '../services/cache.service.js';
 import { listExpenses, parseExpenseListQuery } from '../services/expense-list.service.js';
 import { calcularEstadoPagoGasto } from '../services/payment-status.service.js';
+import { calculatePeriodMetrics, findOrCreatePeriodForMonth } from '../services/metrics.service.js';
 
 /**
  * Lista los gastos del usuario
@@ -384,16 +384,11 @@ export async function getMetrics(req: AuthRequest, res: Response): Promise<void>
       }
     }
 
-    const metricsService = new MetricsService();
-    const metrics = await metricsService.calculatePeriodMetrics(filters);
+    const metrics = await calculatePeriodMetrics(filters);
 
     let periodId: string | null = null;
     if (filters.profileId && filters.mes && filters.año) {
-      const period = await metricsService.findOrCreatePeriodForMonth(
-        filters.profileId,
-        filters.mes,
-        filters.año
-      );
+      const period = await findOrCreatePeriodForMonth(filters.profileId, filters.mes, filters.año);
       periodId = period.id;
     }
 

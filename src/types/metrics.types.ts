@@ -76,3 +76,43 @@ export interface MetricsRangeResponse {
   };
   items: MetricsByMonthItem[];
 }
+
+export interface PeriodMetrics {
+  totalFacturado: number; // Subtotal facturas (PUE + PPD) del período
+  totalPagado: number; // Subtotal PUE + complementos/manual cobrados en el período
+  totalCompras: number; // Subtotal gastos registrados (contable) - PUE + PPD
+  totalComprasPagadas: number; // Subtotal de gastos pagados - PUE + PPD pagado
+  totalPagadoMenosCompras: number; // Flujo de efectivo neto: totalPagado - totalComprasPagadas
+  pendientePagar: number; // Subtotal pendiente de cobro (facturas PPD)
+  gastosPendientes: number; // Subtotal gastos pendientes de pago
+  pagosAnticipadosGastos: number; // Complementos pagados sin gastos correspondientes en el período
+  totalFacturas: number;
+  totalGastos: number;
+  facturasPUE: number;
+  facturasPPD: number;
+  facturasPagadasCompletamente: number;
+  facturasParcialmentePagadas: number;
+  facturasPendientesPago: number; // PPD sin ningún pago
+  gastosPUE: number;
+  gastosPPD: number;
+  gastosPagadosCompletamente: number;
+  gastosParcialmentePagados: number;
+}
+
+export interface PaymentContext {
+  totalPagadoComplementosInvoicesPeriodo: number;
+  totalPagadoComplementosExpensesPeriodo: number;
+  totalPagadoComplementosInvoicesSinConciliarPeriodo: number;
+  totalPagadoComplementosExpensesSinConciliarPeriodo: number;
+  totalPagadoManualPeriodo: number;
+  pagosComplementoPorFactura: Record<string, number>;
+  pagosComplementoPorGasto: Record<string, number>;
+  pagosManualPorFactura: Record<string, number>;
+}
+
+export interface MetricsFilters {
+  profileId?: string;
+  mes?: number;
+  año?: number;
+  userId: string; // Requerido para verificar ownership
+}

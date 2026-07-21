@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Op } from 'sequelize';
 import { PublicReportToken, Profile, User } from '../database/models/index.js';
-import { MetricsService } from './metrics.service.js';
 import { taxEstimateService } from './tax-estimate.service.js';
 import { loadFiscalSettingsSnapshot } from './profile-fiscal.service.js';
 import {
@@ -17,9 +16,9 @@ import type {
   GenerateTokenResponse,
   MetricsByRegimen,
 } from '../types/public-report.types.js';
+import { getMetricsByDateRange } from './metrics.service.js';
 
 const DEFAULT_EXPIRES_IN_DAYS = 30;
-const metricsService = new MetricsService();
 
 /**
  * Genera un token de reporte público para un perfil.
@@ -86,7 +85,11 @@ export async function getPublicData(
       expires_at: { [Op.gt]: new Date() },
     },
     include: [
-      { model: Profile, as: 'profile', attributes: ['id', 'nombre', 'rfc', 'tipo_persona', 'regimenes_fiscales'] },
+      {
+        model: Profile,
+        as: 'profile',
+        attributes: ['id', 'nombre', 'rfc', 'tipo_persona', 'regimenes_fiscales'],
+      },
       { model: User, as: 'user', attributes: ['logo_url', 'nombre_comercial'] },
     ],
   });
@@ -107,10 +110,8 @@ export async function getPublicData(
 
   try {
     const [totalMetrics, ...perRegimenMetrics] = await Promise.all([
-      metricsService.getMetricsByDateRange(profile.id, start, end),
-      ...regimenes.map((r) =>
-        metricsService.getMetricsByDateRange(profile.id, start, end, r).catch(() => null)
-      ),
+      getMetricsByDateRange(profile.id, start, end),
+      ...regimenes.map((r) => getMetricsByDateRange(profile.id, start, end, r).catch(() => null)),
     ]);
     metrics = totalMetrics;
     const metricsRows = regimenes.map((r, i) => ({
@@ -151,12 +152,7 @@ export async function getPublicData(
     metrics_by_regimen,
   };
 
-  await setJsonForPublicReport(
-    cacheKey,
-    response,
-    profile.id,
-    getPublicReportsTtlSeconds()
-  );
+  await setJsonForPublicReport(cacheKey, response, profile.id, getPublicReportsTtlSeconds());
 
   return response;
 }
