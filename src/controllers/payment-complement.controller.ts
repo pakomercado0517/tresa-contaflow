@@ -2,11 +2,7 @@ import type { NextFunction, Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import type { ListPaymentComplementsParams } from '../types/payment.types.js';
 import { getByIdForUser, listForUser } from '../services/payment-complement.service.js';
-import {
-  optionalComplementRole,
-  optionalQueryInt,
-  optionalQueryString,
-} from '../utils/query.util.js';
+import { optionalComplementRole, optionalInt, optionalString } from '../utils/query.util.js';
 import { AppError } from '../utils/AppError.js';
 
 /**
@@ -21,11 +17,11 @@ export async function getPaymentComplements(
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const profileId = optionalQueryString(req.query.profile_id);
+    const profileId = optionalString(req.query.profile_id);
 
     const role = optionalComplementRole(req.query.role);
-    const mes = optionalQueryInt(req.query.mes);
-    const año = optionalQueryInt(req.query.año);
+    const mes = optionalInt(req.query.mes);
+    const año = optionalInt(req.query.año);
 
     const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
@@ -62,7 +58,7 @@ export async function getPaymentComplementById(
 
     const { id } = req.params;
 
-    const profileId = optionalQueryString(req.query.profile_id);
+    const profileId = optionalString(req.query.profile_id);
 
     const data = await getByIdForUser(id as string, userId, profileId);
 

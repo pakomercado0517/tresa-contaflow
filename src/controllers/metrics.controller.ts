@@ -9,7 +9,7 @@ import {
   validateProfileAndRegimenService,
 } from '../services/metrics-report.service.js';
 import { AppError } from '../utils/AppError.js';
-import { optionalQueryString, requiredQueryInt } from '../utils/query.util.js';
+import { optionalString, requiredQueryInt } from '../utils/query.util.js';
 
 function isRangeQuery(req: AuthRequest): boolean {
   const q = req.query;
@@ -35,8 +35,8 @@ export async function getMetricsByMonthYear(
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const profileId = optionalQueryString(req.query.profile_id);
-    const regimenFiscal = optionalQueryString(req.query.regimen_fiscal);
+    const profileId = optionalString(req.query.profile_id);
+    const regimenFiscal = optionalString(req.query.regimen_fiscal);
 
     await validateProfileAndRegimenService(userId, profileId, regimenFiscal);
 
@@ -95,7 +95,7 @@ export async function getMetricsByPeriodId(req: AuthRequest, res: Response, next
     const periodId = Array.isArray(periodIdRaw) ? periodIdRaw[0] : periodIdRaw;
     if (!periodId) throw new AppError('period_id es requerido', 400);
 
-    const regimenFiscal = optionalQueryString(req.query.regimen_fiscal);
+    const regimenFiscal = optionalString(req.query.regimen_fiscal);
 
     const result = await getMetricsByPeriodIdService(userId, periodId, regimenFiscal);
     res.status(200).json(result);

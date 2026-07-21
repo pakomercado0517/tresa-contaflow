@@ -11,5 +11,8 @@ export const normalizeXmlFile: RequestHandler = (req, _res, next) => {
     throw new AppError('El archivo debe ser en formato XML', 400);
 
   authRequest.xmlFile = file;
+  authRequest.xmlBuffer = Buffer.isBuffer(file.data)
+    ? file.data
+    : Buffer.from(file.data as ArrayBuffer);
   next();
 };
