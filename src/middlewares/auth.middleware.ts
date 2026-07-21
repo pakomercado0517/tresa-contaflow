@@ -9,6 +9,7 @@ export interface AuthRequest extends Request {
   userEmail?: string;
   files?: FileArray | null | undefined;
   xmlFile?: UploadedFile | undefined;
+  xmlBuffer?: Buffer;
 }
 
 export async function authenticateToken(

@@ -11,7 +11,7 @@ import {
   getInvoiceByIdService,
   getMetricsService,
 } from '../services/invoice-crud.service.js';
-import { optionalQueryInt, optionalQueryString } from '../utils/query.util.js';
+import { optionalInt, optionalString } from '../utils/query.util.js';
 import type { GetMetricsFilters } from '../types/invoice-crud.types.js';
 
 /**
@@ -93,9 +93,9 @@ export async function getMetrics(req: AuthRequest, res: Response, next: NextFunc
   try {
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
-    const profileId = optionalQueryString(req.query.profileId);
-    const mes = optionalQueryInt(req.query.mes);
-    const año = optionalQueryInt(req.query.año);
+    const profileId = optionalString(req.query.profileId);
+    const mes = optionalInt(req.query.mes);
+    const año = optionalInt(req.query.año);
 
     const filters: GetMetricsFilters = {};
     profileId !== undefined && (filters.profileId = profileId);
