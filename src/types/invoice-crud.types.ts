@@ -1,4 +1,4 @@
-import type { PeriodMetrics } from '../services/metrics.service.js';
+import type { PeriodMetrics } from './metrics.types.js';
 
 export interface GetMetricsFilters {
   profileId?: string;

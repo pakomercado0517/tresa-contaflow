@@ -1,5 +1,4 @@
 import { Profile, Period } from '../database/models/index.js';
-import { MetricsService } from './metrics.service.js';
 import { buildTaxEstimate } from '../lib/tax-estimate/index.js';
 import {
   buildResicoLimiteAnualAlert,
@@ -30,13 +29,10 @@ import type {
   TaxEstimateResult,
   TipoPersonaFiscal,
 } from '../types/tax-estimate.types.js';
+import { getMetricsByDateRange, getMetricsForPeriod } from './metrics.service.js';
 
 export class TaxEstimateServiceError extends Error {
-  constructor(
-    message: string,
-    readonly code: string,
-    readonly statusCode: number
-  ) {
+  constructor(message: string, readonly code: string, readonly statusCode: number) {
     super(message);
     this.name = 'TaxEstimateServiceError';
   }
@@ -74,8 +70,6 @@ function needsYtdMetrics(regimen: string, tipoPersona: TipoPersonaFiscal): boole
 }
 
 export class TaxEstimateService {
-  constructor(private readonly metricsService: MetricsService = new MetricsService()) {}
-
   estimateFromMetrics(
     metrics: PeriodMetricsResponse,
     context: TaxEstimateContext,
@@ -186,13 +180,7 @@ export class TaxEstimateService {
       estimates,
     };
 
-    await setJsonForProfile(
-      cacheKey,
-      response,
-      profileId,
-      getTaxEstimatesTtlSeconds(),
-      'tax'
-    );
+    await setJsonForProfile(cacheKey, response, profileId, getTaxEstimatesTtlSeconds(), 'tax');
     return response;
   }
 
@@ -255,14 +243,11 @@ export class TaxEstimateService {
 
     const tipoPersona = profile.tipo_persona as TipoPersonaFiscal;
     const fiscalSettings = await loadFiscalSettingsSnapshot(profileId, ejercicio);
-    const endDate =
-      period.end_date instanceof Date ? period.end_date : new Date(period.end_date);
+    const endDate = period.end_date instanceof Date ? period.end_date : new Date(period.end_date);
 
     const estimates = await Promise.all(
       targets.map(async (regimen) => {
-        const metrics = await this.metricsService
-          .getMetricsForPeriod(profileId, periodId, regimen)
-          .catch(() => null);
+        const metrics = await getMetricsForPeriod(profileId, periodId, regimen);
         const tax_estimate = await this.estimateFromMetricsWithYtd(
           profileId,
           regimen,
@@ -287,13 +272,7 @@ export class TaxEstimateService {
       estimates,
     };
 
-    await setJsonForProfile(
-      cacheKey,
-      response,
-      profileId,
-      getTaxEstimatesTtlSeconds(),
-      'tax'
-    );
+    await setJsonForProfile(cacheKey, response, profileId, getTaxEstimatesTtlSeconds(), 'tax');
     return response;
   }
 
@@ -342,7 +321,7 @@ export class TaxEstimateService {
   ): Promise<TaxEstimateByRegimen> {
     let metrics: PeriodMetricsResponse | null = null;
     try {
-      metrics = await this.metricsService.getMetricsByDateRange(profileId, start, end, regimen);
+      metrics = await getMetricsByDateRange(profileId, start, end, regimen);
     } catch {
       metrics = null;
     }
@@ -366,12 +345,7 @@ export class TaxEstimateService {
   ): Promise<PeriodMetricsResponse | null> {
     const ytd = getYearToDateRange(mes, ejercicio);
     try {
-      return await this.metricsService.getMetricsByDateRange(
-        profileId,
-        ytd.start,
-        ytd.end,
-        regimen
-      );
+      return await getMetricsByDateRange(profileId, ytd.start, ytd.end, regimen);
     } catch {
       return null;
     }
