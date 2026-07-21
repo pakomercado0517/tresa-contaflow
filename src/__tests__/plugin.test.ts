@@ -16,9 +16,8 @@ import {
   Subscription,
   SubscriptionPlugin,
   Profile,
-  Period,
 } from "../database/models/index";
-import { PluginService } from "../services/plugin.service";
+import { getPluginsWithEnabledForUser } from "../services/plugin.service";
 import { SubscriptionService } from "../services/subscription.service";
 
 /** Crea o obtiene el plugin por nombre (para tests que dependen del catálogo). */
@@ -188,10 +187,9 @@ describe("Plugins - Subscription y middleware", () => {
     });
   });
 
-  describe("PluginService.getPluginsWithEnabledForUser", () => {
+  describe("getPluginsWithEnabledForUser", () => {
     it("incluye enabled true para plugin payroll cuando la suscripción lo tiene", async () => {
-      const service = new PluginService();
-      const plugins = await service.getPluginsWithEnabledForUser(userWithPluginId);
+      const plugins = await getPluginsWithEnabledForUser(userWithPluginId);
       expect(plugins.length).toBeGreaterThanOrEqual(1);
       const payroll = plugins.find((p) => p.name === "payroll");
       expect(payroll).toBeDefined();
@@ -199,8 +197,7 @@ describe("Plugins - Subscription y middleware", () => {
     });
 
     it("incluye enabled false para todos cuando no hay suscripción activa", async () => {
-      const service = new PluginService();
-      const plugins = await service.getPluginsWithEnabledForUser(userWithoutPluginId);
+      const plugins = await getPluginsWithEnabledForUser(userWithoutPluginId);
       expect(plugins.length).toBeGreaterThanOrEqual(1);
       const payroll = plugins.find((p) => p.name === "payroll");
       expect(payroll).toBeDefined();
