@@ -1,3 +1,4 @@
+import type { ComplementRole } from '../types/payment.types.js';
 import { AppError } from './AppError.js';
 
 //Normalizamos un query param opcional a string
@@ -20,4 +21,9 @@ export const requiredQueryInt = (value: unknown): number => {
     throw new AppError('Parámetro de consulta numérico inválido o faltante', 400);
   }
   return parsed;
+};
+
+export const optionalComplementRole = (value: unknown): ComplementRole | undefined => {
+  const role = optionalQueryString(value);
+  return role === undefined ? undefined : (role as ComplementRole);
 };
