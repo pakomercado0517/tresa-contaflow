@@ -1,12 +1,13 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { Period, Profile } from '../database/models/index.js';
 import {
   getMetricsForMonthYear,
   getMetricsForMonthYearRange,
-  getMetricsForPeriod,
 } from '../services/metrics.service.js';
-import { validateProfileAndRegimenService } from '../services/metrics-report.service.js';
+import {
+  getMetricsByPeriodIdService,
+  validateProfileAndRegimenService,
+} from '../services/metrics-report.service.js';
 import { AppError } from '../utils/AppError.js';
 import { optionalQueryString, requiredQueryInt } from '../utils/query.util.js';
 
@@ -85,72 +86,20 @@ export async function getMetricsByMonthYear(
  * Retorna métricas consolidadas del período (por period_id). Valida que el período pertenezca al usuario.
  * Query opcional: regimen_fiscal (clave SAT 3 dígitos) para filtrar facturas y gastos por régimen.
  */
-export async function getMetricsByPeriodId(req: AuthRequest, res: Response): Promise<void> {
+export async function getMetricsByPeriodId(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const periodIdRaw = req.params.period_id;
     const periodId = Array.isArray(periodIdRaw) ? periodIdRaw[0] : periodIdRaw;
-    if (!periodId) {
-      res.status(400).json({ error: 'period_id es requerido' });
-      return;
-    }
+    if (!periodId) throw new AppError('period_id es requerido', 400);
 
-    const regimenFiscal = req.query.regimen_fiscal as string | undefined;
+    const regimenFiscal = optionalQueryString(req.query.regimen_fiscal);
 
-    const period = await Period.findOne({
-      where: { id: periodId },
-      include: [
-        {
-          model: Profile,
-          as: 'profile',
-          where: { user_id: userId },
-          attributes: ['id', 'regimenes_fiscales'],
-        },
-      ],
-      attributes: ['id', 'profile_id', 'start_date', 'end_date'],
-    });
-
-    if (!period) {
-      res.status(404).json({ error: 'Período no encontrado o no pertenece al usuario' });
-      return;
-    }
-
-    if (regimenFiscal && typeof regimenFiscal === 'string') {
-      const periodWithProfile = period as Period & { profile?: Profile };
-      const regimenes = periodWithProfile.profile?.regimenes_fiscales ?? [];
-      if (!regimenes.includes(regimenFiscal)) {
-        res.status(400).json({
-          error: 'El perfil no tiene el régimen fiscal indicado',
-          message: `El perfil no incluye el régimen ${regimenFiscal}. Régimenes del perfil: ${
-            regimenes.join(', ') || 'ninguno'
-          }`,
-        });
-        return;
-      }
-    }
-
-    const result = await getMetricsForPeriod(
-      period.profile_id,
-      periodId,
-      regimenFiscal ?? undefined
-    );
-
-    if (!result) {
-      res.status(404).json({ error: 'No se pudieron calcular las métricas del período' });
-      return;
-    }
-
-    res.json(result);
+    const result = await getMetricsByPeriodIdService(userId, periodId, regimenFiscal);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al obtener métricas por período:', error);
-    res.status(500).json({
-      error: 'Error al obtener métricas',
-      message: error instanceof Error ? error.message : 'Error desconocido',
-    });
+    next(error);
   }
 }
