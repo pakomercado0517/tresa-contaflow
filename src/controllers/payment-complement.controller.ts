@@ -58,22 +58,15 @@ export async function getPaymentComplementById(
 ): Promise<void> {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const idParam = req.params.id;
-    if (!idParam || Array.isArray(idParam)) {
-      res.status(400).json({ error: 'id inválido' });
-      return;
-    }
+    const { id } = req.params;
 
-    const profileId = req.query.profile_id as string | undefined;
+    const profileId = optionalQueryString(req.query.profile_id);
 
-    const data = await getByIdForUser(idParam, userId, profileId);
+    const data = await getByIdForUser(id as string, userId, profileId);
 
-    res.json({ data });
+    res.status(200).json({ data });
   } catch (error) {
     next(error);
   }

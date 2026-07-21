@@ -37,7 +37,7 @@ const listValidation = [
 ];
 
 const idParamValidation = [
-  param('id').isUUID().withMessage('id debe ser un UUID válido'),
+  param('id').isUUID().isString().withMessage('id debe ser un UUID válido'),
   query('profile_id').optional().isUUID().withMessage('profile_id debe ser un UUID válido'),
 ];
 

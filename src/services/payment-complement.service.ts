@@ -30,16 +30,6 @@ interface ConciliationMatch {
   documentoId: string | null;
 }
 
-export class PaymentComplementServiceError extends Error {
-  constructor(
-    public readonly code: 'PROFILE_NOT_FOUND' | 'NOT_FOUND' | 'PROFILE_ID_REQUIRED',
-    message: string
-  ) {
-    super(message);
-    this.name = 'PaymentComplementServiceError';
-  }
-}
-
 export const saveComplemento = async (
   cfdi: CFDI,
   profileId: string,
@@ -300,7 +290,7 @@ export const getByIdForUser = async (
   if (profiles.length === 0) {
     throw new AppError(
       `${profileId ? 'Perfil no encontrado' : 'Complemento de pago no encontrado'}`,
-      400
+      404
     );
   }
 
@@ -321,27 +311,27 @@ export const getByIdForUser = async (
   });
 
   if (links.length === 0) {
-    throw new PaymentComplementServiceError('NOT_FOUND', 'Complemento de pago no encontrado');
+    throw new AppError('Complemento de pago no encontrado', 404);
   }
 
   if (links.length > 1 && !profileId) {
-    throw new PaymentComplementServiceError(
-      'PROFILE_ID_REQUIRED',
-      'profile_id es requerido: el complemento está vinculado a más de un perfil'
+    throw new AppError(
+      'profile_id es requerido: el complemento está vinculado a más de un perfil',
+      400
     );
   }
 
   const link = links[0];
   if (!link) {
-    throw new PaymentComplementServiceError('NOT_FOUND', 'Complemento de pago no encontrado');
+    throw new AppError('Complemento de pago no encontrado', 404);
   }
   const complement = link.complement;
   if (!complement) {
-    throw new PaymentComplementServiceError('NOT_FOUND', 'Complemento de pago no encontrado');
+    throw new AppError('Complemento de pago no encontrado', 404);
   }
   const profile = profiles.find((p) => p.id === link.profile_id);
   if (!profile) {
-    throw new PaymentComplementServiceError('NOT_FOUND', 'Complemento de pago no encontrado');
+    throw new AppError('Complemento de pago no encontrado', 404);
   }
 
   const items = await PaymentComplementItem.findAll({
@@ -607,7 +597,7 @@ const buildComplementItems = (
   return items;
 };
 
-const mapPagoToItem = (
+export const mapPagoToItem = (
   pago: ComplementoPagoItem,
   factura: FacturaRelacionada,
   profileId: string,

@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PaymentComplementItem } from '../database/models/index.js';
-import { PaymentComplementService } from '../services/payment-complement.service.js';
+import { mapPagoToItem } from '../services/payment-complement.service.js';
 import { calcularEstadoPPD } from '../services/payment-status.service.js';
 
 import type { ComplementoPagoItem, FacturaRelacionada } from '../types/cfdi.types.js';
 
 describe('Payment complements multi-factura', () => {
-  const paymentComplementService = new PaymentComplementService();
-
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -33,16 +31,7 @@ describe('Payment complements multi-factura', () => {
       impSaldoInsoluto: 0,
     };
 
-    const item = (
-      paymentComplementService as unknown as {
-        mapPagoToItem: (
-          pagoParam: ComplementoPagoItem,
-          facturaParam: FacturaRelacionada,
-          profileId: string,
-          complementId: string
-        ) => { monto_pago: number; imp_pagado: number };
-      }
-    ).mapPagoToItem(pago, facturaRelacionada, 'profile-id', 'complement-id');
+    const item = mapPagoToItem(pago, facturaRelacionada, 'profile-id', 'complement-id');
 
     expect(item.monto_pago).toBe(600);
     expect(item.imp_pagado).toBe(600);
