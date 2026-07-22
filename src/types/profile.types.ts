@@ -41,3 +41,30 @@ export interface ProfileServiceError {
   message: string;
   statusCode: number;
 }
+
+export interface CreateProfileBody {
+  nombre: string;
+  rfc: string;
+  tipo_persona: 'FISICA' | 'MORAL';
+  regimenes_fiscales?: string[];
+  validaciones_habilitadas?: Record<string, unknown>;
+}
+
+export interface UpdateProfileBody {
+  nombre?: string;
+  rfc?: string;
+  tipo_persona?: 'FISICA' | 'MORAL';
+  regimenes_fiscales?: string[];
+  validaciones_habilitadas?: Record<string, unknown>;
+}
+
+export interface CreateProfileparams {
+  userId: string;
+  body: CreateProfileBody;
+}
+
+export interface UpdateProfileParams {
+  userId: string;
+  profileId: string;
+  body: UpdateProfileBody;
+}

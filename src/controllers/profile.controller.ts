@@ -1,286 +1,138 @@
-import { type Response } from 'express';
-import { Op } from 'sequelize';
+import { type NextFunction, type Response } from 'express';
 import { Profile, Subscription } from '../database/models/index.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { ProfileService } from '../services/profile.service.js';
 import { invalidateProfileCache } from '../services/cache.service.js';
 import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
-import { SUPPORT_EMAIL, ERROR_CODE_RFC_IN_USE } from '../constants/support.constants.js';
-import { normalizeRFC } from '../utils/rfc.util.js';
 import type { ProfileServiceError, FreezeOthersRequest } from '../types/index.js';
+import { unfreezeProfileService } from '../services/profile.service.js';
+import { AppError } from '../utils/AppError.js';
+import {
+  createProfileService,
+  deleteProfileService,
+  getProfileByIdService,
+  getProfilesService,
+  updateProfileService,
+} from '../services/profile-crud.service.js';
+import { optionalString } from '../utils/query.util.js';
+import { freezeExcessProfilesService } from '../services/profile-freeze.service.js';
 
 /**
  * Obtener todos los perfiles del usuario autenticado
  */
-export async function getProfiles(req: AuthRequest, res: Response): Promise<void> {
+export async function getProfiles(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const profiles = await Profile.findAll({
-      where: { user_id: userId },
-      order: [['created_at', 'DESC']],
-    });
-
+    const profiles = await getProfilesService(userId);
     res.json({
       message: 'Perfiles obtenidos exitosamente',
       data: profiles,
       count: profiles.length,
     });
   } catch (error) {
-    console.error('Error al obtener perfiles:', error);
-    res.status(500).json({ error: 'Error al obtener perfiles' });
+    next(error);
   }
 }
 
 /**
  * Obtener un perfil específico por ID
  */
-export async function getProfileById(req: AuthRequest, res: Response): Promise<void> {
+export async function getProfileById(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    const { id } = req.params;
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    const profileId = optionalString(req.params.id);
+    if (!profileId) throw new AppError('ID de profile es requerido', 400);
 
-    const profile = await Profile.findOne({
-      where: { id, user_id: userId },
-    });
-
-    if (!profile) {
-      res.status(404).json({ error: 'Perfil no encontrado' });
-      return;
-    }
-
+    const profile = await getProfileByIdService(userId, profileId);
     res.json({
       message: 'Perfil obtenido exitosamente',
       data: profile,
     });
   } catch (error) {
-    console.error('Error al obtener perfil:', error);
-    res.status(500).json({ error: 'Error al obtener perfil' });
+    next(error);
   }
 }
 
 /**
  * Crear un nuevo perfil
  */
-export async function createProfile(req: AuthRequest, res: Response): Promise<void> {
+export async function createProfile(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    const { nombre, rfc, tipo_persona, regimenes_fiscales, validaciones_habilitadas } = req.body;
+    const body = req.body;
 
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    // Obtener el plan actual del usuario
-    const subscription = await Subscription.findOne({
-      where: { user_id: userId },
-      order: [['created_at', 'DESC']],
-    });
-
-    const currentPlan = subscription?.plan || 'FREE';
-
-    // Verificar límite de perfiles usando el servicio
-    const canCreate = await ProfileService.canCreateProfile(userId, currentPlan);
-    if (!canCreate) {
-      const activeCount = await ProfileService.countActiveProfiles(userId);
-      const limit = ProfileService.getProfileLimitForPlan(currentPlan);
-      res.status(403).json({
-        error: `Has alcanzado el límite de perfiles para tu plan ${currentPlan}`,
-        limit,
-        current: activeCount,
-        code: 'PROFILE_LIMIT_REACHED',
-      });
-      return;
-    }
-
-    // Verificar si el RFC ya está en uso por cualquier usuario (un RFC solo puede existir en una cuenta)
-    const rfcNormalizado = normalizeRFC(rfc);
-    const existingProfile = await Profile.findOne({
-      where: { rfc: rfcNormalizado },
-    });
-
-    if (existingProfile) {
-      res.status(409).json({
-        error: 'Este RFC ya está en uso',
-        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
-        code: ERROR_CODE_RFC_IN_USE,
-      });
-      return;
-    }
-
-    // Normalizar regímenes fiscales: array de strings no vacíos
-    const regimenesNormalizados = Array.isArray(regimenes_fiscales)
-      ? regimenes_fiscales
-          .filter((r: unknown) => typeof r === 'string' && String(r).trim() !== '')
-          .map((r: unknown) => String(r).trim())
-      : [];
-
-    // Crear el perfil
-    const profile = await Profile.create({
-      user_id: userId,
-      nombre,
-      rfc: rfcNormalizado,
-      tipo_persona,
-      regimenes_fiscales: regimenesNormalizados,
-      validaciones_habilitadas: validaciones_habilitadas || {},
-    });
-
+    const profile = await createProfileService({ userId, body });
     res.status(201).json({
       message: 'Perfil creado exitosamente',
       data: profile,
     });
   } catch (error: unknown) {
-    console.error('Error al crear perfil:', error);
-
-    // Manejar error de constraint único (RFC duplicado a nivel BD)
-    if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
-      res.status(409).json({
-        error: 'Este RFC ya está en uso',
-        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
-        code: ERROR_CODE_RFC_IN_USE,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error al crear perfil' });
+    next(error);
   }
 }
 
 /**
  * Actualizar un perfil existente
  */
-export async function updateProfile(req: AuthRequest, res: Response): Promise<void> {
+export async function updateProfile(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    const { id } = req.params;
-    const { nombre, rfc, tipo_persona, regimenes_fiscales, validaciones_habilitadas } = req.body;
+    const profileId = optionalString(req.params.id);
+    const body = req.body;
 
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    if (!profileId) throw new AppError('ID de profile es requerido', 400);
 
-    // Buscar el perfil y verificar que pertenece al usuario
-    const profile = await Profile.findOne({
-      where: { id, user_id: userId },
-    });
-
-    if (!profile) {
-      res.status(404).json({ error: 'Perfil no encontrado' });
-      return;
-    }
-
-    // Si se está actualizando el RFC, verificar que no esté en uso por otro usuario
-    if (rfc) {
-      const rfcNormalizado = normalizeRFC(rfc);
-      if (rfcNormalizado !== profile.rfc) {
-        const existingProfile = await Profile.findOne({
-          where: {
-            rfc: rfcNormalizado,
-            id: { [Op.ne]: profile.id },
-          },
-        });
-
-        if (existingProfile) {
-          res.status(409).json({
-            error: 'Este RFC ya está en uso',
-            message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
-            code: ERROR_CODE_RFC_IN_USE,
-          });
-          return;
-        }
-      }
-    }
-
-    // Normalizar regímenes fiscales si se envían
-    const regimenesActualizados =
-      regimenes_fiscales !== undefined
-        ? Array.isArray(regimenes_fiscales)
-          ? regimenes_fiscales
-              .filter((r: unknown) => typeof r === 'string' && String(r).trim() !== '')
-              .map((r: unknown) => String(r).trim())
-          : []
-        : profile.regimenes_fiscales;
-
-    // Actualizar el perfil
-    await profile.update({
-      nombre: nombre || profile.nombre,
-      rfc: rfc ? normalizeRFC(rfc) : profile.rfc,
-      tipo_persona: tipo_persona || profile.tipo_persona,
-      regimenes_fiscales: regimenesActualizados,
-      validaciones_habilitadas:
-        validaciones_habilitadas !== undefined
-          ? validaciones_habilitadas
-          : profile.validaciones_habilitadas,
-    });
-
-    await invalidateProfileCache(profile.id);
-
+    const profile = await updateProfileService({ userId, profileId, body });
     res.json({
       message: 'Perfil actualizado exitosamente',
       data: profile,
     });
   } catch (error: unknown) {
-    console.error('Error al actualizar perfil:', error);
-
-    // Manejar error de constraint único (RFC duplicado a nivel BD)
-    if (error instanceof Error && error.name === 'SequelizeUniqueConstraintError') {
-      res.status(409).json({
-        error: 'Este RFC ya está en uso',
-        message: `Este RFC ya está registrado en Contafy por otro usuario. Si requiere ayuda para resolver este problema, contacte a ${SUPPORT_EMAIL}`,
-        code: ERROR_CODE_RFC_IN_USE,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error al actualizar perfil' });
+    next(error);
   }
 }
 
 /**
  * Eliminar un perfil
  */
-export async function deleteProfile(req: AuthRequest, res: Response): Promise<void> {
+export async function deleteProfile(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    const { id } = req.params;
+    const profileId = optionalString(req.params.id);
 
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+    if (!profileId) throw new AppError('ID de profile es requerido', 400);
 
-    // Buscar el perfil y verificar que pertenece al usuario
-    const profile = await Profile.findOne({
-      where: { id, user_id: userId },
-    });
-
-    if (!profile) {
-      res.status(404).json({ error: 'Perfil no encontrado' });
-      return;
-    }
-
-    // Eliminar el perfil
-    const profileId = profile.id;
-    await profile.destroy();
-    await invalidateProfileCache(profileId);
-
-    res.json({
-      message: 'Perfil eliminado exitosamente',
-    });
+    const result = await deleteProfileService(userId, profileId);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al eliminar perfil:', error);
-    res.status(500).json({ error: 'Error al eliminar perfil' });
+    next(error);
   }
 }
 
@@ -330,7 +182,7 @@ export async function freezeOtherProfiles(req: AuthRequest, res: Response): Prom
     const effectivePlan = requestedPlan || currentPlan;
 
     // Ejecutar la lógica de congelación usando el servicio
-    const result = await ProfileService.freezeExcessProfiles(
+    const result = await freezeExcessProfilesService(
       userId,
       preserveProfileId,
       effectivePlan,
@@ -404,7 +256,7 @@ export async function unfreezeProfile(req: AuthRequest, res: Response): Promise<
     const currentPlan = subscription?.plan || 'FREE';
 
     // Descongelar usando el servicio
-    const profile = await ProfileService.unfreezeProfile(userId, id, currentPlan);
+    const profile = await unfreezeProfileService(userId, id, currentPlan);
 
     res.json({
       message: 'Perfil descongelado exitosamente',
