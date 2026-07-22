@@ -106,30 +106,35 @@ const fiscalSettingsGetValidation = [
     .notEmpty()
     .withMessage('ejercicio es requerido')
     .isInt({ min: 2000, max: 2100 })
-    .withMessage('ejercicio debe ser un año válido'),
+    .withMessage('ejercicio debe ser un año válido')
+    .toInt(),
 ];
 
 const fiscalSettingsPutValidation = [
   param('id').isUUID().withMessage('ID de perfil inválido'),
   body('ejercicio')
     .isInt({ min: 2000, max: 2100 })
-    .withMessage('ejercicio es requerido y debe ser un año válido'),
+    .withMessage('ejercicio es requerido y debe ser un año válido')
+    .toInt(),
   body('coeficiente_utilidad')
     .optional({ nullable: true })
     .isFloat({ min: 0, max: 1 })
-    .withMessage('coeficiente_utilidad debe estar entre 0 y 1'),
+    .withMessage('coeficiente_utilidad debe estar entre 0 y 1')
+    .toFloat(),
   body('coeficiente_utilidad_ejercicio_anterior')
     .optional({ nullable: true })
     .isFloat({ min: 0, max: 1 })
-    .withMessage('coeficiente_utilidad_ejercicio_anterior debe estar entre 0 y 1'),
+    .withMessage('coeficiente_utilidad_ejercicio_anterior debe estar entre 0 y 1')
+    .toFloat(),
   body('isr_pagos_provisionales_acum')
     .optional()
     .isFloat({ min: 0 })
-    .withMessage('isr_pagos_provisionales_acum debe ser >= 0'),
-  body('saldo_a_favor_isr').optional().isFloat({ min: 0 }),
-  body('saldo_a_favor_iva').optional().isFloat({ min: 0 }),
-  body('perdidas_fiscales_pendientes').optional().isFloat({ min: 0 }),
-  body('ptu_pagada_acum').optional().isFloat({ min: 0 }),
+    .withMessage('isr_pagos_provisionales_acum debe ser >= 0')
+    .toFloat(),
+  body('saldo_a_favor_isr').optional().isFloat({ min: 0 }).toFloat(),
+  body('saldo_a_favor_iva').optional().isFloat({ min: 0 }).toFloat(),
+  body('perdidas_fiscales_pendientes').optional().isFloat({ min: 0 }).toFloat(),
+  body('ptu_pagada_acum').optional().isFloat({ min: 0 }).toFloat(),
 ];
 
 // Rutas

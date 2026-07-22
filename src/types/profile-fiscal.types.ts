@@ -54,6 +54,18 @@ export interface UpsertProfileFiscalSettingsBody {
   ptu_pagada_acum?: number;
 }
 
+export interface GetProfileFiscalSettingsParams {
+  userId: string;
+  profileId: string;
+  ejercicio: number;
+}
+
+export interface UpsertProfileFiscalSettingsParams {
+  userId: string;
+  profileId: string;
+  body: UpsertProfileFiscalSettingsBody;
+}
+
 export const EMPTY_FISCAL_SETTINGS_SNAPSHOT: ProfileFiscalSettingsSnapshot = {
   coeficiente_utilidad: null,
   coeficiente_utilidad_ejercicio_anterior: null,

@@ -1,77 +1,56 @@
-import type { Response } from 'express';
+import type { NextFunction, Response } from 'express';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import {
-  assertProfileOwnership,
-  getFiscalSettings,
-  upsertFiscalSettings,
-} from '../services/profile-fiscal.service.js';
 import type { UpsertProfileFiscalSettingsBody } from '../types/profile-fiscal.types.js';
+import { AppError } from '../utils/AppError.js';
+import { optionalString, requiredQueryInt } from '../utils/query.util.js';
+import {
+  getProfileFiscalSettingsService,
+  putProfileFiscalSettingsService,
+} from '../services/profile-fiscal-crud.service.js';
 
 /**
  * GET /api/profiles/:id/fiscal-settings?ejercicio=
  */
-export async function getProfileFiscalSettings(req: AuthRequest, res: Response): Promise<void> {
+export async function getProfileFiscalSettings(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const idRaw = req.params.id;
-    const profileId = Array.isArray(idRaw) ? idRaw[0] : idRaw;
-    const ejercicioRaw = req.query.ejercicio;
-    const ejercicio =
-      typeof ejercicioRaw === 'string' ? parseInt(ejercicioRaw, 10) : NaN;
+    const profileId = optionalString(req.params.id);
+    if (!profileId) throw new AppError('ID de profile es requerido', 400);
 
-    if (!profileId || Number.isNaN(ejercicio) || ejercicio < 2000 || ejercicio > 2100) {
-      res.status(400).json({ error: 'ejercicio es requerido y debe ser un año válido (2000-2100)' });
-      return;
-    }
+    const ejercicio = requiredQueryInt(req.query.ejercicio);
 
-    const profile = await assertProfileOwnership(profileId, userId);
-    if (!profile) {
-      res.status(404).json({ error: 'Perfil no encontrado o no pertenece al usuario' });
-      return;
-    }
-
-    const data = await getFiscalSettings(profileId, ejercicio);
-    res.json({ data });
+    const data = await getProfileFiscalSettingsService({ userId, profileId, ejercicio });
+    res.status(200).json(data);
   } catch (error) {
-    console.error('Error al obtener configuración fiscal:', error);
-    res.status(500).json({ error: 'Error al obtener configuración fiscal' });
+    next(error);
   }
 }
 
 /**
  * PUT /api/profiles/:id/fiscal-settings
  */
-export async function putProfileFiscalSettings(req: AuthRequest, res: Response): Promise<void> {
+export async function putProfileFiscalSettings(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const idRaw = req.params.id;
-    const profileId = Array.isArray(idRaw) ? idRaw[0] : idRaw;
-    if (!profileId) {
-      res.status(400).json({ error: 'ID de perfil inválido' });
-      return;
-    }
-
-    const profile = await assertProfileOwnership(profileId, userId);
-    if (!profile) {
-      res.status(404).json({ error: 'Perfil no encontrado o no pertenece al usuario' });
-      return;
-    }
+    const profileId = optionalString(req.params.id);
+    if (!profileId) throw new AppError('ID de profile es requerido', 400);
 
     const body = req.body as UpsertProfileFiscalSettingsBody;
-    const data = await upsertFiscalSettings(profileId, body);
-    res.json({ message: 'Configuración fiscal guardada', data });
+    const data = await putProfileFiscalSettingsService({ userId, profileId, body });
+    res.status(200).json({ message: 'Configuración fiscal guardada', data });
   } catch (error) {
-    console.error('Error al guardar configuración fiscal:', error);
-    res.status(500).json({ error: 'Error al guardar configuración fiscal' });
+    next(error);
   }
 }
