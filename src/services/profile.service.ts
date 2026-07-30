@@ -55,61 +55,6 @@ export const hasExcessProfiles = async (userId: string, plan: Plan): Promise<boo
 };
 
 /**
- * Descongelar un perfil si no excede el límite del plan
- */
-export const unfreezeProfileService = async (
-  userId: string,
-  profileId: string,
-  plan: Plan
-): Promise<Profile> => {
-  // 1. Buscar el perfil
-  const profile = await Profile.findOne({
-    where: { id: profileId, user_id: userId },
-  });
-
-  if (!profile) {
-    const error: ProfileServiceError = {
-      code: 'PROFILE_NOT_FOUND',
-      message: 'Perfil no encontrado',
-      statusCode: 404,
-    };
-    throw error;
-  }
-
-  // 2. Verificar que está congelado
-  if (!profile.frozen) {
-    const error: ProfileServiceError = {
-      code: 'PROFILE_NOT_FROZEN',
-      message: 'El perfil no está congelado',
-      statusCode: 400,
-    };
-    throw error;
-  }
-
-  // 3. Verificar que no exceda el límite al descongelar
-  const activeCount = await countActiveProfiles(userId);
-  const limit = getProfileLimitForPlan(plan);
-
-  if (activeCount >= limit) {
-    const error: ProfileServiceError = {
-      code: 'PROFILE_LIMIT_REACHED',
-      message: `No puedes descongelar este perfil. Ya tienes ${activeCount} perfil(es) activo(s) y tu límite es ${limit}`,
-      statusCode: 403,
-    };
-    throw error;
-  }
-
-  // 4. Descongelar
-  await profile.update({
-    frozen: false,
-    frozen_reason: null,
-    frozen_at: null,
-  });
-
-  return profile;
-};
-
-/**
  * Verificar si un usuario puede crear un nuevo perfil
  */
 export const canCreateProfile = async (userId: string, plan: Plan): Promise<boolean> => {

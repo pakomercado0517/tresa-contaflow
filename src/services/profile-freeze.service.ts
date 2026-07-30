@@ -8,7 +8,7 @@ import type {
   ProfileServiceError,
 } from '../types/profile.types.js';
 import { AppError } from '../utils/AppError.js';
-import { getActiveProfilesByUserId, getProfileLimitForPlan } from './profile.service.js';
+import { countActiveProfiles, getActiveProfilesByUserId, getProfileLimitForPlan } from './profile.service.js';
 
 export const freezeOtherProfilesService = async ({
   userId,
@@ -42,7 +42,35 @@ export const freezeOtherProfilesService = async ({
   return result
 };
 
-export const unfreezeProfileService = async () => {};
+  // Descongelar un perfil (rfc)
+export const unfreezeProfileService = async (userId: string, profileId: string): Promise<Profile> => {
+  const profile = await Profile.findOne({
+    where: {id: profileId, user_id: userId}
+  })
+
+  const subscription = await Subscription.findOne({
+    where: { user_id: userId},
+    order: [['created_at', 'DESC']]
+  })
+
+  const plan = subscription?.plan || 'FREE'
+
+  if(!profile) throw new AppError('Perfil no encontrado', 404)
+  if(!profile.frozen) throw new AppError('El perfil no está congelado', 400)
+
+  const activeCount = await countActiveProfiles(userId)
+  const limit = getProfileLimitForPlan(plan)
+
+  if(activeCount >= limit) throw new AppError(`No puedes descongelar este perfil, Ya tienes ${activeCount} perfil(es) activo(s) y tu límite ${limit}`, 403)
+
+  await profile.update({
+    frozen: false,
+    frozen_reason: null,
+    frozen_at: null
+  })
+
+  return profile; 
+};
 
 /**
  * Congelar perfiles que excedan el límite del plan, preservando uno específico

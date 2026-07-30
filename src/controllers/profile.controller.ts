@@ -2,7 +2,6 @@ import { type NextFunction, type Response } from 'express';
 import { Subscription } from '../database/models/index.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
 import type { ProfileServiceError, FreezeOthersRequest } from '../types/index.js';
-import { unfreezeProfileService } from '../services/profile.service.js';
 import { AppError } from '../utils/AppError.js';
 import {
   createProfileService,
@@ -14,7 +13,7 @@ import {
 import { optionalString } from '../utils/query.util.js';
 import {
   freezeOtherProfilesService,
-  getEffectivePlanService,
+  unfreezeProfileService,
 } from '../services/profile-freeze.service.js';
 
 /**
@@ -155,15 +154,10 @@ export async function freezeOtherProfiles(
     // Validar que preserveProfileId fue enviado
     if (!preserveProfileId) throw new AppError('El perfil seleccionado no existe...', 400);
 
-    if(!targetPlan) throw new AppError('targetPlan es requerido', 400)
-
+    if (!targetPlan) throw new AppError('targetPlan es requerido', 400);
 
     // Ejecutar la lógica de congelación usando el servicio
-    const result = await freezeOtherProfilesService(
-      {userId,
-      preserveProfileId,
-      targetPlan}
-    );
+    const result = await freezeOtherProfilesService({ userId, preserveProfileId, targetPlan });
 
     res.status(200).json(result);
   } catch (error) {
@@ -175,50 +169,25 @@ export async function freezeOtherProfiles(
  * Descongelar un perfil
  * PUT /api/profiles/:id/unfreeze
  */
-export async function unfreezeProfile(req: AuthRequest, res: Response): Promise<void> {
+export async function unfreezeProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
     const idRaw = req.params.id;
-    const id = Array.isArray(idRaw) ? idRaw[0] : idRaw;
+    const profileId = optionalString(idRaw);
 
     if (!userId) {
       res.status(401).json({ error: 'Usuario no autenticado' });
       return;
     }
 
-    if (!id) {
+    if (!profileId) {
       res.status(400).json({ error: 'ID de perfil requerido' });
       return;
     }
 
-    // Obtener el plan actual del usuario
-    const subscription = await Subscription.findOne({
-      where: { user_id: userId },
-      order: [['created_at', 'DESC']],
-    });
-
-    const currentPlan = subscription?.plan || 'FREE';
-
-    // Descongelar usando el servicio
-    const profile = await unfreezeProfileService(userId, id, currentPlan);
-
-    res.json({
-      message: 'Perfil descongelado exitosamente',
-      data: profile,
-    });
+    const result = await unfreezeProfileService(userId, profileId);
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al descongelar perfil:', error);
-
-    // Manejar errores del servicio
-    if (error && typeof error === 'object' && 'code' in error) {
-      const serviceError = error as ProfileServiceError;
-      res.status(serviceError.statusCode).json({
-        error: serviceError.message,
-        code: serviceError.code,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error al descongelar perfil' });
+    next(error);
   }
 }
