@@ -1,8 +1,6 @@
 import { type NextFunction, type Response } from 'express';
-import { Profile, Subscription } from '../database/models/index.js';
+import { Subscription } from '../database/models/index.js';
 import type { AuthRequest } from '../middlewares/auth.middleware.js';
-import { invalidateProfileCache } from '../services/cache.service.js';
-import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
 import type { ProfileServiceError, FreezeOthersRequest } from '../types/index.js';
 import { unfreezeProfileService } from '../services/profile.service.js';
 import { AppError } from '../utils/AppError.js';
@@ -14,7 +12,10 @@ import {
   updateProfileService,
 } from '../services/profile-crud.service.js';
 import { optionalString } from '../utils/query.util.js';
-import { freezeExcessProfilesService } from '../services/profile-freeze.service.js';
+import {
+  freezeOtherProfilesService,
+  getEffectivePlanService,
+} from '../services/profile-freeze.service.js';
 
 /**
  * Obtener todos los perfiles del usuario autenticado
@@ -140,90 +141,33 @@ export async function deleteProfile(
  * Congelar perfiles excedentes cuando el usuario hace downgrade
  * POST /api/profiles/freeze-others
  */
-export async function freezeOtherProfiles(req: AuthRequest, res: Response): Promise<void> {
+export async function freezeOtherProfiles(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const userId = req.userId;
     const { preserveProfileId, targetPlan }: FreezeOthersRequest = req.body;
 
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
-    }
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     // Validar que preserveProfileId fue enviado
-    if (!preserveProfileId) {
-      res.status(400).json({
-        error: "El campo 'preserveProfileId' es requerido",
-        code: 'MISSING_PROFILE_ID',
-      });
-      return;
-    }
+    if (!preserveProfileId) throw new AppError('El perfil seleccionado no existe...', 400);
 
-    // Validar targetPlan si se envía
-    let requestedPlan: Plan | undefined;
-    if (targetPlan) {
-      if (!(targetPlan in PLAN_LIMITS)) {
-        res.status(400).json({
-          error: "El campo 'targetPlan' es inválido",
-          code: 'INVALID_PLAN',
-        });
-        return;
-      }
-      requestedPlan = targetPlan;
-    }
+    if(!targetPlan) throw new AppError('targetPlan es requerido', 400)
 
-    // Obtener el plan actual del usuario desde su suscripción
-    const subscription = await Subscription.findOne({
-      where: { user_id: userId },
-      order: [['created_at', 'DESC']],
-    });
-
-    const currentPlan = subscription?.plan || 'FREE';
-    const effectivePlan = requestedPlan || currentPlan;
 
     // Ejecutar la lógica de congelación usando el servicio
-    const result = await freezeExcessProfilesService(
-      userId,
+    const result = await freezeOtherProfilesService(
+      {userId,
       preserveProfileId,
-      effectivePlan,
-      'plan_limit'
+      targetPlan}
     );
 
-    res.status(200).json({
-      message: 'Perfiles congelados exitosamente',
-      frozen: result.frozen.map((p) => ({
-        id: p.id,
-        nombre: p.nombre,
-        rfc: p.rfc,
-        frozen: p.frozen,
-        frozen_reason: p.frozen_reason,
-        frozen_at: p.frozen_at?.toISOString(),
-      })),
-      active: {
-        id: result.active.id,
-        nombre: result.active.nombre,
-        rfc: result.active.rfc,
-        frozen: result.active.frozen,
-      },
-      count: {
-        frozen: result.frozen.length,
-        total: result.frozen.length + 1, // +1 por el activo
-      },
-    });
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al congelar perfiles:', error);
-
-    // Manejar errores del servicio
-    if (error && typeof error === 'object' && 'code' in error) {
-      const serviceError = error as ProfileServiceError;
-      res.status(serviceError.statusCode).json({
-        error: serviceError.message,
-        code: serviceError.code,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error al congelar perfiles' });
+    next(error);
   }
 }
 

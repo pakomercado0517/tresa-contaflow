@@ -68,3 +68,35 @@ export interface UpdateProfileParams {
   profileId: string;
   body: UpdateProfileBody;
 }
+
+export interface FreezeOtherProfilesParams {
+  userId: string;
+  preserveProfileId: string;
+  targetPlan: Plan;
+}
+
+export interface FrozenProfileSummary {
+  id: string;
+  nombre: string;
+  rfc: string;
+  frozen: boolean;
+  frozen_reason: FrozenReason | null;
+  frozen_at?: string | undefined;
+}
+
+export interface ActiveProfileSummary {
+  id: string;
+  nombre: string;
+  rfc: string;
+  frozen: boolean;
+}
+
+export interface FreezeOtherResonse {
+  message: string;
+  frozen: FrozenProfileSummary[];
+  active: ActiveProfileSummary;
+  count: {
+    frozen: number;
+    total: number;
+  };
+}

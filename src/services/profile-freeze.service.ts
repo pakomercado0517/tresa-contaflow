@@ -1,10 +1,46 @@
+import { Result } from 'express-validator';
+import { PLAN_LIMITS, type Plan } from '../constants/plans.constants.js';
 import Profile from '../database/models/Profile.model.js';
-import type { Plan } from '../database/models/Subscription.model.js';
-import type { FrozenReason, ProfileServiceError } from '../types/profile.types.js';
+import Subscription from '../database/models/Subscription.model.js';
+import type {
+  FreezeOtherProfilesParams,
+  FrozenReason,
+  ProfileServiceError,
+} from '../types/profile.types.js';
 import { AppError } from '../utils/AppError.js';
 import { getActiveProfilesByUserId, getProfileLimitForPlan } from './profile.service.js';
 
-export const freezeOtherProfilesService = async () => {};
+export const freezeOtherProfilesService = async ({
+  userId,
+  preserveProfileId,
+  targetPlan,
+}: FreezeOtherProfilesParams) => {
+  const getEffectivePlan = await getEffectivePlanService(userId, targetPlan)
+  const freezeProfilesJSON = await freezeExcessProfilesService(userId, preserveProfileId, getEffectivePlan, 'plan_limit')
+  const result = {
+    message: 'Perfiles congelados exitosamente',
+    frozen: freezeProfilesJSON.frozen.map(p => ({
+      id:p.id,
+      nombre: p.nombre,
+      rfc: p.rfc,
+      frozen: p.frozen,
+      frozen_reason: p.frozen_reason,
+      frozen_at: p.frozen_at
+    })),
+    active: {
+      id: freezeProfilesJSON.active.id,
+      nombre: freezeProfilesJSON.active.nombre,
+      rfc: freezeProfilesJSON.active.rfc,
+      frozen: freezeProfilesJSON.active.frozen
+    },
+    count: {
+      frozen: freezeProfilesJSON.frozen.length,
+      total: freezeProfilesJSON.frozen.length + 1
+    }
+  }
+  
+  return result
+};
 
 export const unfreezeProfileService = async () => {};
 
@@ -68,4 +104,22 @@ export const freezeExcessProfilesService = async (
     frozen: frozenProfiles,
     active: profileToPreserve,
   };
+};
+
+export const getEffectivePlanService = async (userId: string, targetPlan?: Plan) => {
+  let requestedPlan: Plan | undefined;
+  if (targetPlan) {
+    if (!(targetPlan in PLAN_LIMITS)) throw new AppError('El campo target plan es inválido', 400);
+    requestedPlan = targetPlan;
+  }
+
+  const subscription = await Subscription.findOne({
+    where: { user_id: userId },
+    order: [['created_at', 'DESC']],
+  });
+
+  const currentPlan = subscription?.plan || 'FREE';
+  const effectivePlan = requestedPlan || currentPlan;
+
+  return effectivePlan;
 };
