@@ -42,6 +42,7 @@ function mockRes(): Response {
   const res: Partial<Response> = {};
   res.status = vi.fn().mockReturnValue(res) as unknown as Response['status'];
   res.json = vi.fn().mockReturnValue(res) as unknown as Response['json'];
+  res.set = vi.fn().mockReturnValue(res) as unknown as Response['set'];
   return res as Response;
 }
 
@@ -279,7 +280,7 @@ describe('invoice.controller', () => {
       expect(getMetricsService).not.toHaveBeenCalled();
     });
 
-    it('parsea filtros opcionales y responde 200', async () => {
+    it('parsea filtros opcionales y responde 200 con headers de deprecación', async () => {
       const result = {
         filters: { profileId: 'p1', mes: 12, año: 2024 },
         period_id: 'period-1',
@@ -299,17 +300,14 @@ describe('invoice.controller', () => {
         mes: 12,
         año: 2024,
       });
+      expect(res.set).toHaveBeenCalledWith('Deprecation', 'true');
+      expect(res.set).toHaveBeenCalledWith('Link', '</api/metrics>; rel="successor-version"');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(result);
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('omite filtros inválidos o vacíos', async () => {
-      vi.mocked(getMetricsService).mockResolvedValue({
-        filters: { profileId: null, mes: null, año: null },
-        period_id: null,
-        metrics: {},
-      } as never);
+    it('lanza AppError 400 cuando faltan mes o año', async () => {
       const res = mockRes();
 
       await getMetrics(
@@ -318,7 +316,8 @@ describe('invoice.controller', () => {
         next
       );
 
-      expect(getMetricsService).toHaveBeenCalledWith('u1', {});
+      expectNextAppError(400);
+      expect(getMetricsService).not.toHaveBeenCalled();
     });
 
     it('delega el error al middleware con next(error)', async () => {
@@ -326,7 +325,11 @@ describe('invoice.controller', () => {
       vi.mocked(getMetricsService).mockRejectedValue(error);
       const res = mockRes();
 
-      await getMetrics(mockReq({ userId: 'u1', query: {} }), res, next);
+      await getMetrics(
+        mockReq({ userId: 'u1', query: { mes: '1', año: '2025' } }),
+        res,
+        next
+      );
 
       expect(next).toHaveBeenCalledWith(error);
     });

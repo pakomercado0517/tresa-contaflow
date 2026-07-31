@@ -86,8 +86,8 @@ export async function getInvoiceById(req: AuthRequest, res: Response, next: Next
 }
 
 /**
- * Obtiene métricas del dashboard
- * Soporta filtros: profileId, mes, año
+ * @deprecated Usar GET /api/metrics?mes=&año=&profile_id=
+ * Obtiene métricas del dashboard en formato legacy (adaptado desde el stack de /api/metrics).
  */
 export async function getMetrics(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -97,12 +97,24 @@ export async function getMetrics(req: AuthRequest, res: Response, next: NextFunc
     const mes = optionalInt(req.query.mes);
     const año = optionalInt(req.query.año);
 
-    const filters: GetMetricsFilters = {};
+    if (mes === undefined || año === undefined) {
+      throw new AppError(
+        'Los parámetros mes y año son requeridos. Use GET /api/metrics?mes=&año=&profile_id=',
+        400
+      );
+    }
+
+    const filters: GetMetricsFilters = { mes, año };
     profileId !== undefined && (filters.profileId = profileId);
-    mes !== undefined && (filters.mes = mes);
-    año !== undefined && (filters.año = año);
 
     const result = await getMetricsService(userId, filters);
+
+    res.set('Deprecation', 'true');
+    res.set('Link', '</api/metrics>; rel="successor-version"');
+    res.set(
+      'Warning',
+      '299 - "GET /api/invoices/metrics está deprecado. Use GET /api/metrics?mes=&año=&profile_id="'
+    );
     res.status(200).json(result);
   } catch (error) {
     next(error);

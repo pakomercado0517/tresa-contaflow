@@ -5,7 +5,10 @@ import { uploadInvoice } from './invoice.controller.js';
 import { invalidateProfileCache } from '../services/cache.service.js';
 import { listExpenses, parseExpenseListQuery } from '../services/expense-list.service.js';
 import { calcularEstadoPagoGasto } from '../services/payment-status.service.js';
-import { calculatePeriodMetrics, findOrCreatePeriodForMonth } from '../services/metrics.service.js';
+import { getLegacyDashboardMetricsService } from '../services/legacy-dashboard-metrics.service.js';
+import type { GetMetricsFilters } from '../types/invoice-crud.types.js';
+import { AppError } from '../utils/AppError.js';
+import { optionalInt, optionalString } from '../utils/query.util.js';
 
 /**
  * Lista los gastos del usuario
@@ -331,88 +334,39 @@ export async function deleteExpense(req: AuthRequest, res: Response): Promise<vo
 }
 
 /**
- * Obtiene métricas del dashboard de gastos
- * Soporta filtros: profileId, mes, año
- * Incluye period_id cuando hay perfil + mes + año para habilitar "Agregar ingreso manual" / acciones de período en el frontend
+ * @deprecated Usar GET /api/metrics?mes=&año=&profile_id=
+ * Obtiene métricas del dashboard en formato legacy (adaptado desde el stack de /api/metrics).
  */
-export async function getMetrics(req: AuthRequest, res: Response): Promise<void> {
+export async function getMetrics(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   try {
     const userId = req.userId;
-    if (!userId) {
-      res.status(401).json({ error: 'Usuario no autenticado' });
-      return;
+    if (!userId) throw new AppError('Usuario no autenticado', 401);
+
+    const profileId = optionalString(req.query.profileId);
+    const mes = optionalInt(req.query.mes);
+    const año = optionalInt(req.query.año);
+
+    if (mes === undefined || año === undefined) {
+      throw new AppError(
+        'Los parámetros mes y año son requeridos. Use GET /api/metrics?mes=&año=&profile_id=',
+        400
+      );
     }
 
-    const { profileId, mes, año } = req.query;
+    const filters: GetMetricsFilters = { mes, año };
+    profileId !== undefined && (filters.profileId = profileId);
 
-    const filters: {
-      profileId?: string;
-      mes?: number;
-      año?: number;
-      userId: string;
-    } = {
-      userId,
-    };
+    const result = await getLegacyDashboardMetricsService(userId, filters);
 
-    if (profileId && typeof profileId === 'string') {
-      filters.profileId = profileId;
-    }
-
-    if (mes && typeof mes === 'string') {
-      const mesNum = parseInt(mes, 10);
-      if (!isNaN(mesNum) && mesNum >= 1 && mesNum <= 12) {
-        filters.mes = mesNum;
-      } else {
-        res.status(400).json({
-          error: 'Parámetro inválido',
-          message: 'El mes debe ser un número entre 1 y 12',
-        });
-        return;
-      }
-    }
-
-    if (año && typeof año === 'string') {
-      const añoNum = parseInt(año, 10);
-      if (!isNaN(añoNum) && añoNum > 2000 && añoNum < 2100) {
-        filters.año = añoNum;
-      } else {
-        res.status(400).json({
-          error: 'Parámetro inválido',
-          message: 'El año debe ser un número válido',
-        });
-        return;
-      }
-    }
-
-    const metrics = await calculatePeriodMetrics(filters);
-
-    let periodId: string | null = null;
-    if (filters.profileId && filters.mes && filters.año) {
-      const period = await findOrCreatePeriodForMonth(filters.profileId, filters.mes, filters.año);
-      periodId = period.id;
-    }
-
-    res.json({
-      filters: {
-        profileId: filters.profileId || null,
-        mes: filters.mes || null,
-        año: filters.año || null,
-      },
-      period_id: periodId,
-      metrics,
-    });
+    res.set('Deprecation', 'true');
+    res.set('Link', '</api/metrics>; rel="successor-version"');
+    res.set(
+      'Warning',
+      '299 - "GET /api/expenses/metrics está deprecado. Use GET /api/metrics?mes=&año=&profile_id="'
+    );
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error al obtener métricas de gastos:', error);
-
-    if (error instanceof Error) {
-      res.status(500).json({
-        error: 'Error al obtener métricas de gastos',
-        message: error.message,
-      });
-      return;
-    }
-
-    res.status(500).json({ error: 'Error desconocido al obtener métricas de gastos' });
+    next(error);
   }
 }
 

@@ -1059,7 +1059,7 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/invoices/metrics?profileId={{profileId}}&mes=&año=",
+              "raw": "{{base_url}}/api/invoices/metrics?profileId={{profileId}}&mes=12&año=2024",
               "host": ["{{base_url}}"],
               "path": ["api", "invoices", "metrics"],
               "query": [
@@ -1070,17 +1070,17 @@
                 },
                 {
                   "key": "mes",
-                  "value": "",
-                  "description": "Mes (1-12, opcional)"
+                  "value": "12",
+                  "description": "Mes (1-12, requerido)"
                 },
                 {
                   "key": "año",
-                  "value": "",
-                  "description": "Año (opcional)"
+                  "value": "2024",
+                  "description": "Año (requerido)"
                 }
               ]
             },
-            "description": "Obtener métricas del dashboard (total facturado, pagado, compras, pendiente, etc.)"
+            "description": "DEPRECADO: responde formato legacy { filters, metrics, period_id } con headers Deprecation. Migrar a GET /api/metrics?mes=&año=&profile_id= para el formato consolidado (flujo, devengado, impuestos, pendientes, nómina)."
           },
           "response": []
         }

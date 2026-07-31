@@ -265,7 +265,7 @@ export const calcularEstadoPagoFacturas = async (
       });
     } else if (factura.tipo === 'PPD') {
       const complementos = complementosPorFactura.get(factura.uuid) || [];
-      const estado = await calcularEstadoPPDConComplementos(
+      const estado = calcularEstadoPPDConComplementos(
         factura.uuid,
         factura.pagos,
         Number(factura.total),
@@ -389,7 +389,7 @@ const calcularEstadoPPDConComplementos = (
 
   const totalPagado = totalPagadoManual + totalPagadoComplementos;
   const ultimoItem = complementosItems[complementosItems.length - 1];
-  const ultimoSaldoInsoluto = ultimoItem ? Number(ultimoItem.imp_pagado) : null;
+  const ultimoSaldoInsoluto = ultimoItem ? Number(ultimoItem.imp_saldo_insoluto) : null;
 
   let estado: EstadoPago;
   let completamentePagado: boolean;

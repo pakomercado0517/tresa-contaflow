@@ -29,7 +29,10 @@ import {
   metricsMonthKey,
   metricsPeriodKey,
 } from './cache.service.js';
-import { calcularEstadoPagoGasto } from './payment-status.service.js';
+import {
+  calcularEstadoPagoGastos,
+  type EstadoPagoDetalle,
+} from './payment-status.service.js';
 import { AppError } from '../utils/AppError.js';
 
 /**
@@ -41,7 +44,8 @@ import { AppError } from '../utils/AppError.js';
  * Servicio para calcular métricas del dashboard
  */
 /**
- * Calcula las métricas para un período específico
+ * Calcula las métricas para un período específico.
+ * @deprecated Usar getMetricsForMonthYear o getMetricsByDateRange del stack /api/metrics.
  */
 export const calculatePeriodMetrics = async (filters: MetricsFilters): Promise<PeriodMetrics> => {
   const { profileId, mes, año, userId } = filters;
@@ -192,8 +196,22 @@ const calculateMetricsFromData = async (
     }
   });
 
-  // Procesar gastos
-  const profileIdParaGastos = gastos.length > 0 && gastos[0] ? gastos[0].profile_id : '';
+  // Precalcular estados de pago de gastos PPD por perfil (batch, evita N+1)
+  const estadosPagoGastos = new Map<string, EstadoPagoDetalle>();
+  const gastosPPDPorPerfil = new Map<string, AccruedExpense[]>();
+  for (const gasto of gastos) {
+    if (gasto.tipo === 'PPD' && gasto.uuid) {
+      const group = gastosPPDPorPerfil.get(gasto.profile_id) ?? [];
+      group.push(gasto);
+      gastosPPDPorPerfil.set(gasto.profile_id, group);
+    }
+  }
+  for (const [pid, group] of gastosPPDPorPerfil) {
+    const batch = await calcularEstadoPagoGastos(group, pid);
+    for (const [id, estado] of batch) {
+      estadosPagoGastos.set(id, estado);
+    }
+  }
 
   for (const gasto of gastos) {
     const subtotalGasto = Number(gasto.subtotal ?? gasto.total);
@@ -207,15 +225,10 @@ const calculateMetricsFromData = async (
         gastosPagadosCompletamente++;
       } else if (gasto.tipo === 'PPD') {
         gastosPPD++;
-        // Para gastos PPD, el complemento ya fue sumado en totalPagadoComplementosExpensesPeriodo
-        // Solo necesitamos verificar el estado para contar gastos pagados/parciales
-        const estadoPago = await calcularEstadoPagoGasto(gasto, gasto.profile_id);
-
-        // El complemento ya fue sumado en totalComprasPagadas (línea 135),
-        // solo verificar estado para contadores
-        if (estadoPago.completamentePagado) {
+        const estadoPago = estadosPagoGastos.get(gasto.id);
+        if (estadoPago?.completamentePagado) {
           gastosPagadosCompletamente++;
-        } else if (estadoPago.totalPagado > 0) {
+        } else if (estadoPago && estadoPago.totalPagado > 0) {
           gastosParcialmentePagados++;
         }
       }
@@ -266,6 +279,19 @@ const calculateMetricsFromData = async (
 };
 
 /**
+ * Agrupa complementos por UUID y conserva el último (orden ASC por fecha/parcialidad).
+ */
+const buildUltimoComplementoPorUuid = (
+  items: PaymentComplementItem[]
+): Map<string, PaymentComplementItem> => {
+  const map = new Map<string, PaymentComplementItem>();
+  for (const item of items) {
+    map.set(item.factura_uuid, item);
+  }
+  return map;
+};
+
+/**
  * Calcula pendientes basándose en el saldo insoluto del último complemento
  * Nuevo enfoque: Los pendientes se muestran en el mes de timbrado de la PPD
  *
@@ -284,36 +310,43 @@ const calcularPendientesPorSaldoInsoluto = async (
   gastos: AccruedExpense[],
   paymentContext: PaymentContext,
   profileIds: string[],
-  dateRange: { start: Date; end: Date } | null
+  _dateRange: { start: Date; end: Date } | null
 ): Promise<{ pendientePagar: number; gastosPendientes: number }> => {
   let pendientePagar = 0;
   let gastosPendientes = 0;
 
-  // Procesar facturas PPD del período
   const facturasPPD = facturas.filter((f) => f.tipo === 'PPD');
-  for (const factura of facturasPPD) {
-    // Obtener el último complemento de pago para esta factura
-    const ultimoComplemento = await PaymentComplementItem.findOne({
+  const gastosPPD = gastos.filter((g) => g.tipo === 'PPD' && g.uuid);
+
+  const uuidsPendientes = [
+    ...facturasPPD.map((f) => f.uuid),
+    ...gastosPPD.map((g) => g.uuid as string),
+  ];
+
+  let ultimoComplementoPorUuid = new Map<string, PaymentComplementItem>();
+  if (uuidsPendientes.length > 0 && profileIds.length > 0) {
+    const complementosItems = await PaymentComplementItem.findAll({
       where: {
-        profile_id: factura.profile_id,
-        factura_uuid: factura.uuid,
+        profile_id: { [Op.in]: profileIds },
+        factura_uuid: { [Op.in]: uuidsPendientes },
       },
       order: [
-        ['fecha_pago', 'DESC'],
-        ['num_parcialidad', 'DESC'],
+        ['fecha_pago', 'ASC'],
+        ['num_parcialidad', 'ASC'],
       ],
     });
+    ultimoComplementoPorUuid = buildUltimoComplementoPorUuid(complementosItems);
+  }
+
+  for (const factura of facturasPPD) {
+    const ultimoComplemento = ultimoComplementoPorUuid.get(factura.uuid);
 
     if (ultimoComplemento) {
-      // Si hay complemento, usar el saldo insoluto del último complemento
-      // El saldo insoluto ya refleja el estado después de todos los pagos (complementos y manuales)
       const saldoInsoluto = Number(ultimoComplemento.imp_saldo_insoluto || 0);
-      // Solo agregar a pendientes si el saldo insoluto > 0 (tolerancia de 0.01)
       if (saldoInsoluto > 0.01) {
         pendientePagar += saldoInsoluto;
       }
     } else {
-      // Si no hay complementos, restar pagos manuales y complementos ya aplicados (base subtotal)
       const subtotalFactura = Number(factura.subtotal ?? factura.total);
       const totalPagosParciales =
         (paymentContext.pagosComplementoPorFactura[factura.uuid] || 0) +
@@ -325,35 +358,17 @@ const calcularPendientesPorSaldoInsoluto = async (
     }
   }
 
-  // Procesar gastos PPD del período
-  // IMPORTANTE: Solo procesamos gastos que están en el período consultado
-  // Si un gasto está en enero pero su complemento se pagó en diciembre,
-  // en diciembre NO debe aparecer como pendiente (porque el gasto no está en diciembre)
-  const gastosPPD = gastos.filter((g) => g.tipo === 'PPD' && g.uuid);
   for (const gasto of gastosPPD) {
     if (!gasto.uuid) continue;
 
-    // Obtener el último complemento de pago para este gasto
-    const ultimoComplemento = await PaymentComplementItem.findOne({
-      where: {
-        profile_id: gasto.profile_id,
-        factura_uuid: gasto.uuid,
-      },
-      order: [
-        ['fecha_pago', 'DESC'],
-        ['num_parcialidad', 'DESC'],
-      ],
-    });
+    const ultimoComplemento = ultimoComplementoPorUuid.get(gasto.uuid);
 
     if (ultimoComplemento) {
-      // Si hay complemento, usar el saldo insoluto del último complemento
       const saldoInsoluto = Number(ultimoComplemento.imp_saldo_insoluto || 0);
-      // Solo agregar a pendientes si el saldo insoluto > 0 (tolerancia de 0.01)
       if (saldoInsoluto > 0.01) {
         gastosPendientes += saldoInsoluto;
       }
     } else {
-      // Si no hay complementos, usar el subtotal del PPD
       const subtotalGasto = Number(gasto.subtotal ?? gasto.total);
       if (subtotalGasto > 0.01) {
         gastosPendientes += subtotalGasto;

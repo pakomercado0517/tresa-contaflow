@@ -17,12 +17,7 @@ import type {
   InvoiceListQueryParams,
   ListInvoicesResult,
 } from '../types/invoice-list.types.js';
-import {
-  calcularEstadoPagoFactura,
-  calcularEstadoPagoFacturas,
-  type EstadoPagoDetalle,
-} from './payment-status.service.js';
-import { param } from 'express-validator';
+import { calcularEstadoPagoFacturas, type EstadoPagoDetalle } from './payment-status.service.js';
 
 function rehydrateInvoiceListItem(item: InvoiceListItem): InvoiceListItem {
   const fecha =
