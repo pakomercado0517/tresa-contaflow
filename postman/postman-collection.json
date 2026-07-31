@@ -1523,6 +1523,16 @@
                   "key": "code",
                   "value": "{{promotionCode}}",
                   "description": "Filtra por código exacto (opcional)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Página (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Elementos por página (default: 50, max: 100)"
                 }
               ]
             },

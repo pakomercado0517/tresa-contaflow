@@ -2,6 +2,8 @@
  * Tipos para códigos de descuento
  */
 
+import type DiscountCode from '../database/models/DiscountCode.model.js';
+
 export type DiscountCodeStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
 
 export interface DiscountCodeCreateInput {
@@ -44,4 +46,24 @@ export interface PromotionCodeLookup {
   promotionCodeId: string;
   code: string;
   trialDays: number | null;
+}
+
+export interface DiscountCodeListQueryParams {
+  code?: string;
+  active?: boolean;
+  page: number;
+  limit: number;
+}
+
+export interface DiscountCodeListPagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ListDiscountCodesResult {
+  data: DiscountCode[];
+  count: number;
+  pagination: DiscountCodeListPagination;
 }
