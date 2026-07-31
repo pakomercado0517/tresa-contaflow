@@ -265,7 +265,7 @@ export const calcularEstadoPagoFacturas = async (
       });
     } else if (factura.tipo === 'PPD') {
       const complementos = complementosPorFactura.get(factura.uuid) || [];
-      const estado = await calcularEstadoPPDConComplementos(
+      const estado = calcularEstadoPPDConComplementos(
         factura.uuid,
         factura.pagos,
         Number(factura.total),
@@ -335,7 +335,7 @@ export const calcularEstadoPagoGastos = async (
       });
     } else if (gasto.tipo === 'PPD' && gasto.uuid) {
       const complementos = complementosPorUuid.get(gasto.uuid) || [];
-      const estado = await calcularEstadoPPDConComplementos(
+      const estado = calcularEstadoPPDConComplementos(
         gasto.uuid,
         gasto.pagos,
         Number(gasto.total),
@@ -379,10 +379,13 @@ const calcularEstadoPPDConComplementos = (
     .filter((pago) => (pago.origen ?? 'MANUAL') === 'MANUAL')
     .reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
 
-  const totalPagadoComplementos = complementosItems.reduce(
-    (sum, item) => sum + Number(item.imp_pagado || 0),
-    0
-  );
+  let totalPagadoComplementos = 0;
+  const fechasComplementos: Date[] = [];
+
+  for (const item of complementosItems) {
+    totalPagadoComplementos += Number(item.imp_pagado || 0);
+    if (item.fecha_pago) fechasComplementos.push(item.fecha_pago);
+  }
 
   const totalPagado = totalPagadoManual + totalPagadoComplementos;
   const ultimoItem = complementosItems[complementosItems.length - 1];
@@ -403,9 +406,6 @@ const calcularEstadoPPDConComplementos = (
   const saldoPendiente = totalFactura - totalPagado;
   const porcentajePagado = totalFactura > 0 ? (totalPagado / totalFactura) * 100 : 0;
 
-  // Obtener fechas de los complementos para anotaciones
-  const fechasComplementos = complementosItems.map((item) => item.fecha_pago);
-
   return {
     estado,
     totalFactura,
@@ -416,7 +416,6 @@ const calcularEstadoPPDConComplementos = (
     ultimoSaldoInsoluto,
     tieneComplementos,
     tienePagosManuales,
-    // Solo incluir fechasComplementos si hay complementos
     ...(fechasComplementos.length > 0 && { fechasComplementos }),
   };
 };

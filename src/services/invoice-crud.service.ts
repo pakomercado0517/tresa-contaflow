@@ -1,11 +1,10 @@
 import Invoice from '../database/models/Invoice.model.js';
 import Profile from '../database/models/Profile.model.js';
-import type { GetMetricsFilters, GetMetricsResponse } from '../types/invoice-crud.types.js';
-import type { MetricsFilters } from '../types/metrics.types.js';
 import { AppError } from '../utils/AppError.js';
 import { invalidateProfileCache } from './cache.service.js';
-import { calculatePeriodMetrics, findOrCreatePeriodForMonth } from './metrics.service.js';
 import { calcularEstadoPagoFactura } from './payment-status.service.js';
+
+export { getLegacyDashboardMetricsService as getMetricsService } from './legacy-dashboard-metrics.service.js';
 
 export const getInvoiceByIdService = async (userId: string, invoiceId: string) => {
   const invoice = await Invoice.findOne({
@@ -28,36 +27,6 @@ export const getInvoiceByIdService = async (userId: string, invoiceId: string) =
       ...invoice.toJSON(),
       estadoPago,
     },
-  };
-};
-
-export const getMetricsService = async (
-  userId: string,
-  filters: GetMetricsFilters
-): Promise<GetMetricsResponse> => {
-  const { profileId, mes, año } = filters;
-
-  const metricsFilters: MetricsFilters = { userId };
-  profileId !== undefined && (metricsFilters.profileId = profileId);
-  mes !== undefined && (metricsFilters.mes = mes);
-  año !== undefined && (metricsFilters.año = año);
-
-  const metrics = await calculatePeriodMetrics(metricsFilters);
-
-  let periodId: string | null = null;
-  if (profileId && mes && año) {
-    const period = await findOrCreatePeriodForMonth(profileId, mes, año);
-    periodId = period.id;
-  }
-
-  return {
-    filters: {
-      profileId: profileId ?? null,
-      mes: mes ?? null,
-      año: año ?? null,
-    },
-    period_id: periodId,
-    metrics,
   };
 };
 

@@ -162,32 +162,50 @@ describe('discount.controller', () => {
   });
 
   describe('listDiscountCodes', () => {
-    it('normaliza filtros y responde con data y count', async () => {
-      vi.mocked(listDiscountCodesService).mockResolvedValue([{ id: 'id-1' }, { id: 'id-2' }] as never);
-      const req = mockReq({ query: { code: ' test60 ', active: 'true' } });
+    it('normaliza filtros y responde con data, count y pagination', async () => {
+      vi.mocked(listDiscountCodesService).mockResolvedValue({
+        data: [{ id: 'id-1' }, { id: 'id-2' }] as never,
+        count: 2,
+        pagination: { total: 2, page: 1, limit: 50, totalPages: 1 },
+      });
+      const req = mockReq({ query: { code: ' test60 ', active: 'true', page: '1', limit: '50' } });
       const res = mockRes();
 
       await listDiscountCodes(req, res, next);
 
-      expect(listDiscountCodesService).toHaveBeenCalledWith({ code: 'TEST60', active: true });
+      expect(listDiscountCodesService).toHaveBeenCalledWith({
+        code: 'TEST60',
+        active: true,
+        page: 1,
+        limit: 50,
+      });
       expect(res.json).toHaveBeenCalledWith({
         data: [
           { id: 'id-1', mapped: true },
           { id: 'id-2', mapped: true },
         ],
         count: 2,
+        pagination: { total: 2, page: 1, limit: 50, totalPages: 1 },
       });
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('consulta sin filtros cuando no se envían query params', async () => {
-      vi.mocked(listDiscountCodesService).mockResolvedValue([] as never);
+    it('consulta con defaults cuando no se envían query params', async () => {
+      vi.mocked(listDiscountCodesService).mockResolvedValue({
+        data: [] as never,
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 50, totalPages: 1 },
+      });
       const res = mockRes();
 
       await listDiscountCodes(mockReq(), res, next);
 
-      expect(listDiscountCodesService).toHaveBeenCalledWith({});
-      expect(res.json).toHaveBeenCalledWith({ data: [], count: 0 });
+      expect(listDiscountCodesService).toHaveBeenCalledWith({ page: 1, limit: 50 });
+      expect(res.json).toHaveBeenCalledWith({
+        data: [],
+        count: 0,
+        pagination: { total: 0, page: 1, limit: 50, totalPages: 1 },
+      });
     });
 
     it('delega el error al middleware con next(error)', async () => {

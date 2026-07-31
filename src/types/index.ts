@@ -17,6 +17,9 @@ export type {
   DiscountCodeCreateInput,
   DiscountCodeResponse,
   DiscountCodeApplyInput,
+  DiscountCodeListQueryParams,
+  DiscountCodeListPagination,
+  ListDiscountCodesResult,
 } from './discount.types.js';
 export type {
   PagoParcial,

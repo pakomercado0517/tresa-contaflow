@@ -8,7 +8,7 @@ const {
   stripePromotionUpdate,
   discountCodeCreate,
   discountCodeFindByPk,
-  discountCodeFindAll,
+  discountCodeFindAndCountAll,
   discountCodeFindOne,
 } = vi.hoisted(() => ({
   stripeCouponsCreate: vi.fn(),
@@ -17,7 +17,7 @@ const {
   stripePromotionUpdate: vi.fn(),
   discountCodeCreate: vi.fn(),
   discountCodeFindByPk: vi.fn(),
-  discountCodeFindAll: vi.fn(),
+  discountCodeFindAndCountAll: vi.fn(),
   discountCodeFindOne: vi.fn(),
 }));
 
@@ -40,7 +40,7 @@ vi.mock('../database/models/index.js', () => ({
   DiscountCode: {
     create: discountCodeCreate,
     findByPk: discountCodeFindByPk,
-    findAll: discountCodeFindAll,
+    findAndCountAll: discountCodeFindAndCountAll,
     findOne: discountCodeFindOne,
   },
 }));
@@ -106,6 +106,20 @@ describe('discount.service', () => {
       );
 
       expect(error.status).toBe(400);
+    });
+
+    it('lanza AppError 409 si el código ya existe en BD', async () => {
+      discountCodeFindOne.mockResolvedValue({ id: 'existing', code: 'TEST60' });
+
+      const error = await catchError(
+        createDiscountCodeService({ code: 'TEST60', duration: 'once', percentOff: 100 }, 'user-uuid')
+      );
+
+      expect(error).toBeInstanceOf(AppError);
+      expect(error.status).toBe(409);
+      expect(error.message).toBe('El código de descuento ya existe');
+      expect(stripeCouponsCreate).not.toHaveBeenCalled();
+      expect(discountCodeCreate).not.toHaveBeenCalled();
     });
 
     it('crea cupón, promotion code y persiste el registro', async () => {
@@ -177,26 +191,41 @@ describe('discount.service', () => {
   });
 
   describe('listDiscountCodesService', () => {
-    it('consulta con filtros de code y active y ordena por created_at DESC', async () => {
-      discountCodeFindAll.mockResolvedValue([]);
+    it('consulta con filtros, paginación y ordena por created_at DESC', async () => {
+      discountCodeFindAndCountAll.mockResolvedValue({ count: 1, rows: [{ id: 'id-1' }] });
 
-      await listDiscountCodesService({ code: 'TEST60', active: true });
+      const result = await listDiscountCodesService({
+        code: 'TEST60',
+        active: true,
+        page: 2,
+        limit: 25,
+      });
 
-      expect(discountCodeFindAll).toHaveBeenCalledWith({
+      expect(discountCodeFindAndCountAll).toHaveBeenCalledWith({
         where: { code: 'TEST60', active: true },
         order: [['created_at', 'DESC']],
+        limit: 25,
+        offset: 25,
+      });
+      expect(result).toEqual({
+        data: [{ id: 'id-1' }],
+        count: 1,
+        pagination: { total: 1, page: 2, limit: 25, totalPages: 1 },
       });
     });
 
-    it('consulta sin filtros cuando no se proveen', async () => {
-      discountCodeFindAll.mockResolvedValue([]);
+    it('consulta sin filtros con defaults page=1 limit=50', async () => {
+      discountCodeFindAndCountAll.mockResolvedValue({ count: 0, rows: [] });
 
-      await listDiscountCodesService({});
+      const result = await listDiscountCodesService({ page: 1, limit: 50 });
 
-      expect(discountCodeFindAll).toHaveBeenCalledWith({
+      expect(discountCodeFindAndCountAll).toHaveBeenCalledWith({
         where: {},
         order: [['created_at', 'DESC']],
+        limit: 50,
+        offset: 0,
       });
+      expect(result.pagination.totalPages).toBe(1);
     });
   });
 

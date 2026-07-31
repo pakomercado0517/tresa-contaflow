@@ -107,12 +107,14 @@ describe("Invoices API", () => {
       ppdInvoiceUuid = ppdInvoice?.uuid ?? "";
     });
 
-    it("debe obtener métricas del dashboard", async () => {
+    it('debe obtener métricas del dashboard', async () => {
       const response = await request(app)
         .get(`/api/invoices/metrics?profileId=${profileId}&mes=12&año=2024`)
         .set("Authorization", `Bearer ${accessToken}`);
 
       expectSuccess(response, 200);
+      expect(response.headers.deprecation).toBe('true');
+      expect(response.headers.link).toContain('/api/metrics');
       expect(response.body).toHaveProperty("filters");
       expect(response.body).toHaveProperty("metrics");
       expect(response.body.metrics).toHaveProperty("totalFacturado");
@@ -183,8 +185,8 @@ describe("Invoices API", () => {
 
       // totalPagado = PUE (862.07) + manual del PPD (1000) + complemento en período (500) = 2362.07
       expect(metrics.totalPagado).toBeCloseTo(2362.07, 2);
-      // pendientePagar = saldo insoluto del último complemento = 500
-      expect(metrics.pendientePagar).toBeCloseTo(500, 2);
+      // pendientePagar (stack /api/metrics): subtotal PPD - manual - complemento = 224.14
+      expect(metrics.pendientePagar).toBeCloseTo(224.14, 2);
     });
   });
 

@@ -3,14 +3,14 @@ import { AppError } from '../utils/AppError.js';
 
 const {
   invoiceFindOne,
-  calculatePeriodMetrics,
-  findOrCreatePeriodForMonth,
+  getMetricsForMonthYear,
+  validateProfileAndRegimenService,
   invalidateProfileCache,
   calcularEstadoPagoFactura,
 } = vi.hoisted(() => ({
   invoiceFindOne: vi.fn(),
-  calculatePeriodMetrics: vi.fn(),
-  findOrCreatePeriodForMonth: vi.fn(),
+  getMetricsForMonthYear: vi.fn(),
+  validateProfileAndRegimenService: vi.fn(),
   invalidateProfileCache: vi.fn(),
   calcularEstadoPagoFactura: vi.fn(),
 }));
@@ -32,8 +32,11 @@ vi.mock('../services/payment-status.service.js', () => ({
 }));
 
 vi.mock('../services/metrics.service.js', () => ({
-  calculatePeriodMetrics,
-  findOrCreatePeriodForMonth,
+  getMetricsForMonthYear,
+}));
+
+vi.mock('../services/metrics-report.service.js', () => ({
+  validateProfileAndRegimenService,
 }));
 
 import {
@@ -51,9 +54,44 @@ async function catchError(promise: Promise<unknown>): Promise<AppError> {
   throw new Error('Se esperaba que la promesa fuera rechazada, pero se resolvió');
 }
 
+const samplePeriodMetricsResponse = {
+  period: { id: 'period-1', start: new Date(), end: new Date() },
+  flujo: {
+    ingresos_cobrados: 1000,
+    egresos_pagados: 400,
+    flujo_neto: 600,
+    ingresos_cobrados_sin_conciliar: 0,
+    egresos_pagados_sin_conciliar: 0,
+  },
+  devengado: {
+    ingresos_devengados: 1200,
+    egresos_devengados: 500,
+    resultado_devengado: 700,
+  },
+  impuestos: {
+    iva_trasladado: { cobrado: 0, devengado: 0 },
+    iva_acreditable: { pagado: 0, devengado: 0 },
+    retenciones_iva: { cobrado: 0, devengado: 0 },
+    retenciones_isr: { cobrado: 0, devengado: 0 },
+  },
+  pendientes: {
+    por_cobrar: 200,
+    por_pagar: 100,
+    por_cobrar_impuestos: { iva: 0, retenciones_iva: 0, retenciones_isr: 0 },
+    por_pagar_impuestos: { iva: 0, retenciones_iva: 0, retenciones_isr: 0 },
+  },
+  nomina: {
+    total_pagada: 0,
+    percepciones: 0,
+    deducciones: 0,
+    cantidad_empleados: 0,
+  },
+};
+
 describe('invoice-crud.service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    validateProfileAndRegimenService.mockResolvedValue(undefined);
   });
 
   describe('getInvoiceByIdService', () => {
@@ -93,28 +131,16 @@ describe('invoice-crud.service', () => {
   });
 
   describe('getMetricsService', () => {
-    it('calcula métricas sin crear periodo cuando faltan filtros', async () => {
-      const metrics = { totalFacturado: 100 };
-      calculatePeriodMetrics.mockResolvedValue(metrics);
+    it('lanza AppError 400 si faltan mes o año', async () => {
+      const error = await catchError(getMetricsService('u1', { profileId: 'p1' }));
 
-      const result = await getMetricsService('u1', { profileId: 'p1' });
-
-      expect(calculatePeriodMetrics).toHaveBeenCalledWith({
-        userId: 'u1',
-        profileId: 'p1',
-      });
-      expect(findOrCreatePeriodForMonth).not.toHaveBeenCalled();
-      expect(result).toEqual({
-        filters: { profileId: 'p1', mes: null, año: null },
-        period_id: null,
-        metrics,
-      });
+      expect(error).toBeInstanceOf(AppError);
+      expect(error.status).toBe(400);
+      expect(getMetricsForMonthYear).not.toHaveBeenCalled();
     });
 
-    it('crea o encuentra el periodo cuando hay profileId, mes y año', async () => {
-      const metrics = { totalFacturado: 250 };
-      calculatePeriodMetrics.mockResolvedValue(metrics);
-      findOrCreatePeriodForMonth.mockResolvedValue({ id: 'period-1' });
+    it('delega a getMetricsForMonthYear y adapta la respuesta legacy', async () => {
+      getMetricsForMonthYear.mockResolvedValue(samplePeriodMetricsResponse);
 
       const result = await getMetricsService('u1', {
         profileId: 'p1',
@@ -122,18 +148,44 @@ describe('invoice-crud.service', () => {
         año: 2024,
       });
 
-      expect(calculatePeriodMetrics).toHaveBeenCalledWith({
-        userId: 'u1',
-        profileId: 'p1',
-        mes: 12,
-        año: 2024,
-      });
-      expect(findOrCreatePeriodForMonth).toHaveBeenCalledWith('p1', 12, 2024);
+      expect(validateProfileAndRegimenService).toHaveBeenCalledWith('u1', 'p1', undefined);
+      expect(getMetricsForMonthYear).toHaveBeenCalledWith('u1', 12, 2024, 'p1');
       expect(result).toEqual({
         filters: { profileId: 'p1', mes: 12, año: 2024 },
         period_id: 'period-1',
-        metrics,
+        metrics: {
+          totalFacturado: 1200,
+          totalPagado: 1000,
+          totalCompras: 500,
+          totalComprasPagadas: 400,
+          totalPagadoMenosCompras: 600,
+          pendientePagar: 200,
+          gastosPendientes: 100,
+          pagosAnticipadosGastos: 0,
+          totalFacturas: 0,
+          totalGastos: 0,
+          facturasPUE: 0,
+          facturasPPD: 0,
+          facturasPagadasCompletamente: 0,
+          facturasParcialmentePagadas: 0,
+          facturasPendientesPago: 0,
+          gastosPUE: 0,
+          gastosPPD: 0,
+          gastosPagadosCompletamente: 0,
+          gastosParcialmentePagados: 0,
+        },
       });
+    });
+
+    it('retorna period_id null cuando la respuesta es agregada multi-perfil', async () => {
+      getMetricsForMonthYear.mockResolvedValue({
+        ...samplePeriodMetricsResponse,
+        period: { id: 'aggregated', start: new Date(), end: new Date() },
+      });
+
+      const result = await getMetricsService('u1', { mes: 1, año: 2025 });
+
+      expect(result.period_id).toBeNull();
     });
   });
 

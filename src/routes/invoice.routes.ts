@@ -41,11 +41,13 @@ const validateId = [param('id').isUUID().withMessage('id debe ser un UUID válid
 const metricsValidation = [
   query('profileId').optional().isUUID().withMessage('profileId debe ser un UUID válido'),
   query('mes')
-    .optional()
+    .notEmpty()
+    .withMessage('mes es requerido')
     .isInt({ min: 1, max: 12 })
     .withMessage('El mes debe ser un número entero entre 1 y 12'),
   query('año')
-    .optional()
+    .notEmpty()
+    .withMessage('año es requerido')
     .isInt({ min: 2000, max: 2100 })
     .withMessage('El año debe ser un número entero válido (ej.2026)'),
 ];
@@ -106,6 +108,7 @@ router.post(
 );
 
 // CRUD de facturas
+/** @deprecated Use GET /api/metrics — mantiene formato legacy con headers Deprecation */
 router.get('/metrics', metricsValidation, validateRequest, getMetrics);
 router.get('/', invoiceListValidation, validateRequest, getInvoices);
 router.get('/:id', validateId, validateRequest, getInvoiceById);

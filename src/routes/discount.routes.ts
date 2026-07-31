@@ -20,7 +20,7 @@ router.get(
   [
     query("active")
       .optional()
-      .isBoolean()
+      .isIn(["true", "false"])
       .withMessage("active debe ser true o false"),
     query("code")
       .optional()
@@ -28,6 +28,14 @@ router.get(
       .trim()
       .isLength({ min: 3, max: 50 })
       .withMessage("code debe ser un string válido"),
+    query("page")
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage("El número de página debe ser un número entero mayor a 0"),
+    query("limit")
+      .optional()
+      .isInt({ min: 1, max: 100 })
+      .withMessage("El número de elementos por página debe estar entre 1 y 100"),
   ],
   validateRequest,
   listDiscountCodes

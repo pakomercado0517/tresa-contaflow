@@ -5,9 +5,12 @@ import {
   listDiscountCodesService,
   setDiscountActiveService,
 } from '../services/discount.service.js';
-import type { DiscountCodeCreateInput } from '../types/index.js';
 import { AppError } from '../utils/AppError.js';
 import { mapDiscountResponse } from '../mappers/discount.mapper.js';
+import {
+  normalizeDiscountCodeCreateInput,
+  normalizeDiscountListQuery,
+} from '../lib/discount-query.util.js';
 
 /**
  * Crea un código de descuento en Stripe (admin)
@@ -17,46 +20,7 @@ export async function createDiscountCode(req: AuthRequest, res: Response, next: 
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const {
-      code,
-      duration,
-      durationInMonths,
-      percentOff,
-      amountOff,
-      currency,
-      maxRedemptions,
-      expiresAt,
-      active,
-      metadata,
-      trialDays,
-    } = req.body as {
-      code: string;
-      duration: 'once' | 'repeating' | 'forever';
-      durationInMonths?: number;
-      percentOff?: number;
-      amountOff?: number;
-      currency?: string;
-      maxRedemptions?: number;
-      expiresAt?: string;
-      active?: boolean;
-      metadata?: Record<string, string>;
-      trialDays?: number;
-    };
-
-    const input: DiscountCodeCreateInput = {
-      code: code.trim().toUpperCase(),
-      duration,
-      ...(typeof durationInMonths === 'number' ? { durationInMonths } : {}),
-      ...(typeof percentOff === 'number' ? { percentOff } : {}),
-      ...(typeof amountOff === 'number' ? { amountOff } : {}),
-      ...(currency ? { currency } : {}),
-      ...(typeof maxRedemptions === 'number' ? { maxRedemptions } : {}),
-      ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
-      ...(typeof active === 'boolean' ? { active } : {}),
-      ...(metadata ? { metadata } : {}),
-      ...(typeof trialDays === 'number' ? { trialDays } : {}),
-    };
-
+    const input = normalizeDiscountCodeCreateInput(req.body as Record<string, unknown>);
     const record = await createDiscountCodeService(input, userId);
 
     res.status(201).json({
@@ -107,23 +71,13 @@ export async function deactivateDiscountCode(req: AuthRequest, res: Response, ne
  */
 export async function listDiscountCodes(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { code, active } = req.query as { code?: string; active?: string };
-    const normalizedCode = code ? String(code).trim().toUpperCase() : undefined;
-    const activeValue = typeof active === 'string' ? active.toLowerCase() === 'true' : undefined;
-
-    const filters: { code?: string; active?: boolean } = {};
-    if (normalizedCode) {
-      filters.code = normalizedCode;
-    }
-    if (typeof activeValue === 'boolean') {
-      filters.active = activeValue;
-    }
-
-    const records = await listDiscountCodesService(filters);
+    const params = normalizeDiscountListQuery(req.query as Record<string, unknown>);
+    const result = await listDiscountCodesService(params);
 
     res.json({
-      data: records.map((record) => mapDiscountResponse(record)),
-      count: records.length,
+      data: result.data.map((record) => mapDiscountResponse(record)),
+      count: result.count,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);

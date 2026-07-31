@@ -2,8 +2,12 @@ import { DiscountCode } from '../database/models/index.js';
 import { getStripeService } from './stripe.service.js';
 import type Stripe from 'stripe';
 import { AppError } from '../utils/AppError.js';
-import type { DiscountCodeCreateInput } from '../types/discount.types.js';
-import type { PromotionCodeLookup } from '../types/discount.types.js';
+import type {
+  DiscountCodeCreateInput,
+  DiscountCodeListQueryParams,
+  ListDiscountCodesResult,
+  PromotionCodeLookup,
+} from '../types/discount.types.js';
 
 //Obtenemos el cliente de Stripe una sola vez al cargar el archivo
 //no cada vez que alguien llama a una función
@@ -22,6 +26,10 @@ export const createDiscountCodeService = async (
   if (hasAmount && !currency)
     throw new AppError('currency es requerido cuando ammoutnOff está presente', 400);
 
+  const normalizedCode = input.code.trim().toUpperCase();
+  const existing = await DiscountCode.findOne({ where: { code: normalizedCode } });
+  if (existing) throw new AppError('El código de descuento ya existe', 409);
+
   const couponParams: Stripe.CouponCreateParams = {
     duration: input.duration,
     ...(typeof input.durationInMonths === 'number'
@@ -39,7 +47,7 @@ export const createDiscountCodeService = async (
       type: 'coupon',
       coupon: coupon.id,
     },
-    code: input.code,
+    code: normalizedCode,
     ...(typeof input.maxRedemptions === 'number' ? { max_redemptions: input.maxRedemptions } : {}),
     ...(input.expiresAt ? { expires_at: Math.floor(input.expiresAt.getTime() / 1000) } : {}),
     active: input.active ?? true,
@@ -48,7 +56,7 @@ export const createDiscountCodeService = async (
 
   const promotionCode = await stripeService.promotionCodes.create(promotionParams);
   const record = await DiscountCode.create({
-    code: input.code,
+    code: normalizedCode,
     stripe_promotion_code_id: promotionCode.id,
     stripe_coupon_id: coupon.id,
     active: promotionCode.active,
@@ -76,21 +84,33 @@ export const setDiscountActiveService = async (
   return record;
 };
 
-export const listDiscountCodesService = async (filters: {
-  code?: string;
-  active?: boolean;
-}): Promise<DiscountCode[]> => {
+export const listDiscountCodesService = async (
+  params: DiscountCodeListQueryParams
+): Promise<ListDiscountCodesResult> => {
   const where: { code?: string; active?: boolean } = {};
 
-  if (filters.code) where.code = filters.code;
-  if (typeof filters.active === 'boolean') where.active = filters.active;
+  if (params.code) where.code = params.code;
+  if (typeof params.active === 'boolean') where.active = params.active;
 
-  const record = await DiscountCode.findAll({
+  const offset = (params.page - 1) * params.limit;
+
+  const { count, rows } = await DiscountCode.findAndCountAll({
     where,
     order: [['created_at', 'DESC']],
+    limit: params.limit,
+    offset,
   });
 
-  return record;
+  return {
+    data: rows,
+    count,
+    pagination: {
+      total: count,
+      page: params.page,
+      limit: params.limit,
+      totalPages: Math.ceil(count / params.limit) || 1,
+    },
+  };
 };
 
 export const getPromotionCodeForCheckoutService = async (

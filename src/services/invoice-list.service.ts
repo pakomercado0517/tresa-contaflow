@@ -17,11 +17,7 @@ import type {
   InvoiceListQueryParams,
   ListInvoicesResult,
 } from '../types/invoice-list.types.js';
-import {
-  calcularEstadoPagoFactura,
-  calcularEstadoPagoFacturas,
-  type EstadoPagoDetalle,
-} from './payment-status.service.js';
+import { calcularEstadoPagoFacturas, type EstadoPagoDetalle } from './payment-status.service.js';
 
 function rehydrateInvoiceListItem(item: InvoiceListItem): InvoiceListItem {
   const fecha =
@@ -104,6 +100,18 @@ async function fetchInvoicesFromDb(
     offset,
   });
 
+  if (invoices.length === 0) {
+    return {
+      data: [],
+      pagination: {
+        total: count,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.ceil(count / params.limit) || 1,
+      },
+    };
+  }
+
   const estadosPago = new Map<string, EstadoPagoDetalle>();
   const byProfile = new Map<string, typeof invoices>();
   for (const invoice of invoices) {
@@ -118,17 +126,28 @@ async function fetchInvoicesFromDb(
     }
   }
 
-  const invoicesConEstado: InvoiceListItem[] = await Promise.all(
-    invoices.map(async (invoice) => {
-      const estado =
-        estadosPago.get(invoice.id) ??
-        (await calcularEstadoPagoFactura(invoice, invoice.profile_id));
-      return {
-        ...invoice.toJSON(),
-        estadoPago: estado,
-      } as InvoiceListItem;
-    })
-  );
+  const estadoDefault: EstadoPagoDetalle = {
+    estado: 'NO_PAGADO',
+    totalPagado: 0,
+    saldoPendiente: 0,
+    fechasComplementos: [],
+    totalFactura: 0,
+    porcentajePagado: 0,
+    completamentePagado: false,
+    ultimoSaldoInsoluto: 0,
+    tieneComplementos: false,
+    tienePagosManuales: false,
+  };
+
+  const invoicesConEstado: InvoiceListItem[] = invoices.map((invoice) => {
+    const plainInvoice = invoice.get({ plain: true });
+    const estado = estadosPago.get(invoice.id) ?? estadoDefault;
+
+    return {
+      ...plainInvoice,
+      estadoPago: estado,
+    } as InvoiceListItem;
+  });
 
   return {
     data: invoicesConEstado,
