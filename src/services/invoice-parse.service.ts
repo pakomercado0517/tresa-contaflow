@@ -1,4 +1,4 @@
-import { AccruedExpense, Invoice } from '../database/models/index.js';
+import { AccruedExpense, Invoice, Period } from '../database/models/index.js';
 import Profile from '../database/models/Profile.model.js';
 import { AppError } from '../utils/AppError.js';
 import { parseInvoice } from '../parsers/invoice.parser.js';
@@ -20,6 +20,7 @@ import {
   applyPaymentsToInvoice,
   saveComplemento,
 } from './payment-complement.service.js';
+import { ensurePeriodExist } from './period.service.js';
 
 const validationService = new FiscalValidationService();
 const matchingService = new PaymentMatchingService();
@@ -108,6 +109,8 @@ async function saveInvoice(
   profileId: string,
   validacion: EstadoValidacionCFDI
 ): Promise<Invoice> {
+  await ensurePeriodExist(profileId, cfdi.mes, cfdi.año);
+
   const invoice = await Invoice.create({
     profile_id: profileId,
     uuid: cfdi.uuid,
@@ -143,6 +146,8 @@ async function saveExpense(
   validacion: EstadoValidacionGasto
 ): Promise<AccruedExpense> {
   const isPUE = cfdi.tipo === 'PUE';
+
+  await ensurePeriodExist(profileId, cfdi.mes, cfdi.año);
 
   const expense = await AccruedExpense.create({
     profile_id: profileId,
@@ -238,6 +243,7 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
     }
 
     try {
+      await ensurePeriodExist(profileId, cfdi.mes, cfdi.año);
       const savedComplement = await saveComplemento(cfdi, profileId, profile.rfc);
 
       return {

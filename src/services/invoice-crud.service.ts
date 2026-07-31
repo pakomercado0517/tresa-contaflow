@@ -6,6 +6,7 @@ import { AppError } from '../utils/AppError.js';
 import { invalidateProfileCache } from './cache.service.js';
 import { calculatePeriodMetrics, findOrCreatePeriodForMonth } from './metrics.service.js';
 import { calcularEstadoPagoFactura } from './payment-status.service.js';
+import { findPeriodForMont } from './period.service.js';
 
 export const getInvoiceByIdService = async (userId: string, invoiceId: string) => {
   const invoice = await Invoice.findOne({
@@ -46,8 +47,8 @@ export const getMetricsService = async (
 
   let periodId: string | null = null;
   if (profileId && mes && año) {
-    const period = await findOrCreatePeriodForMonth(profileId, mes, año);
-    periodId = period.id;
+    const period = await findPeriodForMont(profileId, mes, año);
+    periodId = period?.id ?? null;
   }
 
   return {
