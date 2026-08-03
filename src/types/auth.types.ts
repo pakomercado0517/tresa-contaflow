@@ -14,6 +14,20 @@ export interface CurrentUserDto {
   nombre_comercial: string | null;
 }
 
+export interface RegisterUserDto {
+  id: string;
+  email: string;
+  password: string;
+  password_hash: string | null;
+  firebase_uid: string | null;
+  nombre: string | null;
+  apellido: string | null;
+  telefono: string | null;
+  email_verified: boolean;
+  email_verification_token: string | null;
+  email_verification_expires: Date | null;
+}
+
 export interface GetCurrentUserResponse {
   user: CurrentUserDto;
 }

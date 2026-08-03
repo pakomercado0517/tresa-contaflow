@@ -14,14 +14,8 @@ import {
   resendVerificationEmailService,
   getCurrentUserService,
 } from '../services/auth-user.service.js';
-import { validationResult } from 'express-validator';
 import { AppError } from '../utils/AppError.js';
 import type { UpdateProfileDto } from '../types/auth.types.js';
-
-export const validate = (req: Request, res: Response, next: NextFunction) => {
-  const errors = validationResult(req);
-  !errors.isEmpty() ? res.status(400).json({ errors: errors.array() }) : next();
-};
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {

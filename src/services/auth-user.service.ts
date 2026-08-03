@@ -1,4 +1,4 @@
-import { Subscription, User } from '../database/models/index.js';
+import { User } from '../database/models/index.js';
 import {
   authMeKey,
   getAuthMeTtlSeconds,
@@ -10,6 +10,7 @@ import type {
   CurrentUserDto,
   GetCurrentUserResponse,
   LoginUserResponse,
+  RegisterUserDto,
   RegisterUserResponse,
   SafeUser,
   UpdateProfileDto,
@@ -18,11 +19,7 @@ import { sequelize } from '../database/config.js';
 import bcrypt from 'bcrypt';
 import { generateVerificationToken, hashVerificationToken } from '../utils/verification.util.js';
 import { AppError } from '../utils/AppError.js';
-import {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyRefreshToken,
-} from '../utils/jwt.util.js';
+import { generateAccessToken, generateAuthTokens, verifyRefreshToken } from '../utils/jwt.util.js';
 import { verifyFirebaseIdToken } from '../utils/firebase.util.js';
 import {
   revokeAccessToken,
@@ -30,6 +27,7 @@ import {
   isRefreshTokenRevoked,
 } from './token-revoke.service.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from './email.service.js';
+import { createUserWithSubscriptionHelper } from './auth-user.helper.js';
 
 /**
  * Elimina los campos sensibles del usuario antes de exponerlo en una respuesta.
@@ -103,60 +101,41 @@ export async function getCurrentUserCached(userId: string): Promise<GetCurrentUs
   return response;
 }
 
-export async function registerUser(user: User): Promise<RegisterUserResponse> {
-  const { email, password, nombre, apellido, telefono } = user;
+export async function registerUser(user: RegisterUserDto): Promise<RegisterUserResponse> {
+  const existingUser = await User.findOne({ where: { email: user.email.toLowerCase().trim() } });
 
-  const existingUser = await User.findOne({ where: { email: email.toLowerCase().trim() } });
   if (existingUser)
     throw new AppError('El email ya está registrado, por favor intenta con otro email.', 409);
 
-  //Preparación de datos
-  const transaction = await sequelize.transaction();
-  let newUser: User;
-  let verificationToken: string;
-
+  let transaction;
   try {
-    const passwordHash = await bcrypt.hash(password ? password.trim() : '', 10);
-    verificationToken = generateVerificationToken();
-    const hashedToken = hashVerificationToken(verificationToken);
-    newUser = await User.create(
-      {
-        email: email.toLowerCase().trim(),
-        password_hash: passwordHash,
-        nombre: nombre ? nombre.trim() : null,
-        apellido: apellido ? apellido.trim() : null,
-        telefono: telefono ? telefono.trim() : null,
-        email_verified: false,
-        email_verification_token: hashedToken,
-        email_verification_expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
-      { transaction }
-    );
-    await Subscription.create(
-      {
-        user_id: newUser.id,
-        plan: 'FREE',
-        status: 'ACTIVE',
-      },
-      { transaction }
+    //Preparación de datos
+    transaction = await sequelize.transaction();
+    const { newUser, verificationToken } = await createUserWithSubscriptionHelper(
+      user,
+      transaction
     );
     await transaction.commit();
+
+    try {
+      await sendVerificationEmail(newUser.email, verificationToken, newUser.nombre);
+    } catch (error) {
+      console.error(error);
+      throw new AppError(
+        `Usuario registrado, pero hubo un error al enviar el email de verificación, por favor intenta nuevamente.`,
+        500
+      );
+    }
+
+    return {
+      message:
+        'Usuario registrado correctamente. Se ha enviado un email de verificación, revisa tu bandeja de entrada.',
+      user: sanitizeUser(newUser),
+    };
   } catch (error) {
-    await transaction.rollback();
+    if (transaction && !transaction.commit) await transaction.rollback();
     throw error;
   }
-  await sendVerificationEmail(newUser.email, verificationToken, newUser.nombre).catch((err) => {
-    throw new AppError(
-      `Error al enviar el email de verificación, por favor intenta nuevamente: ${err.message}`,
-      500
-    );
-  });
-
-  return {
-    message:
-      'Usuario registrado correctamente. Se ha enviado un email de verificación, revisa tu bandeja de entrada.',
-    user: sanitizeUser(newUser),
-  };
 }
 
 export async function loginUser(userDto: User): Promise<LoginUserResponse> {
@@ -180,8 +159,7 @@ export async function loginUser(userDto: User): Promise<LoginUserResponse> {
     userId: findUser.id,
     email: findUser.email,
   };
-  const accessToken = generateAccessToken(tokenPayload);
-  const refreshToken = generateRefreshToken(tokenPayload);
+  const { accessToken, refreshToken } = generateAuthTokens(tokenPayload);
 
   return {
     message: 'Login exitoso',
@@ -197,6 +175,7 @@ export async function loginUserWithGoogle(idToken: string): Promise<LoginUserRes
   if (!email) throw new AppError('No se pudo obtener el email de Google', 400);
 
   let googleUser = await User.findOne({ where: { email } });
+
   if (googleUser) {
     const updateData: Partial<User> = { firebase_uid: decoded.uid, email_verified: true };
     if (!googleUser.nombre) updateData.nombre = decoded.name ? decoded.name.trim() : null;
@@ -204,25 +183,17 @@ export async function loginUserWithGoogle(idToken: string): Promise<LoginUserRes
   } else {
     const transaction = await sequelize.transaction();
     try {
-      googleUser = await User.create(
-        {
-          email,
-          password_hash: null,
-          firebase_uid: decoded.uid,
-          nombre: decoded.name?.trim() || null,
-          email_verified: true,
-        },
-        { transaction }
-      );
+      const userData = {
+        email,
+        password_hash: null,
+        firebase_uid: decoded.uid,
+        nombre: decoded.name?.trim() || null,
+        email_verified: true,
+      } as RegisterUserDto;
 
-      await Subscription.create(
-        {
-          user_id: googleUser.id,
-          plan: 'FREE',
-          status: 'ACTIVE',
-        },
-        { transaction }
-      );
+      const { newUser } = await createUserWithSubscriptionHelper(userData, transaction);
+      googleUser = newUser;
+
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
@@ -230,10 +201,11 @@ export async function loginUserWithGoogle(idToken: string): Promise<LoginUserRes
     }
   }
   const tokenPayload = { userId: googleUser?.id, email: googleUser?.email };
+  const { accessToken, refreshToken } = generateAuthTokens(tokenPayload);
   return {
     message: 'Login exitoso',
-    accessToken: generateAccessToken(tokenPayload),
-    refreshToken: generateRefreshToken(tokenPayload),
+    accessToken,
+    refreshToken,
     user: sanitizeUser(googleUser),
   };
 }
@@ -243,11 +215,9 @@ export async function logoutUser(userId: string, refreshToken: string, accessTok
 
   try {
     refreshPayload = verifyRefreshToken(refreshToken);
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new AppError(
-      error.name === 'Token ExpiredError'
-        ? 'Tu sesión ha expirado'
-        : 'El token de renovación no es válido',
+      `Error al verificar el token de refresco: ${error instanceof Error ? error.message : 'Token ExpiredError'}`,
       401
     );
   }
@@ -334,8 +304,6 @@ export async function updateProfileService(userId: string, profile: UpdateProfil
   const user = await User.findByPk(userId);
   if (!user) throw new AppError('Usuario no encontrado', 404);
   await user.update(profile);
-
-  await user.reload();
 
   await invalidateUserAuthCache(userId);
 
