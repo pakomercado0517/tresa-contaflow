@@ -24,7 +24,7 @@ export const createDiscountCodeService = async (
   if ((hasPercent && hasAmount) || (!hasPercent && !hasAmount))
     throw new AppError('Debes proporcionar percentOff o amountOff, solo uno de los dos', 400);
   if (hasAmount && !currency)
-    throw new AppError('currency es requerido cuando ammoutnOff está presente', 400);
+    throw new AppError('currency es requerido cuando amountOff está presente', 400);
 
   const normalizedCode = input.code.trim().toUpperCase();
   const existing = await DiscountCode.findOne({ where: { code: normalizedCode } });
@@ -41,35 +41,66 @@ export const createDiscountCodeService = async (
     ...(input.metadata ? { metadata: input.metadata } : {}),
   };
 
-  const coupon = await stripeService.coupons.create(couponParams);
-  const promotionParams: Stripe.PromotionCodeCreateParams = {
-    promotion: {
-      type: 'coupon',
-      coupon: coupon.id,
-    },
-    code: normalizedCode,
-    ...(typeof input.maxRedemptions === 'number' ? { max_redemptions: input.maxRedemptions } : {}),
-    ...(input.expiresAt ? { expires_at: Math.floor(input.expiresAt.getTime() / 1000) } : {}),
-    active: input.active ?? true,
-    ...(input.metadata ? { metadata: input.metadata } : {}),
-  };
+  let coupon: Stripe.Coupon | null = null;
+  let promotionCode: Stripe.PromotionCode | null = null;
 
-  const promotionCode = await stripeService.promotionCodes.create(promotionParams);
-  const record = await DiscountCode.create({
-    code: normalizedCode,
-    stripe_promotion_code_id: promotionCode.id,
-    stripe_coupon_id: coupon.id,
-    active: promotionCode.active,
-    expires_at: input.expiresAt ?? null,
-    max_redemptions: input.maxRedemptions ?? null,
-    times_redeemed: promotionCode.times_redeemed ?? 0,
-    created_by: createdBy,
-    metadata: input.metadata ?? null,
-    trial_days: typeof input.trialDays === 'number' ? input.trialDays : null,
-  });
+  try {
+    coupon = await stripeService.coupons.create(couponParams);
 
-  return record;
+    const promotionParams: Stripe.PromotionCodeCreateParams = {
+      promotion: {
+        type: 'coupon',
+        coupon: coupon.id,
+      },
+      code: normalizedCode,
+      ...(typeof input.maxRedemptions === 'number' ? { max_redemptions: input.maxRedemptions } : {}),
+      ...(input.expiresAt ? { expires_at: Math.floor(input.expiresAt.getTime() / 1000) } : {}),
+      active: input.active ?? true,
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    };
+
+    promotionCode = await stripeService.promotionCodes.create(promotionParams);
+
+    const record = await DiscountCode.create({
+      code: normalizedCode,
+      stripe_promotion_code_id: promotionCode.id,
+      stripe_coupon_id: coupon.id,
+      active: promotionCode.active,
+      expires_at: input.expiresAt ?? null,
+      max_redemptions: input.maxRedemptions ?? null,
+      times_redeemed: promotionCode.times_redeemed ?? 0,
+      created_by: createdBy,
+      metadata: input.metadata ?? null,
+      trial_days: typeof input.trialDays === 'number' ? input.trialDays : null,
+    });
+
+    return record;
+  } catch (error) {
+    await rollbackStripeDiscountResources(promotionCode, coupon);
+    throw error;
+  }
 };
+
+async function rollbackStripeDiscountResources(
+  promotionCode: Stripe.PromotionCode | null,
+  coupon: Stripe.Coupon | null
+): Promise<void> {
+  if (promotionCode) {
+    try {
+      await stripeService.promotionCodes.update(promotionCode.id, { active: false });
+    } catch {
+      // Best-effort: no bloquear el error original si falla la compensación en Stripe.
+    }
+  }
+
+  if (coupon) {
+    try {
+      await stripeService.coupons.del(coupon.id);
+    } catch {
+      // Best-effort: no bloquear el error original si falla la compensación en Stripe.
+    }
+  }
+}
 
 export const setDiscountActiveService = async (
   id: string,
@@ -123,18 +154,18 @@ export const getPromotionCodeForCheckoutService = async (
   if (typeof record.max_redemptions === 'number' && record.times_redeemed >= record.max_redemptions)
     return null;
 
-  const stripePromotion = await stripeService.promotionCodes.list({
-    code,
-    active: true,
-    limit: 1,
-  });
+  let promotion: Stripe.PromotionCode;
+  try {
+    promotion = await stripeService.promotionCodes.retrieve(record.stripe_promotion_code_id);
+  } catch {
+    return null;
+  }
 
-  const promotion = stripePromotion.data[0];
-  if (!promotion) return null;
+  if (!promotion.active) return null;
 
   return {
     promotionCodeId: promotion.id,
-    code: promotion.code || code,
+    code: promotion.code || record.code,
     trialDays: record.trial_days,
   };
 };

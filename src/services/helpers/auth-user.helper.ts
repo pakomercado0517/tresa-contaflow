@@ -1,10 +1,10 @@
-import Subscription from '../database/models/Subscription.model.js';
-import User from '../database/models/User.model.js';
+import Subscription from '../../database/models/Subscription.model.js';
+import User from '../../database/models/User.model.js';
 import bcrypt from 'bcrypt';
-import { generateVerificationToken, hashVerificationToken } from '../utils/verification.util.js';
-import sequelize from '../database/config.js';
+import { generateVerificationToken, hashVerificationToken } from '../../utils/verification.util.js';
+import sequelize from '../../database/config.js';
 import type { Transaction } from 'sequelize';
-import type { RegisterUserDto } from '../types/auth.types.js';
+import type { RegisterUserDto } from '../../types/auth.types.js';
 
 export const encryptPassword = async (password: string) => {
   return await bcrypt.hash(password, 10);

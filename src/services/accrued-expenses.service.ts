@@ -9,7 +9,7 @@ import type {
 import {
   calculateManualExpenseAmounts,
   findOwnedManualExpense,
-} from './accrued-expenses.helper.js';
+} from './helpers/accrued-expenses.helper.js';
 
 export async function getAccruedExpensesService(userId: string, period_id: string, type: string) {
   const period = await Period.findOne({
@@ -141,8 +141,7 @@ export async function updateAccruedExpenseService(
   if (concept !== undefined) updateData.concepto = String(concept).trim() || null;
 
   if (subtotal !== undefined || iva !== undefined) {
-    const nextSubtotal =
-      subtotal !== undefined ? Number(subtotal) : Number(expense.subtotal ?? 0);
+    const nextSubtotal = subtotal !== undefined ? Number(subtotal) : Number(expense.subtotal ?? 0);
     const nextIvaRate = iva !== undefined ? Number(iva) : Number(expense.iva ?? 0);
 
     if (Number.isNaN(nextSubtotal) || Number.isNaN(nextIvaRate)) {

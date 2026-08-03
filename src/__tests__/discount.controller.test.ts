@@ -21,8 +21,7 @@ import {
 import { mapDiscountResponse } from '../mappers/discount.mapper.js';
 import {
   createDiscountCode,
-  activateDiscountCode,
-  deactivateDiscountCode,
+  discountCodeSetStatus,
   listDiscountCodes,
 } from '../controllers/discount.controller.js';
 
@@ -45,32 +44,12 @@ function mockReq(overrides: Partial<AuthRequest> = {}): AuthRequest {
 
 const next: NextFunction = vi.fn();
 
-function expectNextAppError(status: number): void {
-  expect(next).toHaveBeenCalledTimes(1);
-  const error = (next as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
-  expect(error).toBeInstanceOf(AppError);
-  expect((error as AppError).status).toBe(status);
-}
-
 describe('discount.controller', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('createDiscountCode', () => {
-    it('lanza AppError 401 cuando no hay userId', async () => {
-      const res = mockRes();
-
-      await createDiscountCode(
-        mockReq({ body: { code: 'X', duration: 'once', percentOff: 10 } }),
-        res,
-        next
-      );
-
-      expectNextAppError(401);
-      expect(createDiscountCodeService).not.toHaveBeenCalled();
-    });
-
     it('responde 201 normalizando el code y mapeando la respuesta', async () => {
       vi.mocked(createDiscountCodeService).mockResolvedValue({ id: 'id-1' } as never);
       const req = mockReq({
@@ -109,14 +88,19 @@ describe('discount.controller', () => {
     });
   });
 
-  describe('activateDiscountCode', () => {
+  describe('discountCodeSetStatus', () => {
     it('responde con el código activado', async () => {
       vi.mocked(setDiscountActiveService).mockResolvedValue({ id: 'id-1' } as never);
       const res = mockRes();
 
-      await activateDiscountCode(mockReq({ params: { id: 'id-1' } }), res, next);
+      await discountCodeSetStatus(
+        mockReq({ params: { id: 'id-1' }, body: { active: true } }),
+        res,
+        next
+      );
 
       expect(setDiscountActiveService).toHaveBeenCalledWith('id-1', true);
+      expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Código de descuento activado',
         discountCode: { id: 'id-1', mapped: true },
@@ -124,25 +108,18 @@ describe('discount.controller', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
-    it('delega el error al middleware con next(error)', async () => {
-      const error = new AppError('Código de descuento no encontrado', 404);
-      vi.mocked(setDiscountActiveService).mockRejectedValue(error);
-      const res = mockRes();
-
-      await activateDiscountCode(mockReq({ params: { id: 'id-1' } }), res, next);
-
-      expect(next).toHaveBeenCalledWith(error);
-    });
-  });
-
-  describe('deactivateDiscountCode', () => {
     it('responde con el código desactivado', async () => {
       vi.mocked(setDiscountActiveService).mockResolvedValue({ id: 'id-1' } as never);
       const res = mockRes();
 
-      await deactivateDiscountCode(mockReq({ params: { id: 'id-1' } }), res, next);
+      await discountCodeSetStatus(
+        mockReq({ params: { id: 'id-1' }, body: { active: false } }),
+        res,
+        next
+      );
 
       expect(setDiscountActiveService).toHaveBeenCalledWith('id-1', false);
+      expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Código de descuento desactivado',
         discountCode: { id: 'id-1', mapped: true },
@@ -155,7 +132,11 @@ describe('discount.controller', () => {
       vi.mocked(setDiscountActiveService).mockRejectedValue(error);
       const res = mockRes();
 
-      await deactivateDiscountCode(mockReq({ params: { id: 'id-1' } }), res, next);
+      await discountCodeSetStatus(
+        mockReq({ params: { id: 'id-1' }, body: { active: true } }),
+        res,
+        next
+      );
 
       expect(next).toHaveBeenCalledWith(error);
     });

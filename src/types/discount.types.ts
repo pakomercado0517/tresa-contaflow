@@ -2,6 +2,7 @@
  * Tipos para códigos de descuento
  */
 
+import type Stripe from 'stripe';
 import type DiscountCode from '../database/models/DiscountCode.model.js';
 
 export type DiscountCodeStatus = 'ACTIVE' | 'INACTIVE' | 'EXPIRED';

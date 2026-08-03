@@ -5,12 +5,12 @@ import {
   listDiscountCodesService,
   setDiscountActiveService,
 } from '../services/discount.service.js';
-import { AppError } from '../utils/AppError.js';
 import { mapDiscountResponse } from '../mappers/discount.mapper.js';
 import {
   normalizeDiscountCodeCreateInput,
   normalizeDiscountListQuery,
 } from '../lib/discount-query.util.js';
+import { optionalString } from '../utils/query.util.js';
 
 /**
  * Crea un código de descuento en Stripe (admin)
@@ -18,10 +18,9 @@ import {
 export async function createDiscountCode(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
     const input = normalizeDiscountCodeCreateInput(req.body as Record<string, unknown>);
-    const record = await createDiscountCodeService(input, userId);
+    const record = await createDiscountCodeService(input, userId!);
 
     res.status(201).json({
       message: 'Código de descuento creado exitosamente',
@@ -32,33 +31,16 @@ export async function createDiscountCode(req: AuthRequest, res: Response, next: 
   }
 }
 
-/**
- * Activa un código de descuento existente (admin)
- */
-export async function activateDiscountCode(req: AuthRequest, res: Response, next: NextFunction) {
+/** Activa o desactiva un código de descuento (active viene del middleware de ruta). */
+export async function discountCodeSetStatus(req: AuthRequest, res: Response, next: NextFunction) {
   try {
-    const { id } = req.params as { id: string };
-    const record = await setDiscountActiveService(id, true);
+    const id = optionalString(req.params.id);
+    const { active } = req.body;
 
-    res.json({
-      message: 'Código de descuento activado',
-      discountCode: mapDiscountResponse(record),
-    });
-  } catch (error) {
-    next(error);
-  }
-}
+    const record = await setDiscountActiveService(id!, active);
 
-/**
- * Desactiva un código de descuento existente (admin)
- */
-export async function deactivateDiscountCode(req: AuthRequest, res: Response, next: NextFunction) {
-  try {
-    const { id } = req.params as { id: string };
-    const record = await setDiscountActiveService(id, false);
-
-    res.json({
-      message: 'Código de descuento desactivado',
+    res.status(200).json({
+      message: active ? 'Código de descuento activado' : 'Código de descuento desactivado',
       discountCode: mapDiscountResponse(record),
     });
   } catch (error) {

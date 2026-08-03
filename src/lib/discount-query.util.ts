@@ -59,29 +59,26 @@ export function normalizeDiscountCodeCreateInput(
   return input;
 }
 
+/**
+ * Normaliza query params ya validados en routes: defaults de paginación y formato de filtros.
+ */
 export function normalizeDiscountListQuery(
   query: Record<string, unknown>
 ): DiscountCodeListQueryParams {
-  let code: string | undefined;
-  if (typeof query.code === 'string' && query.code.trim().length > 0) {
-    code = query.code.trim().toUpperCase();
-  }
-
-  let active: boolean | undefined;
-  if (typeof query.active === 'string') {
-    const normalized = query.active.toLowerCase();
-    if (normalized === 'true') {
-      active = true;
-    } else if (normalized === 'false') {
-      active = false;
-    }
-  }
-
-  const page = Math.max(1, parseInt(String(query.page ?? '1'), 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(String(query.limit ?? '50'), 10) || 50));
+  const page = Math.max(1, Number.parseInt(String(query.page ?? '1'), 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(String(query.limit ?? '50'), 10) || 50));
 
   const params: DiscountCodeListQueryParams = { page, limit };
-  if (code !== undefined) params.code = code;
-  if (active !== undefined) params.active = active;
+
+  if (typeof query.code === 'string' && query.code.trim().length > 0) {
+    params.code = query.code.trim().toUpperCase();
+  }
+
+  if (query.active === 'true') {
+    params.active = true;
+  } else if (query.active === 'false') {
+    params.active = false;
+  }
+
   return params;
 }

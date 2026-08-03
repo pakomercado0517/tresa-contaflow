@@ -27,7 +27,7 @@ import {
   isRefreshTokenRevoked,
 } from './token-revoke.service.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from './email.service.js';
-import { createUserWithSubscriptionHelper } from './auth-user.helper.js';
+import { createUserWithSubscriptionHelper } from './helpers/auth-user.helper.js';
 
 /**
  * Elimina los campos sensibles del usuario antes de exponerlo en una respuesta.
