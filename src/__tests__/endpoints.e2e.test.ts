@@ -169,7 +169,7 @@ describe("E2E Endpoints", () => {
           period_id: userAPeriodId,
           concept: "Gasto devengado E2E",
           subtotal: 3000,
-          iva_amount: 480,
+          iva: 16,
           fecha: "2025-01-10",
           type: "manual",
           categoria: "Servicios",
@@ -179,6 +179,8 @@ describe("E2E Endpoints", () => {
       const expenseId = createRes.body.data.id as string;
       expect(createRes.body.data.tipo_origen).toBe("MANUAL");
       expect(Number(createRes.body.data.subtotal)).toBe(3000);
+      expect(Number(createRes.body.data.iva)).toBe(16);
+      expect(Number(createRes.body.data.iva_amount)).toBe(480);
 
       const listRes = await request(app)
         .get(`/api/accrued-expenses?period_id=${userAPeriodId}&type=manual`)
@@ -206,7 +208,7 @@ describe("E2E Endpoints", () => {
           period_id: userAPeriodId,
           concept: "Gasto para pagar E2E",
           subtotal: 1200,
-          iva_amount: 192,
+          iva: 16,
           fecha: "2025-01-12",
           type: "manual",
           categoria: "Materiales",
@@ -250,7 +252,7 @@ describe("E2E Endpoints", () => {
         año: 2025,
         total: 500,
         subtotal: 431.03,
-        iva: 68.97,
+        iva: 16,
         iva_amount: 68.97,
         concepto: "Gasto de User A",
         categoria: "Otros",

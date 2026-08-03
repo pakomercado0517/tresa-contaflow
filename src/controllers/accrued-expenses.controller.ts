@@ -7,7 +7,6 @@ import {
   getAccruedExpensesService,
   updateAccruedExpenseService,
 } from '../services/accrued-expenses.service.js';
-import { AppError } from '../utils/AppError.js';
 
 /**
  * Lista gastos devengados manuales. Filtro por period_id y type=manual.
@@ -18,13 +17,10 @@ export async function getAccruedExpenses(req: AuthRequest, res: Response, next: 
     const userId = req.userId;
     const { period_id, type } = req.query;
 
-    if (!period_id || typeof period_id !== 'string')
-      throw new AppError('periodId es requerido y debe ser una cadena de texto', 400);
-
     const result = await getAccruedExpensesService(
-      userId!,
-      period_id,
-      (type as string) || 'MANUAL'
+      userId as string,
+      period_id as string,
+      type as string
     );
     res.status(200).json(result);
   } catch (error) {
@@ -39,7 +35,7 @@ export async function getAccruedExpenseById(req: AuthRequest, res: Response, nex
   try {
     const userId = req.userId!;
     const { id } = req.params;
-    if (!id) throw new AppError('El ID del gasto es requerido', 400);
+
     const result = await getAccruedExpenseByIdService(userId, id as string);
     res.status(200).json(result);
   } catch (error) {
@@ -53,17 +49,8 @@ export async function getAccruedExpenseById(req: AuthRequest, res: Response, nex
 export async function createAccruedExpense(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId!;
-    const { profileId, fecha, concepto, subtotal, iva_amount, categoria } = req.body;
-    if (!profileId) throw new AppError('El ID del perfil es requerido', 400);
 
-    const result = await createAccruedExpenseService(userId, {
-      profile_id: profileId,
-      fecha,
-      concepto,
-      subtotal,
-      iva_amount,
-      categoria,
-    });
+    const result = await createAccruedExpenseService(req.body, userId as string);
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -71,7 +58,7 @@ export async function createAccruedExpense(req: AuthRequest, res: Response, next
 }
 
 /**
- * Actualiza un gasto devengado manual (concept, subtotal, iva_amount, is_paid, payment_date, categoria).
+ * Actualiza un gasto devengado manual (concept, subtotal, iva, is_paid, payment_date, categoria).
  */
 export async function updateAccruedExpense(req: AuthRequest, res: Response, next: NextFunction) {
   try {
