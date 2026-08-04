@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateManualExpenseAmounts } from '../services/accrued-expenses.helper.js';
+import { calculateManualExpenseAmounts } from '../services/helpers/accrued-expenses.helper.js';
 
 describe('accrued-expenses.helper', () => {
   describe('calculateManualExpenseAmounts', () => {

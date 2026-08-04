@@ -22,7 +22,7 @@ export function calculateManualExpenseAmounts(
   };
 }
 
-export const findOwnedManualExpense = async (userId: string, id: string) => {
+export const findOwnedExpense = async (userId: string, id: string): Promise<AccruedExpense> => {
   const expense = await AccruedExpense.findOne({
     where: { id },
     include: [
@@ -36,6 +36,13 @@ export const findOwnedManualExpense = async (userId: string, id: string) => {
   });
 
   if (!expense) throw new AppError('Gasto no encontrado', 404);
+
+  return expense;
+};
+
+export const findOwnedManualExpense = async (userId: string, id: string): Promise<AccruedExpense> => {
+  const expense = await findOwnedExpense(userId, id);
+
   if (expense.tipo_origen !== 'MANUAL')
     throw new AppError('Solo se puede operar gastos manuales en esta ruta', 400);
 
