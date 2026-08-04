@@ -52,7 +52,7 @@ export const createManualIncomeService = async (data: CreateManualIncomeInput, u
 
   const period = await Period.findOne({
     where: { id: data.period_id, profile_id: data.profile_id },
-    attributes: ['id'],
+    attributes: ['id', 'start_date', 'end_date'],
   });
 
   if (!period) throw new AppError('Periodo no encontrado o no pertenece al perfil', 404);
@@ -61,6 +61,17 @@ export const createManualIncomeService = async (data: CreateManualIncomeInput, u
 
   const fechaDate = new Date(fecha);
   if (isNaN(fechaDate.getTime())) throw new AppError('Fecha inválida', 400);
+
+  //Verificar que la fecha caiga dentro del rango del periodo
+  const incomeDate = new Date(fechaDate).setHours(0, 0, 0, 0);
+  const startDate = new Date(period.start_date).setHours(0, 0, 0, 0);
+  const endDate = new Date(period.end_date).setHours(23, 59, 59, 999);
+
+  if (incomeDate < startDate || incomeDate > endDate)
+    throw new AppError(
+      `La fecha de ingreso (${fechaDate.toISOString().split('T')[0]} no corresonde al periodo seleccionado`,
+      400
+    );
 
   let paymentDate: Date | null | undefined;
   if (payment_date === undefined) {

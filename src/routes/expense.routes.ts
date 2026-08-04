@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import {
   getExpenses,
   getExpenseById,
@@ -32,6 +32,31 @@ const xmlUploadLimiter = rateLimit({
   skip: (req) => req.method === 'OPTIONS',
 });
 
+const createExpenseValidation = [
+  body('profileId').isUUID().withMessage('profileId debe ser un UUID válido'),
+  body('fecha').notEmpty().withMessage('fecha es requerido'),
+  body('subtotal').isFloat({ min: 0 }).withMessage('subtotal debe ser >= 0'),
+  body('iva')
+    .isFloat({ min: 0 })
+    .withMessage('iva (porcentaje) es requerido y debe ser un número >= 0'),
+  body('concepto').optional().isString(),
+  body('categoria').optional().isString(),
+];
+
+const updateExpenseValidation = [
+  param('id').isUUID().withMessage('id debe ser un UUID válido'),
+  body('fecha').optional().notEmpty().withMessage('fecha no puede estar vacía'),
+  body('subtotal').optional().isFloat({ min: 0 }).withMessage('subtotal debe ser >= 0'),
+  body('iva')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('iva (porcentaje) debe ser un número >= 0'),
+  body('concepto').optional().isString(),
+  body('categoria').optional().isString(),
+];
+
+const idParam = [param('id').isUUID().withMessage('id debe ser un UUID válido')];
+
 const metricsValidation = [
   query('profileId').optional().isUUID().withMessage('profileId debe ser un UUID válido'),
   query('mes')
@@ -49,10 +74,10 @@ const metricsValidation = [
 /** @deprecated Use GET /api/metrics — mantiene formato legacy con headers Deprecation */
 router.get('/metrics', metricsValidation, validateRequest, getMetrics);
 router.get('/', getExpenses);
-router.post('/', validateExpenseLimit, createExpense);
+router.post('/', createExpenseValidation, validateRequest, validateExpenseLimit, createExpense);
 router.post('/upload', xmlUploadLimiter, validateExpenseLimit, uploadExpense);
-router.get('/:id', getExpenseById);
-router.put('/:id', updateExpense);
-router.delete('/:id', deleteExpense);
+router.get('/:id', idParam, validateRequest, getExpenseById);
+router.put('/:id', updateExpenseValidation, validateRequest, updateExpense);
+router.delete('/:id', idParam, validateRequest, deleteExpense);
 
 export default router;

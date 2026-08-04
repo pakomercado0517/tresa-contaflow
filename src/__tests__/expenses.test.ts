@@ -17,7 +17,6 @@ describe("Expenses API", () => {
     const tokens = generateTestTokens(userId, "expenses@example.com");
     accessToken = tokens.accessToken;
 
-    // Crear perfil para las pruebas
     const profile = await Profile.create({
       user_id: userId,
       nombre: "Empresa de Prueba",
@@ -41,9 +40,8 @@ describe("Expenses API", () => {
         .send({
           profileId,
           fecha: "2024-12-15T00:00:00.000Z",
-          total: 500.0,
           subtotal: 431.03,
-          iva: 68.97,
+          iva: 16,
           concepto: "Gasto de prueba",
           categoria: "Servicios",
         });
@@ -52,7 +50,8 @@ describe("Expenses API", () => {
       expect(response.body).toHaveProperty("data");
       expect(response.body.data).toHaveProperty("id");
       expect(response.body.data).toHaveProperty("tipo_origen", "MANUAL");
-      expect(parseFloat(response.body.data.total)).toBe(500.0);
+      expect(parseFloat(response.body.data.total)).toBe(499.99);
+      expect(parseFloat(response.body.data.iva_amount)).toBe(68.96);
     });
 
     it("debe rechazar gasto sin profileId", async () => {
@@ -61,9 +60,8 @@ describe("Expenses API", () => {
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
           fecha: "2024-12-15T00:00:00.000Z",
-          total: 500.0,
           subtotal: 431.03,
-          iva: 68.97,
+          iva: 16,
         });
 
       expectError(response, 400);
@@ -72,16 +70,16 @@ describe("Expenses API", () => {
 
   describe("GET /api/expenses", () => {
     beforeEach(async () => {
-      // Crear algunos gastos de prueba
       await AccruedExpense.create({
         profile_id: profileId,
         tipo_origen: "MANUAL",
         fecha: new Date("2024-12-01"),
         mes: 12,
         año: 2024,
-        total: 100.0,
-        subtotal: 86.21,
-        iva: 13.79,
+        total: 116,
+        subtotal: 100,
+        iva: 16,
+        iva_amount: 16,
         concepto: "Gasto 1",
         categoria: "Servicios",
       });
@@ -92,9 +90,10 @@ describe("Expenses API", () => {
         fecha: new Date("2024-12-15"),
         mes: 12,
         año: 2024,
-        total: 200.0,
-        subtotal: 172.41,
-        iva: 27.59,
+        total: 232,
+        subtotal: 200,
+        iva: 16,
+        iva_amount: 32,
         concepto: "Gasto 2",
         categoria: "Materiales",
       });
@@ -135,9 +134,10 @@ describe("Expenses API", () => {
         fecha: new Date(),
         mes: 12,
         año: 2024,
-        total: 300.0,
-        subtotal: 258.62,
-        iva: 41.38,
+        total: 348,
+        subtotal: 300,
+        iva: 16,
+        iva_amount: 48,
         concepto: "Gasto específico",
         categoria: "Servicios",
       });
@@ -165,9 +165,10 @@ describe("Expenses API", () => {
         fecha: new Date(),
         mes: 12,
         año: 2024,
-        total: 400.0,
-        subtotal: 344.83,
-        iva: 55.17,
+        total: 464,
+        subtotal: 400,
+        iva: 16,
+        iva_amount: 64,
         concepto: "Gasto para actualizar",
         categoria: "Servicios",
       });
@@ -179,13 +180,13 @@ describe("Expenses API", () => {
         .put(`/api/expenses/${expenseId}`)
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
-          total: 450.0,
+          subtotal: 500,
           concepto: "Gasto actualizado",
         });
 
       expectSuccess(response, 200);
       expect(response.body).toHaveProperty("data");
-      expect(response.body.data).toHaveProperty("total", 450.0);
+      expect(parseFloat(response.body.data.total)).toBe(580);
       expect(response.body.data).toHaveProperty("concepto", "Gasto actualizado");
     });
   });
@@ -200,9 +201,10 @@ describe("Expenses API", () => {
         fecha: new Date(),
         mes: 12,
         año: 2024,
-        total: 250.0,
-        subtotal: 215.52,
-        iva: 34.48,
+        total: 290,
+        subtotal: 250,
+        iva: 16,
+        iva_amount: 40,
         concepto: "Gasto para eliminar",
         categoria: "Servicios",
       });
@@ -217,10 +219,8 @@ describe("Expenses API", () => {
       expectSuccess(response, 200);
       expect(response.body).toHaveProperty("message");
 
-      // Verificar que el gasto fue eliminado
       const deletedExpense = await AccruedExpense.findByPk(expenseId);
       expect(deletedExpense).toBeNull();
     });
   });
 });
-

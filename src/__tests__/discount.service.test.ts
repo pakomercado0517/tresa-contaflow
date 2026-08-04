@@ -3,8 +3,9 @@ import { AppError } from '../utils/AppError.js';
 
 const {
   stripeCouponsCreate,
+  stripeCouponsDel,
   stripePromotionCreate,
-  stripePromotionList,
+  stripePromotionRetrieve,
   stripePromotionUpdate,
   discountCodeCreate,
   discountCodeFindByPk,
@@ -12,8 +13,9 @@ const {
   discountCodeFindOne,
 } = vi.hoisted(() => ({
   stripeCouponsCreate: vi.fn(),
+  stripeCouponsDel: vi.fn(),
   stripePromotionCreate: vi.fn(),
-  stripePromotionList: vi.fn(),
+  stripePromotionRetrieve: vi.fn(),
   stripePromotionUpdate: vi.fn(),
   discountCodeCreate: vi.fn(),
   discountCodeFindByPk: vi.fn(),
@@ -26,10 +28,10 @@ const {
 vi.mock('../services/stripe.service.js', () => ({
   getStripeService: () => ({
     getClient: () => ({
-      coupons: { create: stripeCouponsCreate },
+      coupons: { create: stripeCouponsCreate, del: stripeCouponsDel },
       promotionCodes: {
         create: stripePromotionCreate,
-        list: stripePromotionList,
+        retrieve: stripePromotionRetrieve,
         update: stripePromotionUpdate,
       },
     }),
@@ -72,8 +74,9 @@ describe('discount.service', () => {
       times_redeemed: 0,
       active: true,
     });
-    stripePromotionList.mockResolvedValue({ data: [{ id: 'promo_1', code: 'TEST60' }] });
+    stripePromotionRetrieve.mockResolvedValue({ id: 'promo_1', code: 'TEST60', active: true });
     stripePromotionUpdate.mockResolvedValue({});
+    stripeCouponsDel.mockResolvedValue({ deleted: true });
     discountCodeCreate.mockResolvedValue({ id: 'id-1' });
     discountCodeFindOne.mockResolvedValue(null);
   });
@@ -162,6 +165,32 @@ describe('discount.service', () => {
       );
 
       expect(discountCodeCreate.mock.calls[0]?.[0].trial_days).toBeNull();
+    });
+
+    it('compensa en Stripe si falla la persistencia en BD', async () => {
+      discountCodeCreate.mockRejectedValue(new Error('DB caída'));
+
+      await expect(
+        createDiscountCodeService({ code: 'TEST60', duration: 'once', percentOff: 100 }, 'user-uuid')
+      ).rejects.toThrow('DB caída');
+
+      expect(stripeCouponsCreate).toHaveBeenCalledTimes(1);
+      expect(stripePromotionCreate).toHaveBeenCalledTimes(1);
+      expect(stripePromotionUpdate).toHaveBeenCalledWith('promo_1', { active: false });
+      expect(stripeCouponsDel).toHaveBeenCalledWith('coupon_1');
+    });
+
+    it('compensa en Stripe si falla la creación del promotion code', async () => {
+      stripePromotionCreate.mockRejectedValue(new Error('Stripe promo error'));
+
+      await expect(
+        createDiscountCodeService({ code: 'TEST60', duration: 'once', percentOff: 100 }, 'user-uuid')
+      ).rejects.toThrow('Stripe promo error');
+
+      expect(stripeCouponsCreate).toHaveBeenCalledTimes(1);
+      expect(stripePromotionUpdate).not.toHaveBeenCalled();
+      expect(stripeCouponsDel).toHaveBeenCalledWith('coupon_1');
+      expect(discountCodeCreate).not.toHaveBeenCalled();
     });
   });
 
@@ -262,16 +291,32 @@ describe('discount.service', () => {
       expect(await getPromotionCodeForCheckoutService('X')).toBeNull();
     });
 
-    it('retorna null si Stripe no encuentra el promotion code activo', async () => {
+    it('retorna null si Stripe no encuentra el promotion code', async () => {
       discountCodeFindOne.mockResolvedValue({
         code: 'TEST60',
+        stripe_promotion_code_id: 'promo_1',
         active: true,
         expires_at: null,
         max_redemptions: null,
         times_redeemed: 0,
         trial_days: 60,
       });
-      stripePromotionList.mockResolvedValue({ data: [] });
+      stripePromotionRetrieve.mockRejectedValue(new Error('No such promotion code'));
+
+      expect(await getPromotionCodeForCheckoutService('TEST60')).toBeNull();
+    });
+
+    it('retorna null si Stripe reporta el promotion code inactivo', async () => {
+      discountCodeFindOne.mockResolvedValue({
+        code: 'TEST60',
+        stripe_promotion_code_id: 'promo_1',
+        active: true,
+        expires_at: null,
+        max_redemptions: null,
+        times_redeemed: 0,
+        trial_days: 60,
+      });
+      stripePromotionRetrieve.mockResolvedValue({ id: 'promo_1', code: 'TEST60', active: false });
 
       expect(await getPromotionCodeForCheckoutService('TEST60')).toBeNull();
     });
@@ -279,6 +324,7 @@ describe('discount.service', () => {
     it('retorna el lookup con trialDays cuando es válido', async () => {
       discountCodeFindOne.mockResolvedValue({
         code: 'TEST60',
+        stripe_promotion_code_id: 'promo_1',
         active: true,
         expires_at: null,
         max_redemptions: null,
@@ -288,6 +334,7 @@ describe('discount.service', () => {
 
       const result = await getPromotionCodeForCheckoutService('TEST60');
 
+      expect(stripePromotionRetrieve).toHaveBeenCalledWith('promo_1');
       expect(result).toEqual({ promotionCodeId: 'promo_1', code: 'TEST60', trialDays: 60 });
     });
   });

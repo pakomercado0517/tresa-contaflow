@@ -40,12 +40,13 @@ export async function uploadInvoice(req: AuthRequest, res: Response, next: NextF
   try {
     const userId = req.userId;
     if (!userId) throw new AppError('Usuario no autenticado', 401);
+    if (!req.xmlFile) throw new AppError('Archivo XML requerido', 400);
 
     const { profileId } = req.body;
-    const result = await uploadInvoiceService(userId, profileId, req.xmlFile!.data);
-    const status = 'saved' in result && result.saved ? 200 : 201;
+    const result = await uploadInvoiceService(userId, profileId, req.xmlFile.data);
+    const { status, ...body } = result;
 
-    res.status(status).json(result);
+    res.status(status).json(body);
   } catch (error) {
     next(error);
   }

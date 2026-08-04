@@ -127,11 +127,24 @@ export type {
   ListInvoicesResult,
 } from './invoice-list.types.js';
 export type {
+  UploadInvoiceResult,
+  UploadComplementResult,
+  UploadCreatedResult,
+  UploadInvoiceResponseBody,
+} from './invoice-upload.types.js';
+export type {
   ExpenseListQueryParams,
   ExpenseListPagination,
   ExpenseListItem,
   ListExpensesResult,
 } from './expense-list.types.js';
+export type {
+  CreateExpenseDto,
+  UpdateExpenseDto,
+  ExpenseByIdResponse,
+  ExpenseMutationResponse,
+  ExpenseDeleteResponse,
+} from './expense.types.js';
 export type { CurrentUserDto, GetCurrentUserResponse } from './auth.types.js';
 export type {
   TokenRevokeEvent,

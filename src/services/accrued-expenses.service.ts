@@ -6,6 +6,10 @@ import type {
   CreateAccruedExpenseDto,
   UpdateAccruedExpenseDto,
 } from '../types/accrued-expenses.types.js';
+import {
+  calculateManualExpenseAmounts,
+  findOwnedManualExpense,
+} from './helpers/accrued-expenses.helper.js';
 
 export async function getAccruedExpensesService(userId: string, period_id: string, type: string) {
   const period = await Period.findOne({
@@ -33,40 +37,50 @@ export async function getAccruedExpensesService(userId: string, period_id: strin
 }
 
 export async function getAccruedExpenseByIdService(userId: string, id: string) {
-  const expense = await AccruedExpense.findOne({
-    where: { id },
-    include: [
-      {
-        model: Profile,
-        as: 'profile',
-        where: { user_id: userId },
-        attributes: ['id', 'nombre', 'rfc'],
-      },
-    ],
-  });
-
-  if (!expense) throw new AppError('Gasto no encontrado', 404);
-  if (expense.tipo_origen !== 'MANUAL')
-    throw new AppError('Solo se puede consultar gastos manuales en esta ruta', 400);
+  const expense = await findOwnedManualExpense(userId, id);
 
   return { data: expense };
 }
 
-export async function createAccruedExpenseService(userId: string, data: CreateAccruedExpenseDto) {
+export async function createAccruedExpenseService(data: CreateAccruedExpenseDto, userId: string) {
   const profile = await Profile.findOne({
     where: { id: data.profile_id, user_id: userId },
     attributes: ['id'],
   });
   if (!profile) throw new AppError('Perfil no encontrado o no pertenece al usuario', 404);
 
-  const fechaDate = new Date(data.fecha);
+  const period = await Period.findOne({
+    where: { id: data.period_id, profile_id: data.profile_id },
+    attributes: ['id', 'start_date', 'end_date'],
+  });
+
+  if (!period) throw new AppError('Periodo no encontrado o no pertenece al perfil', 404);
+
+  const { fecha } = data;
+
+  const fechaDate = new Date(fecha);
   if (isNaN(fechaDate.getTime())) throw new AppError('Fecha inválida', 400);
+
+  const expenseDate = new Date(fechaDate).setHours(0, 0, 0, 0);
+  const startDate = new Date(period.start_date).setHours(0, 0, 0, 0);
+  const endDate = new Date(period.end_date).setHours(23, 59, 59, 999);
+
+  if (expenseDate < startDate || expenseDate > endDate)
+    throw new AppError(
+      `La fecha del gasto (${fechaDate.toISOString().split('T')[0]}) no corresponde al periodo seleccionado`,
+      400
+    );
 
   const mes = fechaDate.getMonth() + 1;
   const año = fechaDate.getFullYear();
   const subtotalNum = Number(data.subtotal);
-  const ivaAmountNum = Number(data.iva_amount) || 0;
-  const total = subtotalNum + ivaAmountNum;
+  const ivaRate = Number(data.iva);
+
+  if (Number.isNaN(subtotalNum) || Number.isNaN(ivaRate)) {
+    throw new AppError('subtotal e iva deben ser números válidos', 400);
+  }
+
+  const amounts = calculateManualExpenseAmounts(subtotalNum, ivaRate);
 
   const expense = await AccruedExpense.create({
     profile_id: profile.id,
@@ -74,10 +88,11 @@ export async function createAccruedExpenseService(userId: string, data: CreateAc
     fecha: fechaDate,
     mes,
     año,
-    total,
-    subtotal: subtotalNum,
-    iva: ivaAmountNum,
-    concepto: String(data.concepto).trim() || null,
+    total: amounts.total,
+    subtotal: amounts.subtotal,
+    iva: amounts.iva,
+    iva_amount: amounts.iva_amount,
+    concepto: String(data.concept).trim() || null,
     categoria: data.categoria != null ? String(data.categoria).trim() || null : null,
     uuid: null,
     tipo: null,
@@ -107,15 +122,9 @@ export async function updateAccruedExpenseService(
   id: string,
   data: UpdateAccruedExpenseDto
 ) {
-  const expense = await AccruedExpense.findOne({
-    where: { id },
-    include: [{ model: Profile, as: 'profile', where: { user_id: userId }, attributes: ['id'] }],
-  });
-  if (!expense) throw new AppError('Gasto no encontrado', 404);
-  if (expense.tipo_origen !== 'MANUAL')
-    throw new AppError('Solo se pueden actualizar gastos manuales en esta ruta', 400);
+  const expense = await findOwnedManualExpense(userId, id);
 
-  const { concepto, subtotal, iva_amount, categoria, is_paid, payment_date } = data;
+  const { concept, subtotal, categoria, is_paid, payment_date, iva } = data;
   const updateData: Partial<
     Pick<
       AccruedExpense,
@@ -129,16 +138,21 @@ export async function updateAccruedExpenseService(
       | 'categoria'
     >
   > = {};
-  if (concepto !== undefined) updateData.concepto = String(concepto).trim() || null;
-  if (subtotal !== undefined) updateData.subtotal = Number(subtotal);
-  if (iva_amount !== undefined) {
-    updateData.iva_amount = Number(iva_amount);
-    updateData.iva = Number(iva_amount);
-  }
-  if (subtotal !== undefined || iva_amount !== undefined) {
-    const sub = subtotal !== undefined ? Number(subtotal) : Number(expense.subtotal ?? 0);
-    const iva = iva_amount !== undefined ? Number(iva_amount) : Number(expense.iva_amount ?? 0);
-    updateData.total = sub + iva;
+  if (concept !== undefined) updateData.concepto = String(concept).trim() || null;
+
+  if (subtotal !== undefined || iva !== undefined) {
+    const nextSubtotal = subtotal !== undefined ? Number(subtotal) : Number(expense.subtotal ?? 0);
+    const nextIvaRate = iva !== undefined ? Number(iva) : Number(expense.iva ?? 0);
+
+    if (Number.isNaN(nextSubtotal) || Number.isNaN(nextIvaRate)) {
+      throw new AppError('subtotal e iva deben ser números válidos', 400);
+    }
+
+    const amounts = calculateManualExpenseAmounts(nextSubtotal, nextIvaRate);
+    updateData.subtotal = amounts.subtotal;
+    updateData.iva = amounts.iva;
+    updateData.iva_amount = amounts.iva_amount;
+    updateData.total = amounts.total;
   }
   if (typeof is_paid === 'boolean') updateData.is_paid = is_paid;
   if (payment_date !== undefined) {
@@ -161,13 +175,7 @@ export async function updateAccruedExpenseService(
 }
 
 export async function deleteAccruedExpenseService(userId: string, id: string) {
-  const expense = await AccruedExpense.findOne({
-    where: { id },
-    include: [{ model: Profile, as: 'profile', where: { user_id: userId }, attributes: ['id'] }],
-  });
-  if (!expense) throw new AppError('Gasto no encontrado', 404);
-  if (expense.tipo_origen !== 'MANUAL')
-    throw new AppError('Solo se pueden eliminar gastos manuales en esta ruta', 400);
+  const expense = await findOwnedManualExpense(userId, id);
   const profileId = expense.profile_id;
   await expense.destroy();
   await invalidateProfileCache(profileId);

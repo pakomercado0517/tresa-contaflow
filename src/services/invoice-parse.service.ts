@@ -12,6 +12,7 @@ import type {
 } from '../types/validation.types.js';
 import type { MatchingResult } from '../types/matching.types.js';
 import type { ParsedXmlResponse } from '../types/parser.types.js';
+import type { UploadInvoiceResult } from '../types/invoice-upload.types.js';
 import type { CFDI } from '../types/cfdi.types.js';
 import { UniqueConstraintError } from 'sequelize';
 import { calcularEstadoPagoFactura, calcularEstadoPagoGasto } from './payment-status.service.js';
@@ -220,7 +221,11 @@ export const invoiceParseXmlForProfile = async (
   };
 };
 
-export const uploadInvoiceService = async (userId: string, profileId: string, fileData: Buffer) => {
+export const uploadInvoiceService = async (
+  userId: string,
+  profileId: string,
+  fileData: Buffer
+): Promise<UploadInvoiceResult> => {
   const profile = await Profile.findOne({ where: { id: profileId, user_id: userId } });
   if (!profile) throw new AppError('Perfil no encontrado', 404);
 
@@ -247,11 +252,12 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
       const savedComplement = await saveComplemento(cfdi, profileId, profile.rfc);
 
       return {
+        kind: 'complement',
+        status: 200,
         message: 'Complemento de pago procesado exitosamente',
         data: cfdi,
         validacion,
         matching,
-        saved: true,
         complementId: savedComplement.id,
       };
     } catch (error) {
@@ -297,6 +303,8 @@ export const uploadInvoiceService = async (userId: string, profileId: string, fi
         : await calcularEstadoPagoGasto(savedRecord, profileId);
 
     return {
+      kind: 'created',
+      status: 201,
       message: isInvoice ? 'Factura guardada exitosamente' : 'Gasto guardado exitosamente',
       data: savedRecord,
       estadoPago,

@@ -1,4 +1,6 @@
+import type { InvoiceAttributes } from '../database/models/Invoice.model.js';
 import type { PeriodMetrics } from './metrics.types.js';
+import type { EstadoPagoDetalle } from './payment.types.js';
 
 export interface GetMetricsFilters {
   profileId?: string;
@@ -14,4 +16,12 @@ export interface GetMetricsResponse {
   };
   period_id: string | null;
   metrics: PeriodMetrics;
+}
+
+export interface InvoiceByIdResponse {
+  data: InvoiceAttributes & { estadoPago: EstadoPagoDetalle | null };
+}
+
+export interface InvoiceDeleteResponse {
+  message: string;
 }

@@ -48,9 +48,8 @@ export async function getManualIncomeById(req: AuthRequest, res: Response, next:
 export async function createManualIncome(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    if (!userId) throw new AppError('Usuario no autenticado', 401);
 
-    const result = await createManualIncomeService(req.body, userId);
+    const result = await createManualIncomeService(req.body, userId as string);
     res.status(201).json(result);
   } catch (error) {
     next(error);

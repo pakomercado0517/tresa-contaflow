@@ -140,8 +140,16 @@ describe('invoice.controller', () => {
       expect(uploadInvoiceService).not.toHaveBeenCalled();
     });
 
-    it('responde 200 cuando el CFDI ya estaba guardado', async () => {
-      const result = { saved: true, message: 'Ya existía' };
+    it('responde 200 cuando se procesa un complemento de pago', async () => {
+      const result = {
+        kind: 'complement' as const,
+        status: 200 as const,
+        message: 'Complemento de pago procesado exitosamente',
+        data: {},
+        validacion: {},
+        matching: null,
+        complementId: 'comp-1',
+      };
       vi.mocked(uploadInvoiceService).mockResolvedValue(result as never);
       const xmlData = xmlBuffer();
       const req = mockReq({
@@ -155,12 +163,27 @@ describe('invoice.controller', () => {
 
       expect(uploadInvoiceService).toHaveBeenCalledWith('u1', 'p1', xmlData);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(result);
+      expect(res.json).toHaveBeenCalledWith({
+        kind: 'complement',
+        message: 'Complemento de pago procesado exitosamente',
+        data: {},
+        validacion: {},
+        matching: null,
+        complementId: 'comp-1',
+      });
       expect(next).not.toHaveBeenCalled();
     });
 
     it('responde 201 cuando se crea un registro nuevo', async () => {
-      const result = { id: 'inv-1' };
+      const result = {
+        kind: 'created' as const,
+        status: 201 as const,
+        message: 'Factura guardada exitosamente',
+        data: { id: 'inv-1' },
+        estadoPago: {},
+        validacion: {},
+        tipo: 'factura' as const,
+      };
       vi.mocked(uploadInvoiceService).mockResolvedValue(result as never);
       const res = mockRes();
 
@@ -175,7 +198,14 @@ describe('invoice.controller', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith(result);
+      expect(res.json).toHaveBeenCalledWith({
+        kind: 'created',
+        message: 'Factura guardada exitosamente',
+        data: { id: 'inv-1' },
+        estadoPago: {},
+        validacion: {},
+        tipo: 'factura',
+      });
     });
 
     it('delega el error al middleware con next(error)', async () => {
