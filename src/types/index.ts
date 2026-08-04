@@ -127,6 +127,12 @@ export type {
   ListInvoicesResult,
 } from './invoice-list.types.js';
 export type {
+  UploadInvoiceResult,
+  UploadComplementResult,
+  UploadCreatedResult,
+  UploadInvoiceResponseBody,
+} from './invoice-upload.types.js';
+export type {
   ExpenseListQueryParams,
   ExpenseListPagination,
   ExpenseListItem,

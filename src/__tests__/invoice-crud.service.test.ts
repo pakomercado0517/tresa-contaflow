@@ -7,12 +7,14 @@ const {
   validateProfileAndRegimenService,
   invalidateProfileCache,
   calcularEstadoPagoFactura,
+  paymentComplementItemCount,
 } = vi.hoisted(() => ({
   invoiceFindOne: vi.fn(),
   getMetricsForMonthYear: vi.fn(),
   validateProfileAndRegimenService: vi.fn(),
   invalidateProfileCache: vi.fn(),
   calcularEstadoPagoFactura: vi.fn(),
+  paymentComplementItemCount: vi.fn(),
 }));
 
 vi.mock('../database/models/Invoice.model.js', () => ({
@@ -21,6 +23,10 @@ vi.mock('../database/models/Invoice.model.js', () => ({
 
 vi.mock('../database/models/Profile.model.js', () => ({
   default: {},
+}));
+
+vi.mock('../database/models/PaymentComplementItem.model.js', () => ({
+  default: { count: paymentComplementItemCount },
 }));
 
 vi.mock('../services/cache.service.js', () => ({
@@ -201,13 +207,56 @@ describe('invoice-crud.service', () => {
       expect(invalidateProfileCache).not.toHaveBeenCalled();
     });
 
+    it('lanza AppError 409 si la factura tiene complementos vinculados', async () => {
+      invoiceFindOne.mockResolvedValue({
+        id: 'inv-1',
+        profile_id: 'p1',
+        uuid: 'cfdi-uuid-1',
+        tipo: 'PPD',
+        pagos: [],
+      });
+      paymentComplementItemCount.mockResolvedValue(2);
+
+      const error = await catchError(deleteInvoiceService('u1', 'inv-1'));
+
+      expect(error).toBeInstanceOf(AppError);
+      expect(error.status).toBe(409);
+      expect(error.message).toContain('complementos de pago vinculados');
+      expect(paymentComplementItemCount).toHaveBeenCalledWith({
+        where: { profile_id: 'p1', factura_uuid: 'cfdi-uuid-1' },
+      });
+      expect(invalidateProfileCache).not.toHaveBeenCalled();
+    });
+
+    it('lanza AppError 409 si la factura PPD tiene pagos manuales', async () => {
+      invoiceFindOne.mockResolvedValue({
+        id: 'inv-1',
+        profile_id: 'p1',
+        uuid: 'cfdi-uuid-1',
+        tipo: 'PPD',
+        pagos: [{ monto: 500, origen: 'MANUAL' }],
+      });
+      paymentComplementItemCount.mockResolvedValue(0);
+
+      const error = await catchError(deleteInvoiceService('u1', 'inv-1'));
+
+      expect(error).toBeInstanceOf(AppError);
+      expect(error.status).toBe(409);
+      expect(error.message).toContain('factura PPD tiene pagos registrados');
+      expect(invalidateProfileCache).not.toHaveBeenCalled();
+    });
+
     it('elimina la factura e invalida la caché del perfil', async () => {
       const destroy = vi.fn().mockResolvedValue(undefined);
       invoiceFindOne.mockResolvedValue({
         id: 'inv-1',
         profile_id: 'p1',
+        uuid: 'cfdi-uuid-1',
+        tipo: 'PUE',
+        pagos: [],
         destroy,
       });
+      paymentComplementItemCount.mockResolvedValue(0);
 
       const result = await deleteInvoiceService('u1', 'inv-1');
 

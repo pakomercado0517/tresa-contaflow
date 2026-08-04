@@ -8,7 +8,7 @@ import {
   deleteInvoice,
   getMetrics,
 } from '../controllers/invoice.controller.js';
-import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { authenticateToken, type AuthRequest } from '../middlewares/auth.middleware.js';
 import { validateInvoiceLimit } from '../middlewares/plan-limits.middleware.js';
 import { body, param, query } from 'express-validator';
 import { validateRequest } from '../middlewares/validate.middleware.js';
@@ -26,8 +26,8 @@ const xmlUploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: 'Demasiadas solicitudes para procesar XML. Intenta nuevamente en unos minutos.',
-  keyGenerator: (req) => {
-    const userId = (req as any).userId as string | undefined;
+  keyGenerator: (req: AuthRequest) => {
+    const userId = req.userId as string;
     const ip = req.ip ?? req.socket.remoteAddress ?? '0.0.0.0';
     return userId || ipKeyGenerator(ip);
   },
