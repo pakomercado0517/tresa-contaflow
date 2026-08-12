@@ -43,9 +43,29 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Contraseña requerida'),
 ];
 
-const refreshValidation = [body('refreshToken').notEmpty().withMessage('Refresh token requerido')];
+const refreshValidation = [
+  body('refreshToken').custom((value, { req }) => {
+    const fromBody = typeof value === 'string' && value.length > 0;
+    const fromCookie =
+      typeof req.cookies?.refreshToken === 'string' && req.cookies.refreshToken.length > 0;
+    if (fromBody || fromCookie) {
+      return true;
+    }
+    throw new Error('Refresh token requerido');
+  }),
+];
 
-const logoutValidation = [body('refreshToken').notEmpty().withMessage('Refresh token requerido')];
+const logoutValidation = [
+  body('refreshToken').custom((value, { req }) => {
+    const fromBody = typeof value === 'string' && value.length > 0;
+    const fromCookie =
+      typeof req.cookies?.refreshToken === 'string' && req.cookies.refreshToken.length > 0;
+    if (fromBody || fromCookie) {
+      return true;
+    }
+    throw new Error('Refresh token requerido');
+  }),
+];
 
 const verifyEmailValidation = [
   body('token').notEmpty().withMessage('Token de verificación requerido'),

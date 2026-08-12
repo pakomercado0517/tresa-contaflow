@@ -15,7 +15,45 @@ import {
   getCurrentUserService,
 } from '../services/auth-user.service.js';
 import { AppError } from '../utils/AppError.js';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  clearAuthCookies,
+  setAccessTokenCookie,
+  setAuthCookies,
+} from '../utils/auth-cookie.util.js';
 import type { UpdateProfileDto } from '../types/auth.types.js';
+
+function resolveRefreshToken(req: Request): string | undefined {
+  const fromCookie = req.cookies?.[REFRESH_TOKEN_COOKIE];
+  if (typeof fromCookie === 'string' && fromCookie.length > 0) {
+    return fromCookie;
+  }
+
+  const fromBody = req.body?.refreshToken;
+  if (typeof fromBody === 'string' && fromBody.length > 0) {
+    return fromBody;
+  }
+
+  return undefined;
+}
+
+function resolveAccessToken(req: Request): string {
+  const fromCookie = req.cookies?.[ACCESS_TOKEN_COOKIE];
+  if (typeof fromCookie === 'string' && fromCookie.length > 0) {
+    return fromCookie;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer' && parts[1]) {
+      return parts[1];
+    }
+  }
+
+  return '';
+}
 
 export async function register(req: Request, res: Response, next: NextFunction) {
   try {
@@ -30,6 +68,10 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await loginUser(req.body);
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -48,6 +90,10 @@ export async function loginGoogle(req: Request, res: Response, next: NextFunctio
 
     const result = await loginUserWithGoogle(idToken);
 
+    setAuthCookies(res, {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    });
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -57,14 +103,14 @@ export async function loginGoogle(req: Request, res: Response, next: NextFunctio
 export async function logout(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.userId;
-    const { refreshToken } = req.body;
-    const accessToken = req.headers.authorization?.split(' ')[1];
+    const refreshToken = resolveRefreshToken(req);
+    const accessToken = resolveAccessToken(req);
 
     if (!userId) throw new AppError('Usuario no autenticado', 401);
-    if (!refreshToken || typeof refreshToken !== 'string')
-      throw new AppError('Refresh token requerido', 400);
+    if (!refreshToken) throw new AppError('Refresh token requerido', 400);
 
-    const result = await logoutUser(userId, refreshToken, accessToken || '');
+    const result = await logoutUser(userId, refreshToken, accessToken);
+    clearAuthCookies(res);
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -73,9 +119,11 @@ export async function logout(req: AuthRequest, res: Response, next: NextFunction
 
 export async function refresh(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = resolveRefreshToken(req);
     if (!refreshToken) throw new AppError('Refresh token es requerido', 400);
+
     const result = await refreshAccessToken(refreshToken);
+    setAccessTokenCookie(res, { accessToken: result.accessToken });
     res.status(200).json(result);
   } catch (error) {
     next(error);

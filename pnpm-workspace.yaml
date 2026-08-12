@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - '@firebase/util'
+  - bcrypt
+  - esbuild
+  - protobufjs
+  - unrs-resolver

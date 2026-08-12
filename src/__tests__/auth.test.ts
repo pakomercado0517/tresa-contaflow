@@ -110,6 +110,33 @@ describe("Auth API", () => {
       expect(response.body).toHaveProperty("accessToken");
       expect(response.body).toHaveProperty("refreshToken");
       expect(response.body).toHaveProperty("user");
+
+      const setCookie = response.headers["set-cookie"];
+      expect(setCookie).toBeDefined();
+      const cookieHeader = Array.isArray(setCookie) ? setCookie.join(";") : String(setCookie);
+      expect(cookieHeader).toContain("accessToken=");
+      expect(cookieHeader).toContain("refreshToken=");
+      expect(cookieHeader.toLowerCase()).toContain("httponly");
+    });
+
+    it("debe permitir /me con cookie accessToken sin Authorization", async () => {
+      const loginResponse = await request(app)
+        .post("/api/auth/login")
+        .send({
+          email: "login@example.com",
+          password: "password123",
+        });
+
+      const setCookie = loginResponse.headers["set-cookie"];
+      expect(setCookie).toBeDefined();
+
+      const meResponse = await request(app)
+        .get("/api/auth/me")
+        .set("Cookie", setCookie as string[]);
+
+      expectSuccess(meResponse, 200);
+      expect(meResponse.body).toHaveProperty("user");
+      expect(meResponse.body.user).toHaveProperty("email", "login@example.com");
     });
 
     it("debe rechazar login con email incorrecto", async () => {
@@ -157,6 +184,20 @@ describe("Auth API", () => {
       expectSuccess(response, 200);
       expect(response.body).toHaveProperty("accessToken");
       expect(response.body.accessToken).not.toBe(refreshToken);
+
+      const setCookie = response.headers["set-cookie"];
+      expect(setCookie).toBeDefined();
+      const cookieHeader = Array.isArray(setCookie) ? setCookie.join(";") : String(setCookie);
+      expect(cookieHeader).toContain("accessToken=");
+    });
+
+    it("debe renovar access token usando cookie refreshToken sin body", async () => {
+      const response = await request(app)
+        .post("/api/auth/refresh")
+        .set("Cookie", [`refreshToken=${refreshToken}`]);
+
+      expectSuccess(response, 200);
+      expect(response.body).toHaveProperty("accessToken");
     });
 
     it("debe rechazar refresh token inválido", async () => {
@@ -196,6 +237,21 @@ describe("Auth API", () => {
 
       expectSuccess(response, 200);
       expect(response.body).toHaveProperty("message");
+
+      const setCookie = response.headers["set-cookie"];
+      expect(setCookie).toBeDefined();
+      const cookieHeader = Array.isArray(setCookie) ? setCookie.join(";") : String(setCookie);
+      expect(cookieHeader.toLowerCase()).toMatch(/accessToken=;/i);
+      expect(cookieHeader.toLowerCase()).toMatch(/refreshToken=;/i);
+    });
+
+    it("debe hacer logout con cookies sin body ni Authorization Bearer explícito en refresh", async () => {
+      const response = await request(app)
+        .post("/api/auth/logout")
+        .set("Cookie", [`accessToken=${accessToken}`, `refreshToken=${refreshToken}`]);
+
+      expectSuccess(response, 200);
+      expect(response.body).toHaveProperty("message");
     });
 
     it("debe rechazar logout sin access token", async () => {
@@ -206,7 +262,7 @@ describe("Auth API", () => {
       expectError(response, 401);
     });
 
-    it("debe rechazar logout sin refreshToken en body", async () => {
+    it("debe rechazar logout sin refreshToken en body ni cookie", async () => {
       const response = await request(app)
         .post("/api/auth/logout")
         .set("Authorization", `Bearer ${accessToken}`)

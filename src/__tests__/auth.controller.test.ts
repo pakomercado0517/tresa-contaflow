@@ -51,6 +51,8 @@ function mockRes(): Response {
   const res: Partial<Response> = {};
   res.status = vi.fn().mockReturnValue(res) as unknown as Response['status'];
   res.json = vi.fn().mockReturnValue(res) as unknown as Response['json'];
+  res.cookie = vi.fn().mockReturnValue(res) as unknown as Response['cookie'];
+  res.clearCookie = vi.fn().mockReturnValue(res) as unknown as Response['clearCookie'];
   return res as Response;
 }
 
@@ -60,6 +62,7 @@ function mockReq(overrides: Partial<AuthRequest> = {}): AuthRequest {
     params: {},
     query: {},
     headers: {},
+    cookies: {},
     ...overrides,
   } as AuthRequest;
 }
@@ -120,6 +123,16 @@ describe('auth.controller', () => {
       await login(req as Request, res, next);
 
       expect(loginUser).toHaveBeenCalledWith(req.body);
+      expect(res.cookie).toHaveBeenCalledWith(
+        'accessToken',
+        'a',
+        expect.objectContaining({ httpOnly: true, path: '/', sameSite: 'lax' })
+      );
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'r',
+        expect.objectContaining({ httpOnly: true, path: '/', sameSite: 'lax' })
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(result);
       expect(next).not.toHaveBeenCalled();
@@ -156,6 +169,16 @@ describe('auth.controller', () => {
       await loginGoogle(req as Request, res, next);
 
       expect(loginUserWithGoogle).toHaveBeenCalledWith('firebase-token');
+      expect(res.cookie).toHaveBeenCalledWith(
+        'accessToken',
+        'a',
+        expect.objectContaining({ httpOnly: true })
+      );
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'r',
+        expect.objectContaining({ httpOnly: true })
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(result);
       expect(next).not.toHaveBeenCalled();
@@ -204,9 +227,34 @@ describe('auth.controller', () => {
       await logout(req, res, next);
 
       expect(logoutUser).toHaveBeenCalledWith('u1', 'r', 'access-token');
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'accessToken',
+        expect.objectContaining({ httpOnly: true, path: '/' })
+      );
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'refreshToken',
+        expect.objectContaining({ httpOnly: true, path: '/' })
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(result);
       expect(next).not.toHaveBeenCalled();
+    });
+
+    it('usa refresh y access desde cookies cuando no hay body ni Bearer', async () => {
+      const result = { message: 'Logout exitoso' };
+      vi.mocked(logoutUser).mockResolvedValue(result as never);
+      const req = mockReq({
+        userId: 'u1',
+        body: {},
+        cookies: { accessToken: 'cookie-access', refreshToken: 'cookie-refresh' },
+      });
+      const res = mockRes();
+
+      await logout(req, res, next);
+
+      expect(logoutUser).toHaveBeenCalledWith('u1', 'cookie-refresh', 'cookie-access');
+      expect(res.clearCookie).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it('delega el error al middleware con next(error)', async () => {
@@ -239,9 +287,33 @@ describe('auth.controller', () => {
       await refresh(mockReq({ body: { refreshToken: 'r' } }) as Request, res, next);
 
       expect(refreshAccessToken).toHaveBeenCalledWith('r');
+      expect(res.cookie).toHaveBeenCalledWith(
+        'accessToken',
+        'nuevo',
+        expect.objectContaining({ httpOnly: true })
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(result);
       expect(next).not.toHaveBeenCalled();
+    });
+
+    it('lee refreshToken desde cookie cuando no hay body', async () => {
+      const result = { message: 'Token actualizado', accessToken: 'nuevo' };
+      vi.mocked(refreshAccessToken).mockResolvedValue(result as never);
+      const res = mockRes();
+
+      await refresh(
+        mockReq({ body: {}, cookies: { refreshToken: 'cookie-r' } }) as Request,
+        res,
+        next
+      );
+
+      expect(refreshAccessToken).toHaveBeenCalledWith('cookie-r');
+      expect(res.cookie).toHaveBeenCalledWith(
+        'accessToken',
+        'nuevo',
+        expect.objectContaining({ httpOnly: true })
+      );
     });
 
     it('delega el error al middleware con next(error)', async () => {
