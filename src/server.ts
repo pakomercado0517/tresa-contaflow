@@ -1,6 +1,7 @@
 import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -104,6 +105,7 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(cookieParser());
 app.use(
   fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB máximo

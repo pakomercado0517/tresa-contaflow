@@ -68,3 +68,17 @@ export interface UpdateProfileDto {
   nombre_comercial: string | null;
   logo_url: string | null;
 }
+
+/** Nombres de cookies de autenticación (alineados con el frontend). */
+export type AuthCookieName = 'accessToken' | 'refreshToken';
+
+export type AuthCookieKind = 'access' | 'refresh';
+
+export interface AuthTokensForCookies {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface AccessTokenForCookie {
+  accessToken: string;
+}

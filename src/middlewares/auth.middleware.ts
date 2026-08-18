@@ -1,6 +1,7 @@
 import { type Response, type NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/jwt.util.js';
 import { isAccessTokenRevoked } from '../services/token-revoke.service.js';
+import { ACCESS_TOKEN_COOKIE } from '../utils/auth-cookie.util.js';
 import type { Request } from 'express';
 import type { FileArray, UploadedFile } from 'express-fileupload';
 
@@ -12,14 +13,35 @@ export interface AuthRequest extends Request {
   xmlBuffer?: Buffer;
 }
 
+/**
+ * Access token: cookie `accessToken` primero, luego `Authorization: Bearer`.
+ */
+function extractAccessToken(req: Request): string | undefined {
+  const cookieToken = req.cookies?.[ACCESS_TOKEN_COOKIE];
+  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+    return cookieToken;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return undefined;
+  }
+
+  const parts = authHeader.split(' ');
+  if (parts.length === 2 && parts[0] === 'Bearer' && parts[1]) {
+    return parts[1];
+  }
+
+  return undefined;
+}
+
 export async function authenticateToken(
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const token = extractAccessToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Token de acceso requerido' });
@@ -53,8 +75,7 @@ export async function authenticateAdmin(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1];
+    const token = extractAccessToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Token de acceso requerido' });

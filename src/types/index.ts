@@ -145,7 +145,14 @@ export type {
   ExpenseMutationResponse,
   ExpenseDeleteResponse,
 } from './expense.types.js';
-export type { CurrentUserDto, GetCurrentUserResponse } from './auth.types.js';
+export type {
+  CurrentUserDto,
+  GetCurrentUserResponse,
+  AuthCookieName,
+  AuthCookieKind,
+  AuthTokensForCookies,
+  AccessTokenForCookie,
+} from './auth.types.js';
 export type {
   TokenRevokeEvent,
   TokenRevokeKind,
